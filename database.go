@@ -1,11 +1,11 @@
 package sql
 
 import (
+	"errors"
 	"fmt"
 	"github.com/jinzhu/gorm"
-	//"github.com/go-sql-driver/mysql"
-	"log"
 	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -35,29 +35,99 @@ func Connect(dialect string, uri string) (*gorm.DB, error) {
 }
 
 func Exists(db *gorm.DB, table string, model interface{}, query interface{}) (bool, error) {
-	if err := db.Table(table).Find(model, query).Error; err != nil {
+	var count int32
+	if err := db.Table(table).Where(query).Count(&count).Error; err != nil {
 		return false, err
 	} else {
-		return true, nil
+		if count >= 1 {
+			return true, nil
+		}
+		return false, nil
 	}
 }
 
+func InsertWithVersion(db *gorm.DB, table string, model interface{}, versionIndex int) (int64, error) {
+	var defaultVersion interface{}
+	modelType := reflect.TypeOf(model).Elem()
+	versionType := modelType.Field(versionIndex).Type
+	switch versionType.String() {
+	case "int":
+		defaultVersion = int(1)
+	case "int32":
+		defaultVersion = int32(1)
+	case "int64":
+		defaultVersion = int64(1)
+	default:
+		panic("not support type's version")
+	}
+	model, err := setValue(model, versionIndex, defaultVersion)
+	if err != nil {
+		return 0, err
+	}
+	return Insert(db, table, model)
+}
+func setValue(model interface{}, index int, value interface{}) (interface{}, error) {
+	valueObject := reflect.Indirect(reflect.ValueOf(model))
+	switch reflect.ValueOf(model).Kind() {
+	case reflect.Ptr:
+		{
+			valueObject.Field(index).Set(reflect.ValueOf(value))
+			return model, nil
+		}
+	default:
+		if modelWithTypeValue, ok := model.(reflect.Value); ok {
+			_, err := setValueWithTypeValue(modelWithTypeValue, index, value)
+			return modelWithTypeValue.Interface(), err
+		}
+	}
+	return model, nil
+}
+func setValueWithTypeValue(model reflect.Value, index int, value interface{}) (reflect.Value, error) {
+	trueValue := reflect.Indirect(model)
+	switch trueValue.Kind() {
+	case reflect.Struct:
+		{
+			val := reflect.Indirect(reflect.ValueOf(value))
+			if trueValue.Field(index).Kind() == val.Kind() {
+				trueValue.Field(index).Set(reflect.ValueOf(value))
+				return trueValue, nil
+			} else {
+				return trueValue, fmt.Errorf("value's kind must same as field's kind")
+			}
+		}
+	default:
+		return trueValue, nil
+	}
+}
+func FindFieldIndex(modelType reflect.Type, fieldName string) int {
+	numField := modelType.NumField()
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		if field.Name == fieldName {
+			return i
+		}
+	}
+	return -1
+}
+
 func Insert(db *gorm.DB, table string, model interface{}) (int64, error) {
-	if err := db.Table(table).Create(model).Error; err != nil {
-		log.Printf(err.Error())
-		if db.Dialect().GetName() == "mssql" && strings.Contains(err.Error(), "Violation of PRIMARY KEY constraint") {
-			return -1, err //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-		} else if db.Dialect().GetName() == "sqlite3" && strings.Contains(err.Error(), "UNIQUE constraint failed:") {
-			return -1, err //UNIQUE constraint failed: aa.interestWaning, aa.skillIncrease
-		} else if db.Dialect().GetName() == "postgres" && strings.Contains(err.Error(), "pq: duplicate key value violates unique constraint") {
+	x := db.Table(table).Create(model)
+	if err := x.Error; err != nil {
+		dialect := db.Dialect().GetName()
+		ers := err.Error() // log.Printf(err.Error())
+		if dialect == "postgres" && strings.Contains(ers, "pq: duplicate key value violates unique constraint") {
 			return -1, err //pq: duplicate key value violates unique constraint "aa_pkey"
-		} else if db.Dialect().GetName() == "mysql" && strings.Contains(err.Error(), "Error 1062: Duplicate entry") {
+		} else if dialect == "mysql" && strings.Contains(ers, "Error 1062: Duplicate entry") {
 			return -1, err //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+		} else if dialect == "mssql" && strings.Contains(ers, "Violation of PRIMARY KEY constraint") {
+			return -1, err //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+		} else if dialect == "sqlite3" && strings.Contains(ers, "UNIQUE constraint failed:") {
+			return -1, err //UNIQUE constraint failed: aa.interestWaning, aa.skillIncrease
 		} else {
 			return 0, err
 		}
 	} else {
-		return 1, nil
+		return x.RowsAffected, nil
 	}
 }
 
@@ -86,14 +156,14 @@ func PatchObject(db *gorm.DB, model interface{}, updateModel interface{}) (int64
 	return rs.RowsAffected, nil
 }
 
-func Save(db *gorm.DB, table string, model interface{}, query map[string]interface{}) (int64, error) {
+func InsertOrUpdate(db *gorm.DB, table string, model interface{}, query map[string]interface{}) (int64, error) {
 	//var queryModel = reflect.New(reflect.ValueOf(model).Elem().Type()).Interface()
-
 	if isExist, _ := Exists(db, table, model, query); isExist {
 		return Update(db, table, model, query)
 	} else {
 		return Insert(db, table, model)
 	}
+	//db.Table(table).Where(query).Assign(modelNonPointer).FirstOrCreate(&modelNonPointer)
 }
 
 func Delete(db *gorm.DB, table string, results interface{}, query interface{}) (int64, error) {
@@ -105,19 +175,22 @@ func Delete(db *gorm.DB, table string, results interface{}, query interface{}) (
 	}
 }
 
-func FindOneWithResult(db *gorm.DB, table string, result interface{}, query interface{}) (interface{}, error) {
-	if err := db.Table(table).Set("gorm:auto_preload", true).First(result, query).Error; err != nil {
-		return nil, err
-	} else {
-		return result, nil
+func FindOneWithResult(db *gorm.DB, table string, result interface{}, query interface{}) (bool, error) {
+	err := db.Table(table).Set("gorm:auto_preload", true).First(result, query).Error
+	if err == nil {
+		return true, nil
 	}
+	if err.Error() == "record not found" { //record not found
+		return false, err
+	}
+	return true, err
 }
 
-func FindWithResults(db *gorm.DB, table string, results interface{}, query ...interface{}) (interface{}, error) {
-	if err := db.Table(table).Set("gorm:auto_preload", true).Find(results, query...).Error; err != nil {
-		return nil, err
+func FindWithResults(db *gorm.DB, table string, results interface{}, query ...interface{}) error {
+	if err := db.Table(table).Set("gorm:auto_preload", true).Find(results, query...).Error; err == nil {
+		return nil
 	} else {
-		return results, nil
+		return err
 	}
 }
 
@@ -147,6 +220,48 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	return -1, jsonName, jsonName
 }
 
+func HandleResult(result *gorm.DB) (int64, error) {
+	if err := result.Error; err != nil {
+		return result.RowsAffected, err
+	} else {
+		return result.RowsAffected, nil
+	}
+}
+
+// Obtain columns and values required for insert from interface
+func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]interface{}, error) {
+	rv := reflect.ValueOf(value)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+		value = rv.Interface()
+	}
+	if rv.Kind() != reflect.Struct {
+		return nil, errors.New("value must be kind of Struct")
+	}
+
+	var attrs = map[string]interface{}{}
+
+	for _, field := range (&gorm.Scope{Value: value}).Fields() {
+		// Exclude relational record because it's not directly contained in database columns
+		_, hasForeignKey := field.TagSettingsGet("FOREIGNKEY")
+
+		if !ContainString(excludeColumns, field.Struct.Name) && field.StructField.Relationship == nil && !hasForeignKey &&
+			!field.IsIgnored && !IsAutoIncrementField(field) && !IsPrimaryAndBlankField(field) {
+			if field.StructField.HasDefaultValue && field.IsBlank {
+				// If default value presents and field is empty, assign a default value
+				if val, ok := field.TagSettingsGet("DEFAULT"); ok {
+					attrs[field.DBName] = val
+				} else {
+					attrs[field.DBName] = field.Field.Interface()
+				}
+			} else {
+				attrs[field.DBName] = field.Field.Interface()
+			}
+		}
+	}
+	return attrs, nil
+}
+
 // For ViewDefaultRepository
 func GetColumnName(modelType reflect.Type, fieldName string) (col string, colExist bool) {
 	field, ok := modelType.FieldByName(fieldName)
@@ -173,6 +288,25 @@ func GetColumnName(modelType reflect.Type, fieldName string) (col string, colExi
 	}
 	//return gorm.ToColumnName(fieldName), false
 	return fieldName, false
+}
+
+func GetColumnNameByIndex(ModelType reflect.Type, index int) (col string, colExist bool) {
+	fields := ModelType.Field(index)
+	tag, _ := fields.Tag.Lookup("gorm")
+
+	if has := strings.Contains(tag, "column"); has {
+		str1 := strings.Split(tag, ";")
+		num := len(str1)
+		for i := 0; i < num; i++ {
+			str2 := strings.Split(str1[i], ":")
+			for j := 0; j < len(str2); j++ {
+				if str2[j] == "column" {
+					return str2[j+1], true
+				}
+			}
+		}
+	}
+	return "", false
 }
 
 func FindFieldByName(modelType reflect.Type, fieldName string) (int, string, string) {
@@ -246,7 +380,8 @@ func BuildQueryById(id interface{}, modelType reflect.Type, idName string) (quer
 	columnName, _ := GetColumnName(modelType, idName)
 	return map[string]interface{}{columnName: id}
 }
-func BuildQueryByIds(ids map[string]interface{}, modelType reflect.Type) (query map[string]interface{}) {
+
+func MapToGORM(ids map[string]interface{}, modelType reflect.Type) (query map[string]interface{}) {
 	queryGen := make(map[string]interface{})
 	var columnName string
 	for colName, value := range ids {
@@ -264,7 +399,7 @@ func BuildQueryByIdFromObject(object interface{}, modelType reflect.Type, idName
 		value = reflect.Indirect(reflect.ValueOf(object)).FieldByName(colId).Interface()
 		queryGen[colId] = value
 	}
-	return BuildQueryByIds(queryGen, modelType)
+	return MapToGORM(queryGen, modelType)
 }
 
 func BuildQueryByIdFromMap(object map[string]interface{}, modelType reflect.Type, idNames []string) (query map[string]interface{}) {
@@ -273,16 +408,11 @@ func BuildQueryByIdFromMap(object map[string]interface{}, modelType reflect.Type
 	for _, colId := range idNames {
 		queryGen[colId] = object[colId]
 	}
-	return BuildQueryByIds(queryGen, modelType)
+	return MapToGORM(queryGen, modelType)
 }
 
 // For Search
-func getJsonName(modelType reflect.Type, fieldName string) (string, bool) {
-	field, _ := modelType.FieldByName(fieldName)
-	return field.Tag.Lookup("json")
-}
-
-func getTagsSqlBuilder(modelType reflect.Type) []QueryType {
+func GetSqlBuilderTags(modelType reflect.Type) []QueryType {
 	numField := modelType.NumField()
 	//queries := make([]QueryType, 0)
 	var sqlQueries []QueryType
@@ -311,22 +441,6 @@ func getTagsSqlBuilder(modelType reflect.Type) []QueryType {
 	return sqlQueries
 }
 
-/*
-//build errCode
-func BuildError(err error) model.ErrorMessage {
-	if err == gorm.ErrRecordNotFound {
-		return model.ErrorMessage{Field: "", Code: model.RecordNotFound, Message: err.Error()}
-	}
-	me, ok := err.(*mysql.MySQLError)
-	if ok {
-		if me.Number == 1062 {
-			return model.ErrorMessage{Field: "", Code: model.DuplicateEntry, Message: me.Message}
-		}
-		return model.ErrorMessage{Field: "", Code: model.ViolateConstrains, Message: me.Message}
-	}
-	return model.ErrorMessage{Field: "", Code: model.TimeOut, Message: err.Error()}
-}
-*/
 func MapColumnToJson(query map[string]interface{}) interface{} {
 	result := make(map[string]interface{})
 	for k, v := range query {
@@ -348,8 +462,6 @@ func replaceAtIndex(str string, replacement rune, index int) string {
 	return string(out)
 }
 
-// checker
-
 func GetTableName(object interface{}) string {
 	objectValue := reflect.Indirect(reflect.ValueOf(object))
 	tableName := objectValue.MethodByName("TableName").Call([]reflect.Value{})
@@ -369,7 +481,6 @@ func Query(db *gorm.DB, list interface{}, sql string, values ...interface{}) err
 }
 
 func EscapeString(value string) string {
-
 	//replace := map[string]string{"'": `\'`, "\\0": "\\\\0", "\n": "\\n", "\r": "\\r", `"`: `\"`, "\x1a": "\\Z"}
 	//if strings.Contains(value, `\\`) {
 	//	value = strings.Replace(value, "\\", "\\\\", -1)
@@ -379,9 +490,7 @@ func EscapeString(value string) string {
 	//		value = strings.Replace(value, b, a, -1)
 	//	}
 	//}
-
 	return strings.NewReplacer("\\", "\\\\", "'", `\'`, "\\0", "\\\\0", "\n", "\\n", "\r", "\\r", `"`, `\"`, "\x1a", "\\Z" /*We have more here*/).Replace(value)
-
 }
 
 func EscapeStringForSelect(value string) string {
@@ -395,7 +504,36 @@ func EscapeStringForSelect(value string) string {
 	//		value = strings.Replace(value, b, a, -1)
 	//	}
 	//}
-
 	return strings.NewReplacer("'", `''` /*We have more here*/).Replace(value)
+}
 
+// Check if string value is contained in slice
+func ContainString(s []string, value string) bool {
+	for _, v := range s {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+// Enable map keys to be retrieved in same order when iterating
+func SortedKeys(val map[string]interface{}) []string {
+	var keys []string
+	for key := range val {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func IsAutoIncrementField(field *gorm.Field) bool {
+	if value, ok := field.TagSettingsGet("AUTO_INCREMENT"); ok {
+		return strings.ToLower(value) != "false"
+	}
+	return false
+}
+
+func IsPrimaryAndBlankField(field *gorm.Field) bool {
+	return field.IsPrimaryKey && field.IsBlank
 }
