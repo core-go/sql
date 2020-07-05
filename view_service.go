@@ -11,7 +11,7 @@ type ViewService struct {
 	Mapper     Mapper
 	modelType  reflect.Type
 	modelsType reflect.Type
-	idNames    []string
+	keys       []string
 	table      string
 }
 
@@ -21,8 +21,12 @@ func NewViewService(db *gorm.DB, modelType reflect.Type, tableName string, mappe
 	return &ViewService{db, mapper, modelType, modelsType, idNames, tableName}
 }
 
-func (s *ViewService) Ids() []string {
-	return s.idNames
+func NewDefaultViewService(db *gorm.DB, modelType reflect.Type, tableName string) *ViewService {
+	return NewViewService(db, modelType, tableName, nil)
+}
+
+func (s *ViewService) Keys() []string {
+	return s.keys
 }
 
 func (s *ViewService) All(ctx context.Context) (interface{}, error) {
@@ -40,9 +44,9 @@ func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 
 func (s *ViewService) Load(ctx context.Context, id interface{}) (interface{}, error) {
 	var result = s.initSingleResult()
-	l := len(s.idNames)
+	l := len(s.keys)
 	if l <= 1 {
-		query := BuildQueryById(id, s.modelType, s.idNames[0])
+		query := BuildQueryById(id, s.modelType, s.keys[0])
 		found, err := FindOneWithResult(s.Database, s.table, result, query)
 		if found == false && err != nil {
 			return nil, err
@@ -66,9 +70,9 @@ func (s *ViewService) Load(ctx context.Context, id interface{}) (interface{}, er
 }
 
 func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
-	l := len(s.idNames)
+	l := len(s.keys)
 	if l <= 1 {
-		query := BuildQueryById(id, s.modelType, s.idNames[0])
+		query := BuildQueryById(id, s.modelType, s.keys[0])
 		ok, er0 := FindOneWithResult(s.Database, s.table, result, query)
 		if ok && er0 == nil && s.Mapper != nil {
 			_, er2 := s.Mapper.DbToModel(ctx, result)
@@ -92,9 +96,9 @@ func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result 
 
 func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 	var result = s.initSingleResult()
-	l := len(s.idNames)
+	l := len(s.keys)
 	if l <= 1 {
-		query := BuildQueryById(id, s.modelType, s.idNames[0])
+		query := BuildQueryById(id, s.modelType, s.keys[0])
 		return Exists(s.Database, s.table, result, query)
 	}
 	var ids = id.(map[string]interface{})

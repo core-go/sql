@@ -11,8 +11,8 @@ func NewGenericSearchService(db *gorm.DB, modelType reflect.Type, tableName stri
 	return genericService, searchService
 }
 
-func NewDefaultGenericSearchService(db *gorm.DB, modelType reflect.Type, tableName string, searchBuilder SearchResultBuilder, mapper Mapper) (*GenericService, *SearchService) {
-	genericService := NewDefaultGenericService(db, modelType, tableName, mapper)
+func NewDefaultGenericSearchService(db *gorm.DB, modelType reflect.Type, tableName string, searchBuilder SearchResultBuilder) (*GenericService, *SearchService) {
+	genericService := NewDefaultGenericService(db, modelType, tableName)
 	searchService := NewSearchService(db, modelType, tableName, searchBuilder)
 	return genericService, searchService
 }

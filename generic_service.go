@@ -30,8 +30,8 @@ func NewGenericService(db *gorm.DB, modelType reflect.Type, tableName string, ve
 	return &GenericService{defaultViewService, versionField, -1, ""}
 }
 
-func NewDefaultGenericService(db *gorm.DB, modelType reflect.Type, tableName string, mapper Mapper) *GenericService {
-	return NewGenericService(db, modelType, tableName, "", mapper)
+func NewDefaultGenericService(db *gorm.DB, modelType reflect.Type, tableName string) *GenericService {
+	return NewGenericService(db, modelType, tableName, "", nil)
 }
 
 func (s *GenericService) Insert(ctx context.Context, model interface{}) (int64, error) {
@@ -63,7 +63,7 @@ func (s *GenericService) Update(ctx context.Context, model interface{}) (int64, 
 		}
 		model = m2
 	}
-	idQuery := BuildQueryByIdFromObject(model, s.modelType, s.idNames)
+	idQuery := BuildQueryByIdFromObject(model, s.modelType, s.keys)
 	if len(s.versionField) > 0 {
 		versionQuery := s.buildVersionQueryAndModifyModel(idQuery, model, s.versionField, s.versionDBField)
 		rowAffect, err := Update(s.Database, s.table, model, versionQuery)
@@ -88,7 +88,7 @@ func (s *GenericService) Patch(ctx context.Context, model map[string]interface{}
 			return 0, err
 		}
 	}
-	idQuery := BuildQueryByIdFromMap(model, s.modelType, s.idNames)
+	idQuery := BuildQueryByIdFromMap(model, s.modelType, s.keys)
 	if len(s.versionField) > 0 {
 		versionQuery := s.buildVersionQueryAndModifyModel(idQuery, model, s.versionDBField, s.versionDBField)
 		rowAffect, err := Patch(s.Database, s.table, MapToGORM(model, s.modelType), versionQuery)
@@ -118,9 +118,9 @@ func (s *GenericService) Save(ctx context.Context, model interface{}) (int64, er
 }
 
 func (s *GenericService) Delete(ctx context.Context, id interface{}) (int64, error) {
-	l := len(s.idNames)
+	l := len(s.keys)
 	if l == 1 {
-		return Delete(s.Database, s.table, s.initSingleResult(), BuildQueryById(id, s.modelType, s.idNames[0]))
+		return Delete(s.Database, s.table, s.initSingleResult(), BuildQueryById(id, s.modelType, s.keys[0]))
 	} else {
 		ids := id.(map[string]interface{})
 		return Delete(s.Database, s.table, s.initSingleResult(), MapToGORM(ids, s.modelType))
