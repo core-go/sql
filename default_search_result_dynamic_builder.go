@@ -40,7 +40,7 @@ func (b *DefaultSearchResultDynamicBuilder) BuildSearchResult(ctx context.Contex
 			}
 		}
 	}
-	return b.buildFromDynamicQuery(ctx, b.Database, tableName, modelType, query, sort, searchModel.PageIndex, searchModel.PageSize)
+	return b.buildFromDynamicQuery(ctx, b.Database, tableName, modelType, query, sort, searchModel.Page, searchModel.Limit)
 }
 
 func (b *DefaultSearchResultDynamicBuilder) buildFromDynamicQuery(ctx context.Context, db *gorm.DB, tableName string, modelType reflect.Type, query DynamicQuery, sort string, pageIndex int64, pageSize int64) (*s.SearchResult, error) {
@@ -85,12 +85,12 @@ func (b *DefaultSearchResultDynamicBuilder) findAndCount(db *gorm.DB, tableName 
 
 func (b *DefaultSearchResultDynamicBuilder) buildSearchResult(ctx context.Context, models interface{}, count int64, pageIndex int64, pageSize int64) (*s.SearchResult, error) {
 	searchResult := s.SearchResult{}
-	searchResult.ItemTotal = count
+	searchResult.Total = count
 
-	searchResult.LastPage = false
+	searchResult.Last = false
 	lengthModels := int64(reflect.Indirect(reflect.ValueOf(models)).Len())
 	if pageSize*pageIndex+lengthModels >= count {
-		searchResult.LastPage = true
+		searchResult.Last = true
 	}
 	if b.Mapper == nil {
 		searchResult.Results = models

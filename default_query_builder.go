@@ -78,10 +78,10 @@ func (b *DefaultQueryBuilder) BuildQuery(sm interface{}, modelType reflect.Type,
 			if len(v.SortType) == 0 {
 				v.SortType = "ASC"
 			}
-			if len(v.SortField) > 0 {
-				columnName, exist := GetColumnName(modelType, v.SortField)
+			if len(v.Sort) > 0 {
+				columnName, exist := GetColumnName(modelType, v.Sort)
 				if exist && len(columnName) == 0 {
-					columnName = v.SortField
+					columnName = v.Sort
 				}
 				sortString = ` ORDER BY ` + columnName + ` ` + v.SortType
 			}

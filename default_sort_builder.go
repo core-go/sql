@@ -16,16 +16,16 @@ type DefaultSortBuilder struct {
 func (b *DefaultSortBuilder) BuildSort(s s.SearchModel, modelType reflect.Type) string {
 	var sort = make([]string, 0)
 
-	if len(s.SortField) == 0 {
+	if len(s.Sort) == 0 {
 		return ""
 	}
 
-	if strings.Index(s.SortField, ",") < 0 {
-		columnName := b.getColumnName(s.SortField, modelType)
+	if strings.Index(s.Sort, ",") < 0 {
+		columnName := b.getColumnName(s.Sort, modelType)
 		sortType := b.getSortType(s.SortType)
 		sort = append(sort, columnName+" "+sortType)
 	} else {
-		sorts := strings.Split(s.SortField, ",")
+		sorts := strings.Split(s.Sort, ",")
 		for i := 0; i < len(sorts); i++ {
 			sortField := strings.TrimSpace(sorts[i])
 			params := strings.Split(sortField, " ")

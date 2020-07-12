@@ -34,7 +34,7 @@ func (b *DefaultSearchResultBuilder) BuildSearchResult(ctx context.Context, m in
 			}
 		}
 	}
-	return b.buildFromDynamicQuery(ctx, b.Database, tableName, modelType, query, params, searchModel.PageIndex, searchModel.PageSize, searchModel.InitPageSize)
+	return b.buildFromDynamicQuery(ctx, b.Database, tableName, modelType, query, params, searchModel.Page, searchModel.Limit, searchModel.FirstLimit)
 }
 
 func (b *DefaultSearchResultBuilder) buildFromDynamicQuery(ctx context.Context, db *gorm.DB, tableName string, modelType reflect.Type, query string, params []interface{}, pageIndex int64, pageSize int64, initpageSize int64) (*s.SearchResult, error) {
@@ -98,9 +98,9 @@ func (b *DefaultSearchResultBuilder) buildCountQuery(sql string, params []interf
 
 func (b *DefaultSearchResultBuilder) buildSearchResult(ctx context.Context, models interface{}, count int64, pageIndex int64, pageSize int64, initpageSize int64) (*s.SearchResult, error) {
 	searchResult := s.SearchResult{}
-	searchResult.ItemTotal = count
+	searchResult.Total = count
 
-	searchResult.LastPage = false
+	searchResult.Last = false
 	lengthModels := int64(reflect.Indirect(reflect.ValueOf(models)).Len())
 	var receivedItems int64
 
@@ -113,7 +113,7 @@ func (b *DefaultSearchResultBuilder) buildSearchResult(ctx context.Context, mode
 	} else {
 		receivedItems = pageSize*(pageIndex-1) + lengthModels
 	}
-	searchResult.LastPage = receivedItems >= count
+	searchResult.Last = receivedItems >= count
 
 	if b.Mapper == nil {
 		searchResult.Results = models
