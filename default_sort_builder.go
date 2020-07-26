@@ -19,29 +19,22 @@ func (b *DefaultSortBuilder) BuildSort(s s.SearchModel, modelType reflect.Type) 
 	if len(s.Sort) == 0 {
 		return ""
 	}
-
-	if strings.Index(s.Sort, ",") < 0 {
-		columnName := b.getColumnName(s.Sort, modelType)
-		sortType := b.getSortType(s.SortType)
-		sort = append(sort, columnName+" "+sortType)
-	} else {
-		sorts := strings.Split(s.Sort, ",")
-		for i := 0; i < len(sorts); i++ {
-			sortField := strings.TrimSpace(sorts[i])
-			params := strings.Split(sortField, " ")
-
-			if len(params) > 0 {
-				columnName := b.getColumnName(params[0], modelType)
-				sortType := b.getSortType(params[1])
-				sort = append(sort, columnName+" "+sortType)
-			}
+	sorts := strings.Split(s.Sort, ",")
+	for i := 0; i < len(sorts); i++ {
+		sortField := strings.TrimSpace(sorts[i])
+		fieldName := sortField
+		c := sortField[0:1]
+		if c == "-" || c == "+" {
+			fieldName = sortField[1:]
 		}
+		columnName := GetColumnNameForSearch(modelType, fieldName)
+		sortType := GetSortType(c)
+		sort = append(sort, columnName+" "+sortType)
 	}
-
 	return strings.Join(sort, ",")
 }
 
-func (b *DefaultSortBuilder) getColumnName(sortField string, modelType reflect.Type) string {
+func GetColumnNameForSearch(modelType reflect.Type, sortField string) string {
 	sortField = strings.TrimSpace(sortField)
 	i, _, column := GetFieldByJson(modelType, sortField)
 	if i > -1 {
@@ -50,10 +43,10 @@ func (b *DefaultSortBuilder) getColumnName(sortField string, modelType reflect.T
 	return gorm.ToColumnName(sortField)
 }
 
-func (b *DefaultSortBuilder) getSortType(sortType string) string {
-	t := desc
-	if strings.ToUpper(sortType) != strings.ToUpper(desc) {
-		t = asc
+func GetSortType(sortType string) string {
+	if sortType == "-" {
+		return desc
+	} else  {
+		return asc
 	}
-	return t
 }

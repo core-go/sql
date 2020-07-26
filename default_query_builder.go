@@ -75,15 +75,22 @@ func (b *DefaultQueryBuilder) BuildQuery(sm interface{}, modelType reflect.Type,
 			} else {
 				s1 = sql
 			}
-			if len(v.SortType) == 0 {
-				v.SortType = "ASC"
-			}
 			if len(v.Sort) > 0 {
-				columnName, exist := GetColumnName(modelType, v.Sort)
-				if exist && len(columnName) == 0 {
-					columnName = v.Sort
+				var sort = make([]string, 0)
+
+				sorts := strings.Split(v.Sort, ",")
+				for i := 0; i < len(sorts); i++ {
+					sortField := strings.TrimSpace(sorts[i])
+					fieldName := sortField
+					c := sortField[0:1]
+					if c == "-" || c == "+" {
+						fieldName = sortField[1:]
+					}
+					columnName := GetColumnNameForSearch(modelType, fieldName)
+					sortType := GetSortType(c)
+					sort = append(sort, columnName+" "+sortType)
 				}
-				sortString = ` ORDER BY ` + columnName + ` ` + v.SortType
+				sortString = ` ORDER BY ` + strings.Join(sort, ",")
 			}
 		}
 
