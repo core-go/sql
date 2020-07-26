@@ -116,13 +116,13 @@ func Insert(db *gorm.DB, table string, model interface{}) (int64, error) {
 		dialect := db.Dialect().GetName()
 		ers := err.Error() // log.Printf(err.Error())
 		if dialect == "postgres" && strings.Contains(ers, "pq: duplicate key value violates unique constraint") {
-			return -1, err //pq: duplicate key value violates unique constraint "aa_pkey"
+			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
 		} else if dialect == "mysql" && strings.Contains(ers, "Error 1062: Duplicate entry") {
-			return -1, err //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 		} else if dialect == "mssql" && strings.Contains(ers, "Violation of PRIMARY KEY constraint") {
-			return -1, err //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
 		} else if dialect == "sqlite3" && strings.Contains(ers, "UNIQUE constraint failed:") {
-			return -1, err //UNIQUE constraint failed: aa.interestWaning, aa.skillIncrease
+			return 0, nil //UNIQUE constraint failed: aa.interestWaning, aa.skillIncrease
 		} else {
 			return 0, err
 		}
