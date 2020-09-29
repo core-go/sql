@@ -20,7 +20,7 @@ func NewSqlHealthService(db *gorm.DB, name string, timeout time.Duration, provid
 }
 
 func NewDefaultSqlHealthService(db *gorm.DB, provider bool, sql string) *SqlHealthService {
-	return &SqlHealthService{db, "mongo", sql, 5 * time.Second, provider}
+	return &SqlHealthService{db, "sql", sql, 5 * time.Second, provider}
 }
 
 func (s *SqlHealthService) Name() string {

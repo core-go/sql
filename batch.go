@@ -7,7 +7,10 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
+
+var formatDateUpdate = "2006-01-02 15:04:05"
 
 // Insert multiple records at once
 // [objects]        Must be a slice of struct
@@ -15,14 +18,14 @@ import (
 //                  Embedding a large number of variables at once will raise an error beyond the limit of prepared statement.
 //                  Larger size will normally lead the better performance, but 2000 to 3000 is reasonable.
 // [excludeColumns] Columns you want to exclude from insert. You can omit if there is no column you want to exclude.
-func InsertMany(db *gorm.DB, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
+func InsertMany(db *gorm.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
 		chunkSize = len(objects)
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := insertObjSet(db, objSet, false, excludeColumns...)
+		count, err := insertObjSet(db, tableName, objSet, false, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -31,14 +34,14 @@ func InsertMany(db *gorm.DB, objects []interface{}, chunkSize int, excludeColumn
 	return c, nil
 }
 
-func InsertManySkipErrors(db *gorm.DB, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
+func InsertManySkipErrors(db *gorm.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
 		chunkSize = len(objects)
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := insertObjSet(db, objSet, true, excludeColumns...)
+		count, err := insertObjSet(db, tableName, objSet, true, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -47,7 +50,7 @@ func InsertManySkipErrors(db *gorm.DB, objects []interface{}, chunkSize int, exc
 	return c, nil
 }
 
-func insertObjSet(db *gorm.DB, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
+func insertObjSet(db *gorm.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
 	if len(objects) == 0 {
 		return 0, nil
 	}
@@ -101,7 +104,7 @@ func insertObjSet(db *gorm.DB, objects []interface{}, skipDuplicate bool, exclud
 	if skipDuplicate {
 		if db.Dialect().GetName() == "postgres" {
 			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
-				mainScope.QuotedTableName(),
+				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 			)
@@ -113,7 +116,7 @@ func insertObjSet(db *gorm.DB, objects []interface{}, skipDuplicate bool, exclud
 				qKey = append(qKey, key)
 			}
 			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
-				mainScope.QuotedTableName(),
+				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 				strings.Join(qKey, ", "),
@@ -196,6 +199,12 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 					case bool:
 						where := mainScope.Quote(key) + " = " + strconv.FormatBool(v)
 						keys = append(keys, where)
+					case time.Time:
+						where := mainScope.Quote(key) + " = " + v.Format(formatDateUpdate)
+						keys = append(keys, where)
+					case *time.Time:
+						where := mainScope.Quote(key) + " = " + v.Format(formatDateUpdate)
+						keys = append(keys, where)
 					case string:
 						if db.Dialect().GetName() == "postgres" {
 							where := mainScope.Quote(key) + " = " + `E'` + EscapeString(v) + `'`
@@ -220,26 +229,46 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 			if _, ok := objAttrs[s]; !ok {
 				return 0, errors.New("could not find field")
 			}
+			var d = objAttrs[s]
+			fmt.Print(reflect.TypeOf(d))
 			switch v := objAttrs[s].(type) {
-			case int:
-				where := strconv.Itoa(v)
-				fields = append(fields, fmt.Sprintf("%s = %s", i2, where))
-			case float64:
-				where := strconv.FormatFloat(v, 'f', -1, 64)
-				fields = append(fields, fmt.Sprintf("%s = %s", i2, where))
-			case bool:
-				where := strconv.FormatBool(v)
-				fields = append(fields, fmt.Sprintf("%s = %s", i2, where))
-			case string:
-				//v = `'` + v + `'`
-				if db.Dialect().GetName() == "postgres" {
-					fields = append(fields, fmt.Sprintf("%s = E'%s'", i2, EscapeString(v)))
-					break
-				} else if db.Dialect().GetName() == "mssql" {
-					fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeStringForSelect(v)))
-					break
+			case int, *int:
+				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
+				if c, ok := v.(int); ok {
+					where := strconv.Itoa(c)
+					fields = append(fields, fmt.Sprintf("%s = %s", i2, where))
 				}
-				fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeString(v)))
+			case float64, *float64:
+				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
+				if c, ok := v.(float64); ok {
+					where := strconv.FormatFloat(c, 'f', -1, 64)
+					fields = append(fields, fmt.Sprintf("%s = %s", i2, where))
+				}
+			case bool, *bool:
+				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
+				if c, ok := v.(bool); ok {
+					where := strconv.FormatBool(c)
+					fields = append(fields, fmt.Sprintf("%s = %s", i2, where))
+				}
+			case string, *string:
+				//v = `'` + v + `'`
+				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
+				if c, ok := v.(string); ok {
+					if db.Dialect().GetName() == "postgres" {
+						fields = append(fields, fmt.Sprintf("%s = E'%s'", i2, EscapeString(c)))
+						break
+					} else if db.Dialect().GetName() == "mssql" {
+						fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeStringForSelect(c)))
+						break
+					}
+					fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeString(c)))
+				}
+				break
+			case time.Time, *time.Time:
+				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
+				if c, ok := v.(time.Time); ok {
+					fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeString(c.Format(formatDateUpdate))))
+				}
 			default:
 				return 0, errors.New("unsupported type")
 			}
@@ -253,6 +282,29 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 	//query := fmt.Sprintf("update %s IN (%s)", strings.Join(pkey, ", "))
 	//db.Table(tableName).Where(query, ).Updates(objAttrs)
 	mainScope.Raw(query)
-	x := db.Exec(mainScope.SQL)
+	fmt.Print(fmt.Sprintf("mainScope.SQL:  %s", mainScope.SQL))
+	x := db.Exec(mainScope.SQL, mainScope.SQLVars...)
 	return x.RowsAffected, x.Error
+}
+
+func InArray(value int, arr []int) bool {
+	for i := 0; i < len(arr); i++ {
+		if value == arr[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func InterfaceSlice(slice interface{}) ([]interface{}, error) {
+	s := reflect.ValueOf(slice)
+	if s.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("InterfaceSlice() given a non-slice type")
+	}
+	ret := make([]interface{}, s.Len())
+
+	for i := 0; i < s.Len(); i++ {
+		ret[i] = s.Index(i).Interface()
+	}
+	return ret, nil
 }
