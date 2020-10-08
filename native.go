@@ -193,3 +193,21 @@ func BuildDeleteQuery(db *gorm.DB, table string, query map[string]interface{}) (
 	q := strings.Join(queryArr, " AND ")
 	return fmt.Sprintf("DELETE FROM %v WHERE %v", table, q), values
 }
+
+func BuildInsertSQL(db *gorm.DB, tableName string, model map[string]interface{}) (string, []interface{}) {
+	var cols []string
+	var values []interface{}
+	subScope := db.NewScope("")
+	for col, v := range model {
+		cols = append(cols, subScope.Quote(col))
+		values = append(values, v)
+	}
+	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
+	numCol := len(cols)
+	var arrValue []string
+	for i := 0; i < numCol; i++ {
+		arrValue = append(arrValue, "?")
+	}
+	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
+	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", subScope.Quote(tableName), column, value), values
+}
