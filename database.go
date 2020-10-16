@@ -357,6 +357,34 @@ func FindIdFields(modelType reflect.Type) []string {
 	return idFields
 }
 
+func FindIdColumns(modelType reflect.Type) []string {
+	numField := modelType.NumField()
+	var idFields = make([]string , 0)
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		ormTag := field.Tag.Get("gorm")
+		tags := strings.Split(ormTag, ";")
+		for _, tag := range tags {
+			if strings.Compare(strings.TrimSpace(tag), "primary_key") == 0 {
+				if has := strings.Contains(ormTag, "column"); has {
+					str1 := strings.Split(ormTag, ";")
+					num := len(str1)
+					for i := 0; i < num; i++ {
+						str2 := strings.Split(str1[i], ":")
+						for j := 0; j < len(str2); j++ {
+							if str2[j] == "column" {
+								idFields = append(idFields, str2[j+1])
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return idFields
+}
+
+
 func BuildQueryMap(db *gorm.DB, object interface{}, onlyPrimaryKeys bool) map[string]interface{} {
 	objectValue := reflect.Indirect(reflect.ValueOf(object))
 	modelType := objectValue.Type()
