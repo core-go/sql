@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type SqlHealthService struct {
+type SqlHealthChecker struct {
 	db       *gorm.DB
 	name     string
 	sql      string
@@ -15,19 +15,19 @@ type SqlHealthService struct {
 	provider bool
 }
 
-func NewSqlHealthService(db *gorm.DB, name string, timeout time.Duration, provider bool, sql string) *SqlHealthService {
-	return &SqlHealthService{db, name, sql, timeout, provider}
+func NewSqlHealthChecker(db *gorm.DB, name string, timeout time.Duration, provider bool, sql string) *SqlHealthChecker {
+	return &SqlHealthChecker{db, name, sql, timeout, provider}
 }
 
-func NewDefaultSqlHealthService(db *gorm.DB, provider bool, sql string) *SqlHealthService {
-	return &SqlHealthService{db, "sql", sql, 5 * time.Second, provider}
+func NewDefaultSqlHealthChecker(db *gorm.DB, provider bool, sql string) *SqlHealthChecker {
+	return &SqlHealthChecker{db, "sql", sql, 5 * time.Second, provider}
 }
 
-func (s *SqlHealthService) Name() string {
+func (s *SqlHealthChecker) Name() string {
 	return s.name
 }
 
-func (s *SqlHealthService) Check(ctx context.Context) (map[string]interface{}, error) {
+func (s *SqlHealthChecker) Check(ctx context.Context) (map[string]interface{}, error) {
 	cancel := func() {}
 	if s.timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, s.timeout)
@@ -51,7 +51,7 @@ func (s *SqlHealthService) Check(ctx context.Context) (map[string]interface{}, e
 	}
 }
 
-func (s *SqlHealthService) Build(ctx context.Context, data map[string]interface{}, err error) map[string]interface{} {
+func (s *SqlHealthChecker) Build(ctx context.Context, data map[string]interface{}, err error) map[string]interface{} {
 	if err == nil {
 		return data
 	}
