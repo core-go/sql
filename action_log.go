@@ -92,7 +92,7 @@ func (s *ActionLogWriter) SaveLog(ctx context.Context, resource string, action s
 	if s.Generator != nil {
 		id, er0 := s.Generator.Generate(ctx)
 		if er0 == nil && len(id) > 0 {
-			log["_id"] = id
+			log[ch.Id] = id
 		}
 	}
 	ext := BuildExt(ctx, ch.Ext)
@@ -111,7 +111,7 @@ func (s *ActionLogWriter) SaveLog(ctx context.Context, resource string, action s
 		tx.Rollback()
 		return err
 	}
-	return nil
+	return tx.Commit().Error
 }
 
 func BuildExt(ctx context.Context, keys *[]string) map[string]interface{} {
