@@ -4,11 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jinzhu/gorm"
+	"log"
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 )
-
+func CreatePoolByConfig(c DatabaseConfig) (*gorm.DB, error) {
+	if c.Retry.Retry1 <= 0 {
+		return CreatePool(c)
+	} else {
+		durations := DurationsFromValue(c.Retry, "Retry", 9)
+		return CreatePoolWithRetries(c, durations)
+	}
+}
 func CreatePool(dbConfig DatabaseConfig) (*gorm.DB, error) {
 	if dbConfig.Dialect == "postgres" {
 		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", dbConfig.User, dbConfig.Database, dbConfig.Password, dbConfig.Host, dbConfig.Port)
@@ -29,7 +38,48 @@ func CreatePool(dbConfig DatabaseConfig) (*gorm.DB, error) {
 		return gorm.Open("sqlite3", dbConfig.Host)
 	}
 }
-
+func CreatePoolWithRetries(c DatabaseConfig, retries []time.Duration) (*gorm.DB, error) {
+	if c.Retry.Retry1 <= 0 {
+		return CreatePool(c)
+	} else {
+		db, er1 := CreatePool(c)
+		if er1 == nil {
+			return db, er1
+		}
+		i := 0
+		err := Retry(retries, func() (err error) {
+			i = i + 1
+			db2, er2 := CreatePool(c)
+			if er2 == nil {
+				db = db2
+			}
+			return er2
+		})
+		if err != nil {
+			log.Printf("Cannot conect to database: %s.", err.Error())
+		}
+		return db, err
+	}
+}
+func BuildUri(dbConfig DatabaseConfig) string {
+	if dbConfig.Dialect == "postgres" {
+		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", dbConfig.User, dbConfig.Database, dbConfig.Password, dbConfig.Host, dbConfig.Port)
+		return uri
+	} else if dbConfig.Dialect == "mysql" {
+		uri := ""
+		if dbConfig.MultiStatements {
+			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
+			return uri
+		}
+		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
+		return uri
+	} else if dbConfig.Dialect == "mssql" { // mssql
+		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
+		return uri
+	} else { //sqlite
+		return dbConfig.Host
+	}
+}
 func Connect(dialect string, uri string) (*gorm.DB, error) {
 	return gorm.Open(dialect, uri)
 }
