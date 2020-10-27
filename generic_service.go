@@ -13,10 +13,12 @@ type GenericService struct {
 	versionField   string
 	versionIndex   int
 	versionDBField string
+	mapJsonIndex   map[string]int
 }
 
 func NewGenericService(db *gorm.DB, modelType reflect.Type, tableName string, versionField string, mapper Mapper) *GenericService {
 	defaultViewService := NewViewService(db, modelType, tableName, mapper)
+	mapJsonIndex := BuildMapField(modelType)
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
 		if index >= 0 {
@@ -27,7 +29,7 @@ func NewGenericService(db *gorm.DB, modelType reflect.Type, tableName string, ve
 			return &GenericService{ViewService: defaultViewService, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
 		}
 	}
-	return &GenericService{defaultViewService, versionField, -1, ""}
+	return &GenericService{defaultViewService, versionField, -1, "", mapJsonIndex}
 }
 
 func NewDefaultGenericService(db *gorm.DB, modelType reflect.Type, tableName string) *GenericService {
@@ -65,7 +67,7 @@ func (s *GenericService) Update(ctx context.Context, model interface{}) (int64, 
 	}
 	idQuery := BuildQueryByIdFromObject(model, s.modelType, s.keys)
 	if len(s.versionField) > 0 {
-		versionQuery := s.buildVersionQueryAndModifyModel(idQuery, model, s.versionField, s.versionDBField)
+		versionQuery := s.buildVersionQueryAndModifyModel(idQuery, model, s.mapJsonIndex, s.versionField, s.versionDBField)
 		rowAffect, err := Update(s.Database, s.table, model, versionQuery)
 		if rowAffect == 0 {
 			newModel := reflect.New(s.modelType).Interface()
@@ -90,7 +92,7 @@ func (s *GenericService) Patch(ctx context.Context, model map[string]interface{}
 	}
 	idQuery := BuildQueryByIdFromMap(model, s.modelType, s.keys)
 	if len(s.versionField) > 0 {
-		versionQuery := s.buildVersionQueryAndModifyModel(idQuery, model, s.versionDBField, s.versionDBField)
+		versionQuery := s.buildVersionQueryAndModifyModel(idQuery, model, s.mapJsonIndex, s.versionDBField, s.versionDBField)
 		rowAffect, err := Patch(s.Database, s.table, MapToGORM(model, s.modelType), versionQuery)
 		if rowAffect == 0 {
 			newModel := reflect.New(s.modelType).Interface()
@@ -127,7 +129,7 @@ func (s *GenericService) Delete(ctx context.Context, id interface{}) (int64, err
 	}
 }
 
-func (s *GenericService) buildVersionQueryAndModifyModel(query map[string]interface{}, model interface{}, versionField string, versionDBField string) map[string]interface{} {
+func (s *GenericService) buildVersionQueryAndModifyModel(query map[string]interface{}, model interface{}, mapJsonIndex map[string]int, versionField string, versionDBField string) map[string]interface{} {
 	newMap := copyMap(query)
 	if v, ok := model.(map[string]interface{}); ok {
 		if currentVersion, exist := v[s.versionField]; exist {
@@ -143,16 +145,18 @@ func (s *GenericService) buildVersionQueryAndModifyModel(query map[string]interf
 		}
 	} else {
 		valueOfModel := reflect.Indirect(reflect.ValueOf(model))
-		valueOfCurrentVersion := valueOfModel.FieldByName(s.versionField)
-		newMap[versionDBField] = valueOfCurrentVersion.Interface()
-		switch valueOfCurrentVersion.Kind().String() {
-		case "int":
-			{
-				nextVersion := reflect.ValueOf(valueOfCurrentVersion.Interface().(int) + 1)
-				valueOfModel.FieldByName(s.versionField).Set(nextVersion)
+		if index, ok := mapJsonIndex[s.versionField]; ok {
+			valueOfCurrentVersion := valueOfModel.FieldByIndex([]int{index})
+			newMap[versionDBField] = valueOfCurrentVersion.Interface()
+			switch valueOfCurrentVersion.Kind().String() {
+			case "int":
+				{
+					nextVersion := reflect.ValueOf(valueOfCurrentVersion.Interface().(int) + 1)
+					valueOfModel.FieldByIndex([]int{index}).Set(nextVersion)
+				}
+			default:
+				panic("not support type's version")
 			}
-		default:
-			panic("not support type's version")
 		}
 	}
 	return newMap
@@ -164,4 +168,21 @@ func copyMap(originalMap map[string]interface{}) map[string]interface{} {
 		newMap[k] = v
 	}
 	return newMap
+}
+
+func BuildMapField(modelType reflect.Type) map[string]int {
+	model := reflect.New(modelType).Interface()
+	val := reflect.Indirect(reflect.ValueOf(model))
+	m := make(map[string]int)
+	for i := 0; i < val.Type().NumField(); i++ {
+		field := val.Type().Field(i)
+		tag1, ok1 := field.Tag.Lookup("json")
+		if ok1 {
+			jsonName := strings.Split(tag1, ",")[0]
+			m[jsonName] = i
+		} else {
+			m[field.Name] = i
+		}
+	}
+	return m
 }
