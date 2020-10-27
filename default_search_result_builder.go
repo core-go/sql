@@ -2,20 +2,20 @@ package sql
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
 	"strings"
 
 	s "github.com/common-go/search"
-	"github.com/jinzhu/gorm"
 )
 
 type DefaultSearchResultBuilder struct {
-	Database     *gorm.DB
+	Database     *sql.DB
 	QueryBuilder QueryBuilder
 	Mapper       Mapper
 }
 
-func NewSearchResultBuilder(db *gorm.DB, queryBuilder QueryBuilder, mapper Mapper) *DefaultSearchResultBuilder {
+func NewSearchResultBuilder(db *sql.DB, queryBuilder QueryBuilder, mapper Mapper) *DefaultSearchResultBuilder {
 	builder := &DefaultSearchResultBuilder{db, queryBuilder, mapper}
 	return builder
 }
@@ -37,7 +37,7 @@ func (b *DefaultSearchResultBuilder) BuildSearchResult(ctx context.Context, m in
 	return b.buildFromDynamicQuery(ctx, b.Database, tableName, modelType, query, params, searchModel.Page, searchModel.Limit, searchModel.FirstLimit)
 }
 
-func (b *DefaultSearchResultBuilder) buildFromDynamicQuery(ctx context.Context, db *gorm.DB, tableName string, modelType reflect.Type, query string, params []interface{}, pageIndex int64, pageSize int64, initpageSize int64) (*s.SearchResult, error) {
+func (b *DefaultSearchResultBuilder) buildFromDynamicQuery(ctx context.Context, db *sql.DB, tableName string, modelType reflect.Type, query string, params []interface{}, pageIndex int64, pageSize int64, initpageSize int64) (*s.SearchResult, error) {
 	var countSelect struct {
 		Total int
 	}

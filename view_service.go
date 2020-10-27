@@ -2,12 +2,14 @@ package sql
 
 import (
 	"context"
-	"github.com/jinzhu/gorm"
+	"database/sql"
+	"fmt"
 	"reflect"
+	"strings"
 )
 
 type ViewService struct {
-	Database   *gorm.DB
+	Database   *sql.DB
 	Mapper     Mapper
 	modelType  reflect.Type
 	modelsType reflect.Type
@@ -15,95 +17,86 @@ type ViewService struct {
 	table      string
 }
 
-func NewViewService(db *gorm.DB, modelType reflect.Type, tableName string, mapper Mapper) *ViewService {
+func NewViewService(db *sql.DB, modelType reflect.Type, tableName string, mapper Mapper) *ViewService {
 	idNames := FindIdFields(modelType)
 	modelsType := reflect.Zero(reflect.SliceOf(modelType)).Type()
 	return &ViewService{db, mapper, modelType, modelsType, idNames, tableName}
 }
 
-func NewDefaultViewService(db *gorm.DB, modelType reflect.Type, tableName string) *ViewService {
+func NewDefaultViewService(db *sql.DB, modelType reflect.Type, tableName string) *ViewService {
 	return NewViewService(db, modelType, tableName, nil)
 }
 
-func (s *ViewService) Keys() []string {
+func (s *ViewService) sqlKeys() []string {
 	return s.keys
 }
 
-func (s *ViewService) All(ctx context.Context) (interface{}, error) {
-	var results = s.initArrayResults()
-	err := FindWithResults(s.Database, s.table, results, map[string]interface{}{})
-	if err == nil && s.Mapper != nil {
-		r2, er2 := s.Mapper.DbToModels(ctx, results)
-		if er2 != nil {
-			return results, err
-		}
-		return r2, err
-	}
-	return results, err
+func (s *ViewService) sqlAll(ctx context.Context) (interface{}, error) {
+	queryGetAll := s.GetAll()
+
+	fmt.Printf("queryGetAll: %v\n", queryGetAll)
+	result, err := s.Database.Exec(queryGetAll)
+	return result, err
 }
 
-func (s *ViewService) Load(ctx context.Context, id interface{}) (interface{}, error) {
-	var result = s.initSingleResult()
-	l := len(s.keys)
-	if l <= 1 {
-		query := BuildQueryById(id, s.modelType, s.keys[0])
-		found, err := FindOneWithResult(s.Database, s.table, result, query)
-		if found == false && err != nil {
-			return nil, err
-		}
-		return result, nil
-	}
-	var ids = id.(map[string]interface{})
-	query := MapToGORM(ids, s.modelType)
-	found, err := FindOneWithResult(s.Database, s.table, result, query)
-	if found == false && err != nil {
-		return nil, err
-	}
-	if s.Mapper != nil {
-		r2, er2 := s.Mapper.DbToModel(ctx, result)
-		if er2 != nil {
-			return result, er2
-		}
-		return r2, er2
-	}
-	return result, nil
+func (s *ViewService) SQLFindById(ids map[string]interface{}) (interface{}, error) {
+	queryFindById, values := s.FindById(ids)
+	fmt.Printf("queryFindById: %v\n", queryFindById)
+	result, err := s.Database.Exec(queryFindById, values...)
+	return result, err
 }
 
-func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
-	l := len(s.keys)
-	if l <= 1 {
-		query := BuildQueryById(id, s.modelType, s.keys[0])
-		ok, er0 := FindOneWithResult(s.Database, s.table, result, query)
-		if ok && er0 == nil && s.Mapper != nil {
-			_, er2 := s.Mapper.DbToModel(ctx, result)
-			if er2 != nil {
-				return ok, er2
+func (s *ViewService) FindById(ids map[string]interface{}) (string, []interface{}) {
+	modelType := s.modelType
+	numField := modelType.NumField()
+	var idFieldNames []string
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		ormTag := field.Tag.Get("gorm")
+		tags := strings.Split(ormTag, ";")
+		for _, tag := range tags {
+			if strings.Compare(strings.TrimSpace(tag), "primary_key") == 0 {
+				idFieldNames = append(idFieldNames, field.Name)
 			}
 		}
-		return ok, er0
 	}
-	var ids = id.(map[string]interface{})
-	query := MapToGORM(ids, s.modelType)
-	ok, er2 := FindOneWithResult(s.Database, s.table, result, query)
-	if ok && er2 == nil && s.Mapper != nil {
-		_, er3 := s.Mapper.DbToModel(ctx, result)
-		if er3 != nil {
-			return ok, er3
+	query := make(map[string]interface{})
+	if len(idFieldNames) > 1 {
+		idsMap := make(map[string]interface{})
+		for i := 0; i < len(idFieldNames); i += 2 {
+			idsMap[idFieldNames[i]] = idFieldNames[i+1]
 		}
+		query = s.BuildQueryByMulId(idsMap, modelType)
+	} else {
+		query = s.BuildQueryBySingleId(ids[idFieldNames[0]], modelType, idFieldNames[0])
 	}
-	return ok, er2
+	var queryArr []string
+	var values []interface{}
+	for key, value := range query {
+		queryArr = append(queryArr, fmt.Sprintf("%v=?", key))
+		values = append(values, value)
+	}
+	q := strings.Join(queryArr, " AND ")
+	return fmt.Sprintf("SELECT * FROM %v WHERE %v", s.table, q), values
 }
 
-func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
-	var result = s.initSingleResult()
-	l := len(s.keys)
-	if l <= 1 {
-		query := BuildQueryById(id, s.modelType, s.keys[0])
-		return Exists(s.Database, s.table, result, query)
+func (s *ViewService) GetAll() string {
+	return fmt.Sprintf("SELECT * FROM %v", s.table)
+}
+
+func (s *ViewService) BuildQueryBySingleId(id interface{}, modelType reflect.Type, idName string) (query map[string]interface{}) {
+	columnName, _ := GetColumnName(modelType, idName)
+	return map[string]interface{}{columnName: id}
+}
+
+func (s *ViewService) BuildQueryByMulId(ids map[string]interface{}, modelType reflect.Type) (query map[string]interface{}) {
+	queryGen := make(map[string]interface{})
+	var columnName string
+	for colName, value := range ids {
+		columnName, _ = GetColumnName(modelType, colName)
+		queryGen[columnName] = value
 	}
-	var ids = id.(map[string]interface{})
-	query := MapToGORM(ids, s.modelType)
-	return Exists(s.Database, s.table, result, query)
+	return queryGen
 }
 
 func (s *ViewService) initSingleResult() interface{} {

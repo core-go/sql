@@ -2,19 +2,19 @@ package sql
 
 import (
 	"context"
+	"database/sql"
 	s "github.com/common-go/search"
-	"github.com/jinzhu/gorm"
 	"reflect"
 )
 
 type SearchService struct {
-	Database      *gorm.DB
+	Database      *sql.DB
 	modelType     reflect.Type
 	table         string
 	searchBuilder SearchResultBuilder
 }
 
-func NewSearchService(db *gorm.DB, modelType reflect.Type, tableName string, searchBuilder SearchResultBuilder) *SearchService {
+func NewSearchService(db *sql.DB, modelType reflect.Type, tableName string, searchBuilder SearchResultBuilder) *SearchService {
 	return &SearchService{db, modelType, tableName, searchBuilder}
 }
 

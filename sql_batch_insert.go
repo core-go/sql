@@ -2,16 +2,16 @@ package sql
 
 import (
 	"context"
-	"github.com/jinzhu/gorm"
+	"database/sql"
 	"reflect"
 )
 
 type SqlBatchInsert struct {
-	db        *gorm.DB
+	db        *sql.DB
 	tableName string
 }
 
-func NewSqlBatchInsert(database *gorm.DB, tableName string) *SqlBatchInsert {
+func NewSqlBatchInsert(database *sql.DB, tableName string) *SqlBatchInsert {
 	return &SqlBatchInsert{database, tableName}
 }
 

@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/jinzhu/gorm"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 )
+
 func CreatePoolByConfig(c DatabaseConfig) (*gorm.DB, error) {
 	if c.Retry.Retry1 <= 0 {
 		return CreatePool(c)
@@ -96,26 +98,26 @@ func Exists(db *gorm.DB, table string, model interface{}, query interface{}) (bo
 	}
 }
 
-func InsertWithVersion(db *gorm.DB, table string, model interface{}, versionIndex int) (int64, error) {
-	var defaultVersion interface{}
-	modelType := reflect.TypeOf(model).Elem()
-	versionType := modelType.Field(versionIndex).Type
-	switch versionType.String() {
-	case "int":
-		defaultVersion = int(1)
-	case "int32":
-		defaultVersion = int32(1)
-	case "int64":
-		defaultVersion = int64(1)
-	default:
-		panic("not support type's version")
-	}
-	model, err := setValue(model, versionIndex, defaultVersion)
-	if err != nil {
-		return 0, err
-	}
-	return Insert(db, table, model)
-}
+//func InsertWithVersion(db *gorm.DB, table string, model interface{}, versionIndex int) (int64, error) {
+//	var defaultVersion interface{}
+//	modelType := reflect.TypeOf(model).Elem()
+//	versionType := modelType.Field(versionIndex).Type
+//	switch versionType.String() {
+//	case "int":
+//		defaultVersion = int(1)
+//	case "int32":
+//		defaultVersion = int32(1)
+//	case "int64":
+//		defaultVersion = int64(1)
+//	default:
+//		panic("not support type's version")
+//	}
+//	model, err := setValue(model, versionIndex, defaultVersion)
+//	if err != nil {
+//		return 0, err
+//	}
+//	return Insert(db, table, model)
+//}
 func setValue(model interface{}, index int, value interface{}) (interface{}, error) {
 	valueObject := reflect.Indirect(reflect.ValueOf(model))
 	switch reflect.ValueOf(model).Kind() {
@@ -160,34 +162,26 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 	return -1
 }
 
-func Insert(db *gorm.DB, table string, model interface{}) (int64, error) {
-	x := db.Table(table).Create(model)
-	if err := x.Error; err != nil {
-		dialect := db.Dialect().GetName()
-		ers := err.Error() // log.Printf(err.Error())
-		if dialect == "postgres" && strings.Contains(ers, "pq: duplicate key value violates unique constraint") {
-			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
-		} else if dialect == "mysql" && strings.Contains(ers, "Error 1062: Duplicate entry") {
-			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if dialect == "mssql" && strings.Contains(ers, "Violation of PRIMARY KEY constraint") {
-			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-		} else if dialect == "sqlite3" && strings.Contains(ers, "UNIQUE constraint failed:") {
-			return 0, nil //UNIQUE constraint failed: aa.interestWaning, aa.skillIncrease
-		} else {
-			return 0, err
-		}
-	} else {
-		return x.RowsAffected, nil
+func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
+	queryInsert := BuildInsert(table, model)
+
+	result, err := db.Exec(queryInsert)
+	if err != nil {
+		fmt.Println(err)
+		return -1, err
 	}
+	return result.RowsAffected()
 }
 
-func Update(db *gorm.DB, table string, model interface{}, query interface{}) (int64, error) {
-	result := db.Table(table).Where(query).Save(model)
-	if err := result.Error; err != nil {
-		return result.RowsAffected, err
-	} else {
-		return result.RowsAffected, nil
+func Update(db *sql.DB, table string, model interface{}) (int64, error) {
+	query, values := BuildUpdate(table, model)
+
+	result, err := db.Exec(query, values...)
+
+	if err != nil {
+		return -1, err
 	}
+	return result.RowsAffected()
 }
 
 func Patch(db *gorm.DB, table string, model map[string]interface{}, query map[string]interface{}) (int64, error) {
@@ -206,23 +200,26 @@ func PatchObject(db *gorm.DB, model interface{}, updateModel interface{}) (int64
 	return rs.RowsAffected, nil
 }
 
-func InsertOrUpdate(db *gorm.DB, table string, model interface{}, query map[string]interface{}) (int64, error) {
-	//var queryModel = reflect.New(reflect.ValueOf(model).Elem().Type()).Interface()
-	if isExist, _ := Exists(db, table, model, query); isExist {
-		return Update(db, table, model, query)
-	} else {
-		return Insert(db, table, model)
-	}
-	//db.Table(table).Where(query).Assign(modelNonPointer).FirstOrCreate(&modelNonPointer)
-}
+//func InsertOrUpdate(db *gorm.DB, table string, model interface{}, query map[string]interface{}) (int64, error) {
+//	//var queryModel = reflect.New(reflect.ValueOf(model).Elem().Type()).Interface()
+//	if isExist, _ := Exists(db, table, model, query); isExist {
+//		return Update(db, table, model, query)
+//	} else {
+//		return Insert(db, table, model)
+//	}
+//	//db.Table(table).Where(query).Assign(modelNonPointer).FirstOrCreate(&modelNonPointer)
+//}
 
-func Delete(db *gorm.DB, table string, results interface{}, query interface{}) (int64, error) {
-	if err := db.Table(table).First(results, query).Error; err != nil {
-		return 0, err
-	} else {
-		db.Table(table).Where(query).Delete(&results)
-		return 1, nil
+func Delete(db *sql.DB, table string, query map[string]interface{}) (int64, error) {
+	queryDelete, values := BuildDelete(table, query)
+
+	result, err := db.Exec(queryDelete, values...)
+
+	if err != nil {
+		fmt.Println(err)
+		return -1, err
 	}
+	return BuildResult(result.RowsAffected())
 }
 
 func FindOneWithResult(db *gorm.DB, table string, result interface{}, query interface{}) (bool, error) {
@@ -268,6 +265,76 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 		}
 	}
 	return -1, jsonName, jsonName
+}
+func BuildInsert(table string, model interface{}) string {
+	mapData, _ := BuildMapDataAndKeys(model)
+	var cols []string
+	var values []interface{}
+	for col, v := range mapData {
+		cols = append(cols, QuoteColumnName(col))
+		values = append(values, v)
+	}
+	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
+	numCol := len(cols)
+	var arrValue []string
+	for i := 0; i < numCol; i++ {
+		arrValue = append(arrValue, "?")
+	}
+	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
+	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", table, column, value)
+}
+
+func BuildUpdate(table string, model interface{}) (string, []interface{}) {
+	mapData, keys := BuildMapDataAndKeys(model)
+	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
+	idFields := FindIdColumns(modelType)
+	query := make(map[string]interface{})
+	if len(idFields) > 1 {
+		idsMap := make(map[string]interface{})
+		for i := 0; i < len(idFields); i += 2 {
+			idsMap[idFields[i]] = idFields[i+1]
+		}
+		query = MapToGORM(idsMap, modelType)
+	} else {
+		query = BuildQueryById(mapData[idFields[0]], modelType, idFields[0])
+	}
+
+	for _, gormColumnName := range idFields {
+		if _, exist := Find(idFields, gormColumnName); exist {
+			delete(mapData, gormColumnName)
+			keys = RemoveItem(keys, gormColumnName)
+		}
+	}
+
+	var values []interface{}
+	var updateQuery []string
+	for _, key := range keys {
+		if v, ok := mapData[key]; ok {
+			values = append(values, v)
+			updateQuery = append(updateQuery, fmt.Sprintf("%v=?", QuoteColumnName(key)))
+		}
+	}
+
+	setValueUpdate := strings.Join(updateQuery, ",")
+	var queryArr []string
+	for key, value := range query {
+		queryArr = append(queryArr, fmt.Sprintf("%v=?", key))
+		values = append(values, value)
+	}
+	q := strings.Join(queryArr, " AND ")
+	return fmt.Sprintf("UPDATE %v SET %v WHERE %v", table, setValueUpdate, q), values
+}
+
+func BuildDelete(table string, ids map[string]interface{}) (string, []interface{}) {
+
+	var values []interface{}
+	var queryArr []string
+	for key, value := range ids {
+		queryArr = append(queryArr, fmt.Sprintf("%v=?", QuoteColumnName(key)))
+		values = append(values, value)
+	}
+	q := strings.Join(queryArr, " AND ")
+	return fmt.Sprintf("DELETE FROM %v WHERE %v", table, q), values
 }
 
 func HandleResult(result *gorm.DB) (int64, error) {
@@ -409,7 +476,7 @@ func FindIdFields(modelType reflect.Type) []string {
 
 func FindIdColumns(modelType reflect.Type) []string {
 	numField := modelType.NumField()
-	var idFields = make([]string , 0)
+	var idFields = make([]string, 0)
 	for i := 0; i < numField; i++ {
 		field := modelType.Field(i)
 		ormTag := field.Tag.Get("gorm")
@@ -433,7 +500,6 @@ func FindIdColumns(modelType reflect.Type) []string {
 	}
 	return idFields
 }
-
 
 func BuildQueryMap(db *gorm.DB, object interface{}, onlyPrimaryKeys bool) map[string]interface{} {
 	objectValue := reflect.Indirect(reflect.ValueOf(object))
@@ -554,8 +620,72 @@ func QueryOne(db *gorm.DB, model interface{}, sql string, values ...interface{})
 	return db.Raw(sql, values...).Scan(model).Error
 }
 
-func Query(db *gorm.DB, list interface{}, sql string, values ...interface{}) error {
-	return db.Raw(sql, values...).Find(list).Error
+func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) error {
+	rows, err1 := db.Query(sql, values...)
+	if err1 != nil {
+		return err1
+	}
+	defer rows.Close()
+	tb, err2 := ScanType(rows, results)
+	if err2 != nil {
+		return err2
+	}
+	results = tb
+	rerr := rows.Close()
+	if rerr != nil {
+		return rerr
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// StructScan : transfer struct to slice for scan
+func StructScan(s interface{}) (r []interface{}) {
+	if s != nil {
+		vals := reflect.ValueOf(s).Elem()
+		for i := 0; i < vals.NumField(); i++ {
+			r = append(r, vals.Field(i).Addr().Interface())
+		}
+	}
+
+	return
+}
+
+func ScanType(rows *sql.Rows, tb interface{}) (t []interface{}, err error) {
+	for rows.Next() {
+		gTb := reflect.New(reflect.TypeOf(tb).Elem()).Interface()
+		if err = rows.Scan(StructScan(gTb)...); err == nil {
+			t = append(t, gTb)
+		}
+	}
+
+	return
+}
+
+func Scan(rows *sql.Rows, structType reflect.Type) (t []interface{}, err error) {
+	for rows.Next() {
+		gTb := reflect.New(structType).Interface()
+		if err = rows.Scan(StructScan(gTb)...); err == nil {
+			t = append(t, gTb)
+		}
+	}
+
+	return
+}
+
+func ScanRowType(row *sql.Row, tb interface{}) (t interface{}, err error) {
+	t = reflect.New(reflect.TypeOf(tb).Elem()).Interface()
+	err = row.Scan(StructScan(t)...)
+	return
+}
+
+func ScanRow(row *sql.Row, structType reflect.Type) (t interface{}, err error) {
+	t = reflect.New(structType).Interface()
+	err = row.Scan(StructScan(t)...)
+	return
 }
 
 func EscapeString(value string) string {

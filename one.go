@@ -140,3 +140,21 @@ func BuildMapDataAndKeys(model interface{}) (map[string]interface{}, []string) {
 	return mapValue, keys
 }
 
+func QuoteByDriver(key, driver string) string {
+	switch driver {
+	case "*mysql.MySQLDriver":
+		return fmt.Sprintf("%s", key)
+	case "*mssql.Driver":
+		return fmt.Sprintf(`[%s]`, key)
+	default:
+		return fmt.Sprintf(`"%s"`, key)
+	}
+}
+
+func BuildResult(result int64, err error) (int64, error) {
+	if err != nil {
+		return result, err
+	} else {
+		return result, nil
+	}
+}

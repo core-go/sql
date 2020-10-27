@@ -1,141 +1,36 @@
 package sql
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/jinzhu/gorm"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 )
 
+type Statement struct {
+	Query  string
+	Values []interface{}
+}
+
 var formatDateUpdate = "2006-01-02 15:04:05"
 
-// Insert multiple records at once
-// [objects]        Must be a slice of struct
-// [chunkSize]      Number of records to insert at once.
-//                  Embedding a large number of variables at once will raise an error beyond the limit of prepared statement.
-//                  Larger size will normally lead the better performance, but 2000 to 3000 is reasonable.
-// [excludeColumns] Columns you want to exclude from insert. You can omit if there is no column you want to exclude.
-func InsertMany(db *gorm.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
+func InsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
 		chunkSize = len(objects)
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := insertObjSet(db, tableName, objSet, false, excludeColumns...)
+		count, err := insertObjSetSQL(db, tableName, objSet, false, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
 		}
 	}
 	return c, nil
-}
-
-func InsertManySkipErrors(db *gorm.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
-	// Split records with specified size not to exceed Database parameter limit
-	if chunkSize <= 0 {
-		chunkSize = len(objects)
-	}
-	var c int64 = 0
-	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := insertObjSet(db, tableName, objSet, true, excludeColumns...)
-		c = c + count
-		if err != nil {
-			return c, err
-		}
-	}
-	return c, nil
-}
-
-func insertObjSet(db *gorm.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
-	if len(objects) == 0 {
-		return 0, nil
-	}
-
-	firstAttrs, err := ExtractMapValue(objects[0], excludeColumns)
-	if err != nil {
-		return 0, err
-	}
-
-	attrSize := len(firstAttrs)
-	modelType := reflect.TypeOf(objects[0])
-	pkey := FindIdFields(modelType)
-	// Scope to eventually run SQL
-	mainScope := db.NewScope(objects[0])
-	// Store placeholders for embedding variables
-	placeholders := make([]string, 0, attrSize)
-
-	// Replace with database column name
-	dbColumns := make([]string, 0, attrSize)
-	for _, key := range SortedKeys(firstAttrs) {
-		dbColumns = append(dbColumns, mainScope.Quote(key))
-	}
-
-	for _, obj := range objects {
-		objAttrs, err := ExtractMapValue(obj, excludeColumns)
-		if err != nil {
-			return 0, err
-		}
-
-		// If object sizes are different, SQL statement loses consistency
-		if len(objAttrs) != attrSize {
-			return 0, errors.New("attribute sizes are inconsistent")
-		}
-
-		scope := db.NewScope(obj)
-
-		// Append variables
-		variables := make([]string, 0, attrSize)
-		for _, key := range SortedKeys(objAttrs) {
-			scope.AddToVars(objAttrs[key])
-			variables = append(variables, "?")
-		}
-
-		valueQuery := "(" + strings.Join(variables, ", ") + ")"
-		placeholders = append(placeholders, valueQuery)
-
-		// Also append variables to mainScope
-		mainScope.SQLVars = append(mainScope.SQLVars, scope.SQLVars...)
-	}
-	var query string
-	if skipDuplicate {
-		if db.Dialect().GetName() == "postgres" {
-			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
-				tableName,
-				strings.Join(dbColumns, ", "),
-				strings.Join(placeholders, ", "),
-			)
-
-		} else if db.Dialect().GetName() == "mysql" {
-			var qKey []string
-			for _, i2 := range pkey {
-				key := i2 + " = " + i2
-				qKey = append(qKey, key)
-			}
-			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
-				tableName,
-				strings.Join(dbColumns, ", "),
-				strings.Join(placeholders, ", "),
-				strings.Join(qKey, ", "),
-			)
-		} else {
-			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", db.Dialect().GetName())
-		}
-	}
-	{
-		query = fmt.Sprintf(fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
-			mainScope.QuotedTableName(),
-			strings.Join(dbColumns, ", "),
-			strings.Join(placeholders, ", "),
-		))
-	}
-	mainScope.Raw(query)
-
-	x := db.Exec(mainScope.SQL, mainScope.SQLVars...)
-	return x.RowsAffected, x.Error
 }
 
 // Separate objects into several size
@@ -154,7 +49,126 @@ func splitObjects(objArr []interface{}, size int) [][]interface{} {
 	return chunkSet
 }
 
-func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, error) {
+func RawInsertManySkipErrors(db *sql.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
+	// Split records with specified size not to exceed Database parameter limit
+	if chunkSize <= 0 {
+		chunkSize = len(objects)
+	}
+	var c int64 = 0
+	for _, objSet := range splitObjects(objects, chunkSize) {
+		count, err := insertObjSetSQL(db, tableName, objSet, true, excludeColumns...)
+		c = c + count
+		if err != nil {
+			return c, err
+		}
+	}
+	return c, nil
+}
+
+func insertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
+	if len(objects) == 0 {
+		return 0, nil
+	}
+
+	firstAttrs, err := ExtractMapValue(objects[0], excludeColumns)
+	if err != nil {
+		return 0, err
+	}
+
+	attrSize := len(firstAttrs)
+	modelType := reflect.TypeOf(objects[0])
+	pkey := FindIdFields(modelType)
+	// Scope to eventually run SQL
+	mainScope := Statement{}
+	// Store placeholders for embedding variables
+	placeholders := make([]string, 0, attrSize)
+
+	// Replace with database column name
+	dbColumns := make([]string, 0, attrSize)
+	for _, key := range SortedKeys(firstAttrs) {
+		dbColumns = append(dbColumns, QuoteColumnName(key))
+	}
+
+	for _, obj := range objects {
+		objAttrs, err := ExtractMapValue(obj, excludeColumns)
+		if err != nil {
+			return 0, err
+		}
+
+		// If object sizes are different, SQL statement loses consistency
+		if len(objAttrs) != attrSize {
+			return 0, errors.New("attribute sizes are inconsistent")
+		}
+
+		scope := Statement{}
+
+		// Append variables
+		variables := make([]string, 0, attrSize)
+		for _, key := range SortedKeys(objAttrs) {
+			scope.Values = append(scope.Values, objAttrs[key])
+			variables = append(variables, "?")
+		}
+
+		valueQuery := "(" + strings.Join(variables, ", ") + ")"
+		placeholders = append(placeholders, valueQuery)
+
+		// Also append variables to mainScope
+		mainScope.Values = append(mainScope.Values, scope.Values...)
+	}
+	var query string
+	driver := reflect.TypeOf(db.Driver()).String()
+	if skipDuplicate {
+		if driver == "*postgres.Driver" {
+			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
+				tableName,
+				strings.Join(dbColumns, ", "),
+				strings.Join(placeholders, ", "),
+			)
+
+		} else if driver == "*mysql.MySQLDriver" {
+			var qKey []string
+			for _, i2 := range pkey {
+				key := i2 + " = " + i2
+				qKey = append(qKey, key)
+			}
+			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
+				tableName,
+				strings.Join(dbColumns, ", "),
+				strings.Join(placeholders, ", "),
+				strings.Join(qKey, ", "),
+			)
+		} else {
+			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driver)
+		}
+	}
+	{
+		query = fmt.Sprintf(fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+			tableName,
+			strings.Join(dbColumns, ", "),
+			strings.Join(placeholders, ", "),
+		))
+	}
+	mainScope.Query = query
+
+	x, err := db.Exec(mainScope.Query, mainScope.Values...)
+	fmt.Println(err)
+	return x.RowsAffected()
+}
+
+func InterfaceSlice(slice interface{}) ([]interface{}, error) {
+	s := reflect.ValueOf(slice)
+	if s.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("InterfaceSlice() given a non-slice type")
+	}
+	ret := make([]interface{}, s.Len())
+
+	for i := 0; i < s.Len(); i++ {
+		ret[i] = s.Index(i).Interface()
+	}
+	return ret, nil
+}
+
+func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	if len(objects) == 0 {
 		return 0, nil
 	}
@@ -166,11 +180,12 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 	modelType := reflect.TypeOf(objects[0])
 	objAttrs := make(map[string]interface{})
 	pkey := FindIdFields(modelType)
-	mainScope := db.NewScope(objects[0])
+	mainScope := Statement{}
 	query := ""
 	dbColumns := make([]string, 0)
+	driver := reflect.TypeOf(db.Driver()).String()
 	for _, key := range SortedKeys(firstAttrs) {
-		dbColumns = append(dbColumns, mainScope.Quote(key))
+		dbColumns = append(dbColumns, QuoteByDriver(key, driver))
 	}
 
 	for _, obj := range objects {
@@ -191,31 +206,31 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 					}
 					switch v := objAttrs[key].(type) {
 					case int:
-						where := mainScope.Quote(key) + " = " + strconv.Itoa(v)
+						where := QuoteByDriver(key, driver) + " = " + strconv.Itoa(v)
 						keys = append(keys, where)
 					case float64:
-						where := mainScope.Quote(key) + " = " + strconv.FormatFloat(v, 'f', -1, 64)
+						where := QuoteByDriver(key, driver) + " = " + strconv.FormatFloat(v, 'f', -1, 64)
 						keys = append(keys, where)
 					case bool:
-						where := mainScope.Quote(key) + " = " + strconv.FormatBool(v)
+						where := QuoteByDriver(key, driver) + " = " + strconv.FormatBool(v)
 						keys = append(keys, where)
 					case time.Time:
-						where := mainScope.Quote(key) + " = " + v.Format(formatDateUpdate)
+						where := QuoteByDriver(key, driver) + " = " + v.Format(formatDateUpdate)
 						keys = append(keys, where)
 					case *time.Time:
-						where := mainScope.Quote(key) + " = " + v.Format(formatDateUpdate)
+						where := QuoteByDriver(key, driver) + " = " + v.Format(formatDateUpdate)
 						keys = append(keys, where)
 					case string:
-						if db.Dialect().GetName() == "postgres" {
-							where := mainScope.Quote(key) + " = " + `E'` + EscapeString(v) + `'`
+						if driver == "*postgres.Driver" {
+							where := QuoteByDriver(key, driver) + " = " + `E'` + EscapeString(v) + `'`
 							keys = append(keys, where)
 							break
-						} else if db.Dialect().GetName() == "mssql" {
-							where := mainScope.Quote(key) + " = " + `'` + EscapeStringForSelect(v) + `'`
+						} else if driver == "*mssql.Driver" {
+							where := QuoteByDriver(key, driver) + " = " + `'` + EscapeStringForSelect(v) + `'`
 							keys = append(keys, where)
 							break
 						}
-						where := mainScope.Quote(key) + " = " + `'` + EscapeString(v) + `'`
+						where := QuoteByDriver(key, driver) + " = " + `'` + EscapeString(v) + `'`
 						keys = append(keys, where)
 					default:
 						return 0, errors.New("unsupported type")
@@ -225,7 +240,7 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 		}
 		for _, i2 := range dbColumns {
 			s := i2
-			s = s[1 : len(s)-1]
+			//s = s[1 : len(s)-1]
 			if _, ok := objAttrs[s]; !ok {
 				return 0, errors.New("could not find field")
 			}
@@ -254,10 +269,10 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 				//v = `'` + v + `'`
 				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
 				if c, ok := v.(string); ok {
-					if db.Dialect().GetName() == "postgres" {
+					if driver == "*postgres.Driver" {
 						fields = append(fields, fmt.Sprintf("%s = E'%s'", i2, EscapeString(c)))
 						break
-					} else if db.Dialect().GetName() == "mssql" {
+					} else if driver == "*mssql.Driver" {
 						fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeStringForSelect(c)))
 						break
 					}
@@ -275,36 +290,15 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 			sets = strings.Join(fields, ", ")
 		}
 		keyValues = keyValues + strings.Join(keys, " and ")
-		query = query + fmt.Sprintf("update %s set %s where %s; ", tableName, sets, keyValues)
+		query = query + fmt.Sprintf("UPDATE %s SET %s WHERE %s; ", tableName, sets, keyValues)
 	}
 	//UPDATE users SET name='hello', age=18 WHERE id IN (10, 11)
 
 	//query := fmt.Sprintf("update %s IN (%s)", strings.Join(pkey, ", "))
 	//db.Table(tableName).Where(query, ).Updates(objAttrs)
-	mainScope.Raw(query)
-	fmt.Print(fmt.Sprintf("mainScope.SQL:  %s", mainScope.SQL))
-	x := db.Exec(mainScope.SQL, mainScope.SQLVars...)
-	return x.RowsAffected, x.Error
-}
-
-func InArray(value int, arr []int) bool {
-	for i := 0; i < len(arr); i++ {
-		if value == arr[i] {
-			return true
-		}
-	}
-	return false
-}
-
-func InterfaceSlice(slice interface{}) ([]interface{}, error) {
-	s := reflect.ValueOf(slice)
-	if s.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("InterfaceSlice() given a non-slice type")
-	}
-	ret := make([]interface{}, s.Len())
-
-	for i := 0; i < s.Len(); i++ {
-		ret[i] = s.Index(i).Interface()
-	}
-	return ret, nil
+	mainScope.Query = query
+	//fmt.Print(fmt.Sprintf("mainScope.SQL:  %s", mainScope.SQL))
+	x, err := db.Exec(mainScope.Query)
+	fmt.Println(err)
+	return x.RowsAffected()
 }
