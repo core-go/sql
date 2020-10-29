@@ -49,3 +49,7 @@ func (s *GenericService) Delete(id interface{}) (int64, error) {
 		return Delete(s.Database, s.table, MapToGORM(ids, s.modelType))
 	}
 }
+
+func (s *GenericService) Patch(model map[string]interface{}) (int64, error) {
+	return Patch(s.Database, s.table, model, s.modelType)
+}

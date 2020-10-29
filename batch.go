@@ -10,12 +10,13 @@ import (
 	"time"
 )
 
-type Statement struct {
-	Query  string
-	Values []interface{}
-}
-
 var formatDateUpdate = "2006-01-02 15:04:05"
+
+const (
+	DRIVER_POSTGRES = "postgres"
+	DRIVER_MYSQL    = "mysql"
+	DRIVER_MSSQL    = "mssql"
+)
 
 func InsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
@@ -69,8 +70,8 @@ func insertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 	if len(objects) == 0 {
 		return 0, nil
 	}
-
-	firstAttrs, err := ExtractMapValue(objects[0], excludeColumns)
+	driverName := getDriver(db)
+	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
 	if err != nil {
 		return 0, err
 	}
@@ -90,7 +91,7 @@ func insertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 	}
 
 	for _, obj := range objects {
-		objAttrs, err := ExtractMapValue(obj, excludeColumns)
+		objAttrs, _, err := ExtractMapValue(obj, excludeColumns)
 		if err != nil {
 			return 0, err
 		}
@@ -116,16 +117,15 @@ func insertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 		mainScope.Values = append(mainScope.Values, scope.Values...)
 	}
 	var query string
-	driver := reflect.TypeOf(db.Driver()).String()
 	if skipDuplicate {
-		if driver == "*postgres.Driver" {
+		if driverName == DRIVER_POSTGRES {
 			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 			)
 
-		} else if driver == "*mysql.MySQLDriver" {
+		} else if driverName == DRIVER_MYSQL {
 			var qKey []string
 			for _, i2 := range pkey {
 				key := i2 + " = " + i2
@@ -138,7 +138,7 @@ func insertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 				strings.Join(qKey, ", "),
 			)
 		} else {
-			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driver)
+			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driverName)
 		}
 	}
 	{
@@ -169,136 +169,157 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 }
 
 func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
+	var placeholder []string
+	driverName := getDriver(db)
+	var query []string
 	if len(objects) == 0 {
 		return 0, nil
 	}
-	var placeholder []string
-	firstAttrs, err := ExtractMapValue(objects[0], placeholder)
+	valueDefault := objects[0]
+	statement := newStatement(valueDefault, placeholder...)
+	columns := make([]string, 0) // columns set value for update
+	for _, key := range SortedKeys(statement.Attributes) {
+		columns = append(columns, QuoteByDriver(key, driverName))
+	}
+	for _, obj := range objects {
+		scope := newStatement(obj, placeholder...)
+		// Append variables set column
+		for _, key := range SortedKeys(scope.Attributes) {
+			scope.Values = append(scope.Values, scope.Attributes[key])
+		}
+		// Append variables where
+		for _, key := range scope.Keys {
+			scope.Values = append(scope.Values, scope.AttributeKeys[key])
+		}
+		// Also append variables to mainScope
+		//statement.Values = append(statement.Values, scope.Values...)
+
+		n := len(scope.Columns)
+		sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+		if err1 != nil {
+			return 0, err1
+		}
+		columnsKeys := scope.Keys
+		where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+		if err2 != nil {
+			return 0, err2
+		}
+		query = append(query, fmt.Sprintf(fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+			tableName,
+			sets,
+			where,
+		)))
+	}
+
+	statement.Query = strings.Join(query, "; ")
+	fmt.Println("QUERY : ", statement.Query)
+	x, err := db.Exec(statement.Query)
+	fmt.Println(err)
 	if err != nil {
 		return 0, err
 	}
-	modelType := reflect.TypeOf(objects[0])
-	objAttrs := make(map[string]interface{})
-	pkey := FindIdFields(modelType)
-	mainScope := Statement{}
-	query := ""
-	dbColumns := make([]string, 0)
-	driver := reflect.TypeOf(db.Driver()).String()
-	for _, key := range SortedKeys(firstAttrs) {
-		dbColumns = append(dbColumns, QuoteByDriver(key, driver))
-	}
-
-	for _, obj := range objects {
-		var keyValues string
-		sets := ""
-		var fields []string
-		objAttrs, err = ExtractMapValue(obj, placeholder)
-		if err != nil {
-			return 0, err
-		}
-		var keys []string
-
-		for _, key := range SortedKeys(objAttrs) {
-			for _, i2 := range pkey {
-				if strings.ToLower(i2) == strings.ToLower(key) {
-					if _, ok := objAttrs[key]; !ok {
-						return 0, errors.New("could not find field")
-					}
-					switch v := objAttrs[key].(type) {
-					case int:
-						where := QuoteByDriver(key, driver) + " = " + strconv.Itoa(v)
-						keys = append(keys, where)
-					case float64:
-						where := QuoteByDriver(key, driver) + " = " + strconv.FormatFloat(v, 'f', -1, 64)
-						keys = append(keys, where)
-					case bool:
-						where := QuoteByDriver(key, driver) + " = " + strconv.FormatBool(v)
-						keys = append(keys, where)
-					case time.Time:
-						where := QuoteByDriver(key, driver) + " = " + v.Format(formatDateUpdate)
-						keys = append(keys, where)
-					case *time.Time:
-						where := QuoteByDriver(key, driver) + " = " + v.Format(formatDateUpdate)
-						keys = append(keys, where)
-					case string:
-						if driver == "*postgres.Driver" {
-							where := QuoteByDriver(key, driver) + " = " + `E'` + EscapeString(v) + `'`
-							keys = append(keys, where)
-							break
-						} else if driver == "*mssql.Driver" {
-							where := QuoteByDriver(key, driver) + " = " + `'` + EscapeStringForSelect(v) + `'`
-							keys = append(keys, where)
-							break
-						}
-						where := QuoteByDriver(key, driver) + " = " + `'` + EscapeString(v) + `'`
-						keys = append(keys, where)
-					default:
-						return 0, errors.New("unsupported type")
-					}
-				}
-			}
-		}
-		for _, i2 := range dbColumns {
-			s := i2
-			//s = s[1 : len(s)-1]
-			if _, ok := objAttrs[s]; !ok {
-				return 0, errors.New("could not find field")
-			}
-			var d = objAttrs[s]
-			fmt.Print(reflect.TypeOf(d))
-			switch v := objAttrs[s].(type) {
-			case int, *int:
-				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
-				if c, ok := v.(int); ok {
-					where := strconv.Itoa(c)
-					fields = append(fields, fmt.Sprintf("%s = %s", i2, where))
-				}
-			case float64, *float64:
-				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
-				if c, ok := v.(float64); ok {
-					where := strconv.FormatFloat(c, 'f', -1, 64)
-					fields = append(fields, fmt.Sprintf("%s = %s", i2, where))
-				}
-			case bool, *bool:
-				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
-				if c, ok := v.(bool); ok {
-					where := strconv.FormatBool(c)
-					fields = append(fields, fmt.Sprintf("%s = %s", i2, where))
-				}
-			case string, *string:
-				//v = `'` + v + `'`
-				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
-				if c, ok := v.(string); ok {
-					if driver == "*postgres.Driver" {
-						fields = append(fields, fmt.Sprintf("%s = E'%s'", i2, EscapeString(c)))
-						break
-					} else if driver == "*mssql.Driver" {
-						fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeStringForSelect(c)))
-						break
-					}
-					fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeString(c)))
-				}
-				break
-			case time.Time, *time.Time:
-				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
-				if c, ok := v.(time.Time); ok {
-					fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeString(c.Format(formatDateUpdate))))
-				}
-			default:
-				return 0, errors.New("unsupported type")
-			}
-			sets = strings.Join(fields, ", ")
-		}
-		keyValues = keyValues + strings.Join(keys, " and ")
-		query = query + fmt.Sprintf("UPDATE %s SET %s WHERE %s; ", tableName, sets, keyValues)
-	}
-	//UPDATE users SET name='hello', age=18 WHERE id IN (10, 11)
-
-	//query := fmt.Sprintf("update %s IN (%s)", strings.Join(pkey, ", "))
-	//db.Table(tableName).Where(query, ).Updates(objAttrs)
-	mainScope.Query = query
-	//fmt.Print(fmt.Sprintf("mainScope.SQL:  %s", mainScope.SQL))
-	x, err := db.Exec(mainScope.Query)
-	fmt.Println(err)
 	return x.RowsAffected()
+}
+
+func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string) (int64, error) {
+	driverName := getDriver(db)
+	var query []string
+	if len(objects) == 0 {
+		return 0, nil
+	}
+	for _, obj := range objects {
+		scope := statement()
+		// Append variables set column
+		for key, _ := range obj {
+			if _, ok := Find(idTagJsonNames, key); !ok {
+				scope.Columns = append(scope.Columns, key)
+				scope.Values = append(scope.Values, obj[key])
+			}
+		}
+		// Append variables where
+		for i, key := range idTagJsonNames {
+			scope.Values = append(scope.Values, obj[key])
+			scope.Keys = append(scope.Keys, idColumNames[i])
+		}
+
+		n := len(scope.Columns)
+		sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+		if err1 != nil {
+			return 0, err1
+		}
+		columnsKeys := scope.Keys
+		where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+		if err2 != nil {
+			return 0, err2
+		}
+		query = append(query, fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+			tableName,
+			sets,
+			where,
+		))
+	}
+
+	sql := strings.Join(query, "; ")
+	x, err := db.Exec(sql)
+	if err != nil {
+		return 0, err
+	}
+	return x.RowsAffected()
+}
+
+func getDriver(db *sql.DB) string {
+	driver := reflect.TypeOf(db.Driver()).String()
+	switch driver {
+	case "*postgres.Driver":
+		return DRIVER_POSTGRES
+	case "*mysql.MySQLDriver":
+		return DRIVER_MYSQL
+	case "*mssql.Driver":
+		return DRIVER_MSSQL
+	default:
+		return "no support"
+	}
+}
+
+func getValueColumn(value interface{}, driverName string) (string, error) {
+	str := ""
+	switch v := value.(type) {
+	case int:
+		str = strconv.Itoa(v)
+	case float64:
+		str = strconv.FormatFloat(v, 'f', -1, 64)
+	case bool:
+		str = strconv.FormatBool(v)
+	case time.Time:
+		str = v.Format(formatDateUpdate)
+	case *time.Time:
+		str = v.Format(formatDateUpdate)
+	case string:
+		if driverName == DRIVER_POSTGRES {
+			str = `E'` + EscapeString(v) + `'`
+		} else if driverName == DRIVER_MSSQL {
+			str = `'` + EscapeStringForSelect(v) + `'`
+		} else {
+			str = `'` + EscapeString(v) + `'`
+		}
+	default:
+		return "", errors.New("unsupported type")
+	}
+	return str, nil
+}
+
+func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, start int, driverName string, joinStr string) (string, error) {
+	arr := make([]string, n)
+	j := start
+	for i, _ := range arr {
+		columnName := columns[i]
+		value, err := getValueColumn(values[j], driverName)
+		if err == nil {
+			arr[i] = fmt.Sprintf("%s = %s", columnName, value)
+		} else {
+			return "", err
+		}
+		j++
+	}
+	return strings.Join(arr, joinStr), nil
 }

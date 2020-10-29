@@ -10,7 +10,7 @@ import (
 // raw query
 func Save(db *gorm.DB, table string, model interface{}) (int64, error) {
 	placeholders := make([]string, 0)
-	attrs, err := ExtractMapValue(model, placeholders)
+	attrs, _, err := ExtractMapValue(model, placeholders)
 	if err != nil {
 		return 0, fmt.Errorf("cannot extract object's values: %w", err)
 	}

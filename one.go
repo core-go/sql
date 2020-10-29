@@ -112,7 +112,7 @@ func BuildInsertOneQuery(table string, model interface{}) (string, []interface{}
 
 func QuoteColumnName(str string) string {
 	if strings.Contains(str, ".") {
-		newStrs := []string{}
+		var newStrs []string
 		for _, str := range strings.Split(str, ".") {
 			newStrs = append(newStrs, str)
 		}
@@ -142,9 +142,9 @@ func BuildMapDataAndKeys(model interface{}) (map[string]interface{}, []string) {
 
 func QuoteByDriver(key, driver string) string {
 	switch driver {
-	case "*mysql.MySQLDriver":
+	case "mysql":
 		return fmt.Sprintf("%s", key)
-	case "*mssql.Driver":
+	case "mssql":
 		return fmt.Sprintf(`[%s]`, key)
 	default:
 		return fmt.Sprintf(`"%s"`, key)

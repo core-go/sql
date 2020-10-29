@@ -31,22 +31,24 @@ func (s *ViewService) sqlKeys() []string {
 	return s.keys
 }
 
-func (s *ViewService) sqlAll(ctx context.Context) (interface{}, error) {
+func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 	queryGetAll := s.GetAll()
 
 	fmt.Printf("queryGetAll: %v\n", queryGetAll)
-	result, err := s.Database.Exec(queryGetAll)
+	row, err := s.Database.Query(queryGetAll)
+	result, err := ScanByModelType(row, s.modelType)
 	return result, err
 }
 
-func (s *ViewService) SQLFindById(ids map[string]interface{}) (interface{}, error) {
-	queryFindById, values := s.FindById(ids)
+func (s *ViewService) FindById(ctx context.Context, ids map[string]interface{}) (interface{}, error) {
+	queryFindById, values := s.BuildFindById(ids)
 	fmt.Printf("queryFindById: %v\n", queryFindById)
-	result, err := s.Database.Exec(queryFindById, values...)
+	row, err := s.Database.Query(queryFindById, values...)
+	result, err := ScanByModelType(row, s.modelType)
 	return result, err
 }
 
-func (s *ViewService) FindById(ids map[string]interface{}) (string, []interface{}) {
+func (s *ViewService) BuildFindById(ids map[string]interface{}) (string, []interface{}) {
 	modelType := s.modelType
 	numField := modelType.NumField()
 	var idFieldNames []string

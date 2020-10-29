@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+const (
+	DBName      = "column"
+	PRIMARY_KEY = "primary_key"
+)
+
 func CreatePoolByConfig(c DatabaseConfig) (*gorm.DB, error) {
 	if c.Retry.Retry1 <= 0 {
 		return CreatePool(c)
@@ -184,12 +189,18 @@ func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 	return result.RowsAffected()
 }
 
-func Patch(db *gorm.DB, table string, model map[string]interface{}, query map[string]interface{}) (int64, error) {
-	result := db.Table(table).Where(query).Updates(model)
-	if err := result.Error; err != nil {
-		return result.RowsAffected, err
+func Patch(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type) (int64, error) {
+	fieldName, idJsonName := FindNames(modelType)
+	driverName := getDriver(db)
+	query := BuildPatch(table, model, fieldName, idJsonName, driverName)
+	if query == "" {
+		return 0, errors.New("Fail to build query")
 	}
-	return result.RowsAffected, nil
+	result, err := db.Exec(query)
+	if err != nil {
+		return -1, err
+	}
+	return result.RowsAffected()
 }
 
 func PatchObject(db *gorm.DB, model interface{}, updateModel interface{}) (int64, error) {
@@ -325,6 +336,39 @@ func BuildUpdate(table string, model interface{}) (string, []interface{}) {
 	return fmt.Sprintf("UPDATE %v SET %v WHERE %v", table, setValueUpdate, q), values
 }
 
+func BuildPatch(table string, model map[string]interface{}, idTagJsonNames []string, idColumNames []string, driverName string) string {
+	scope := statement()
+	// Append variables set column
+	for key, _ := range model {
+		if _, ok := Find(idTagJsonNames, key); !ok {
+			scope.Columns = append(scope.Columns, key)
+			scope.Values = append(scope.Values, model[key])
+		}
+	}
+	// Append variables where
+	for i, key := range idTagJsonNames {
+		scope.Values = append(scope.Values, model[key])
+		scope.Keys = append(scope.Keys, idColumNames[i])
+	}
+
+	n := len(scope.Columns)
+	sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+	if err1 != nil {
+		return ""
+	}
+	columnsKeys := scope.Keys
+	where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+	if err2 != nil {
+		return ""
+	}
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+		table,
+		sets,
+		where,
+	)
+	return query
+}
+
 func BuildDelete(table string, ids map[string]interface{}) (string, []interface{}) {
 
 	var values []interface{}
@@ -346,37 +390,46 @@ func HandleResult(result *gorm.DB) (int64, error) {
 }
 
 // Obtain columns and values required for insert from interface
-func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]interface{}, error) {
+func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]interface{}, map[string]interface{}, error) {
 	rv := reflect.ValueOf(value)
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
 		value = rv.Interface()
 	}
 	if rv.Kind() != reflect.Struct {
-		return nil, errors.New("value must be kind of Struct")
+		return nil, nil, errors.New("value must be kind of Struct")
 	}
 
 	var attrs = map[string]interface{}{}
+	var attrsKey = map[string]interface{}{}
 
-	for _, field := range (&gorm.Scope{Value: value}).Fields() {
+	for _, field := range GetMapField(value) {
+		if !ContainString(excludeColumns, GetTag(field, "fieldName")) && !IsPrimary(field) {
+			if dBName, ok := field.Tags[DBName]; ok {
+				attrs[dBName] = field.Value.Interface()
+			}
+		}
+		if IsPrimary(field) {
+			if dBName, ok := field.Tags[DBName]; ok {
+				attrsKey[dBName] = field.Value.Interface()
+			}
+		}
 		// Exclude relational record because it's not directly contained in database columns
-		_, hasForeignKey := field.TagSettingsGet("FOREIGNKEY")
-
-		if !ContainString(excludeColumns, field.Struct.Name) && field.StructField.Relationship == nil && !hasForeignKey &&
+		//_, hasForeignKey := field.TagSettingsGet("FOREIGNKEY")
+		/*if !ContainString(excludeColumns, field.Struct.Name) && field.StructField.Relationship == nil && !hasForeignKey &&
 			!field.IsIgnored && !IsAutoIncrementField(field) && !IsPrimaryAndBlankField(field) {
 			if field.StructField.HasDefaultValue && field.IsBlank {
 				// If default value presents and field is empty, assign a default value
 				if val, ok := field.TagSettingsGet("DEFAULT"); ok {
 					attrs[field.DBName] = val
 				} else {
-					attrs[field.DBName] = field.Field.Interface()
 				}
 			} else {
 				attrs[field.DBName] = field.Field.Interface()
 			}
-		}
+		}*/
 	}
-	return attrs, nil
+	return attrs, attrsKey, nil
 }
 
 // For ViewDefaultRepository
@@ -665,6 +718,17 @@ func ScanType(rows *sql.Rows, tb interface{}) (t []interface{}, err error) {
 	return
 }
 
+func ScanByModelType(rows *sql.Rows, modelType reflect.Type) (t []interface{}, err error) {
+	for rows.Next() {
+		gTb := reflect.New(modelType).Interface()
+		if err = rows.Scan(StructScan(gTb)...); err == nil {
+			t = append(t, gTb)
+		}
+	}
+
+	return
+}
+
 func Scan(rows *sql.Rows, structType reflect.Type) (t []interface{}, err error) {
 	for rows.Next() {
 		gTb := reflect.New(structType).Interface()
@@ -742,6 +806,13 @@ func IsAutoIncrementField(field *gorm.Field) bool {
 	return false
 }
 
-func IsPrimaryAndBlankField(field *gorm.Field) bool {
-	return field.IsPrimaryKey && field.IsBlank
+func GetTag(field Field, tagName string) string {
+	if tag, ok := field.Tags[tagName]; ok {
+		return tag
+	}
+	return ""
+}
+
+func IsPrimary(field Field) bool {
+	return GetTag(field, PRIMARY_KEY) != ""
 }
