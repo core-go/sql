@@ -65,7 +65,7 @@ func FindNames(modelType reflect.Type) ([]string, []string) {
 					tag1, ok1 := field.Tag.Lookup("json")
 					tagJsons := strings.Split(tag1, ",")
 					if ok1 && len(tagJsons) > 0 {
-						idJsons = append(idColumnFields, tagJsons[0])
+						idJsons = append(idJsons, tagJsons[0])
 					}
 				}
 			}

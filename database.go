@@ -8,6 +8,7 @@ import (
 	"log"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -798,6 +799,15 @@ func ScanRow(row *sql.Row, structType reflect.Type) (t interface{}, err error) {
 	t = reflect.New(structType).Interface()
 	err = row.Scan(StructScan(t)...)
 	return
+}
+
+func BuildMarkByDriver(number int, driver string) string {
+	switch driver {
+	case DRIVER_POSTGRES:
+		return "$" + strconv.Itoa(number)
+	default:
+		return "?"
+	}
 }
 
 func EscapeString(value string) string {
