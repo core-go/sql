@@ -10,7 +10,8 @@ import (
 
 type DatabaseConfig struct {
 	MultiStatements bool        `mapstructure:"multi_statements"`
-	Dialect         string      `mapstructure:"dialect"`
+	DataSourceName  string      `mapstructure:"data_source_name"`
+	Provider        string      `mapstructure:"provider"`
 	Host            string      `mapstructure:"host"`
 	Port            int         `mapstructure:"port"`
 	Database        string      `mapstructure:"database"`
@@ -29,6 +30,7 @@ type RetryConfig struct {
 	Retry8 int64 `mapstructure:"8" json:"retry8,omitempty" gorm:"column:retry8" bson:"retry8,omitempty" dynamodbav:"retry8,omitempty" firestore:"retry8,omitempty"`
 	Retry9 int64 `mapstructure:"9" json:"retry9,omitempty" gorm:"column:retry9" bson:"retry9,omitempty" dynamodbav:"retry9,omitempty" firestore:"retry9,omitempty"`
 }
+
 func MakeDurations(vs []int64) []time.Duration {
 	durations := make([]time.Duration, 0)
 	for _, v := range vs {

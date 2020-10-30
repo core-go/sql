@@ -13,50 +13,38 @@ import (
 )
 
 const (
-	DBName      = "column"
-	PRIMARY_KEY = "primary_key"
+	DBName     = "column"
+	PrimaryKey = "primary_key"
 )
 
-func CreatePoolByConfig(c DatabaseConfig) (*gorm.DB, error) {
+func OpenByConfig(c DatabaseConfig) (*sql.DB, error) {
 	if c.Retry.Retry1 <= 0 {
-		return CreatePool(c)
+		return open(c)
 	} else {
 		durations := DurationsFromValue(c.Retry, "Retry", 9)
-		return CreatePoolWithRetries(c, durations)
+		return Open(c, durations...)
 	}
 }
-func CreatePool(dbConfig DatabaseConfig) (*gorm.DB, error) {
-	if dbConfig.Dialect == "postgres" {
-		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", dbConfig.User, dbConfig.Database, dbConfig.Password, dbConfig.Host, dbConfig.Port)
-		fmt.Println("uri ", uri)
-		return gorm.Open("postgres", uri)
-	} else if dbConfig.Dialect == "mysql" {
-		uri := ""
-		if dbConfig.MultiStatements {
-			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
-			return gorm.Open("mysql", uri)
-		}
-		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
-		return gorm.Open("mysql", uri)
-	} else if dbConfig.Dialect == "mssql" { // mssql
-		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
-		return gorm.Open("mssql", uri)
-	} else { //sqlite
-		return gorm.Open("sqlite3", dbConfig.Host)
-	}
-}
-func CreatePoolWithRetries(c DatabaseConfig, retries []time.Duration) (*gorm.DB, error) {
-	if c.Retry.Retry1 <= 0 {
-		return CreatePool(c)
+func open(c DatabaseConfig) (*sql.DB, error) {
+	if len(c.DataSourceName) > 0 {
+		return sql.Open(c.Provider, c.DataSourceName)
 	} else {
-		db, er1 := CreatePool(c)
+		dsn := BuildDataSourceName(c)
+		return sql.Open(c.Provider, dsn)
+	}
+}
+func Open(c DatabaseConfig, retries ...time.Duration) (*sql.DB, error) {
+	if len(retries) == 0 {
+		return open(c)
+	} else {
+		db, er1 := open(c)
 		if er1 == nil {
 			return db, er1
 		}
 		i := 0
 		err := Retry(retries, func() (err error) {
 			i = i + 1
-			db2, er2 := CreatePool(c)
+			db2, er2 := open(c)
 			if er2 == nil {
 				db = db2
 			}
@@ -68,27 +56,87 @@ func CreatePoolWithRetries(c DatabaseConfig, retries []time.Duration) (*gorm.DB,
 		return db, err
 	}
 }
-func BuildUri(dbConfig DatabaseConfig) string {
-	if dbConfig.Dialect == "postgres" {
-		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", dbConfig.User, dbConfig.Database, dbConfig.Password, dbConfig.Host, dbConfig.Port)
+func BuildDataSourceName(c DatabaseConfig) string {
+	if c.Provider == "postgres" {
+		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", c.User, c.Database, c.Password, c.Host, c.Port)
 		return uri
-	} else if dbConfig.Dialect == "mysql" {
+	} else if c.Provider == "mysql" {
 		uri := ""
-		if dbConfig.MultiStatements {
-			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
+		if c.MultiStatements {
+			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", c.User, c.Password, c.Host, c.Port, c.Database)
 			return uri
 		}
-		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
+		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", c.User, c.Password, c.Host, c.Port, c.Database)
 		return uri
-	} else if dbConfig.Dialect == "mssql" { // mssql
-		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
+	} else if c.Provider == "mssql" { // mssql
+		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", c.User, c.Password, c.Host, c.Port, c.Database)
 		return uri
+	} else if c.Provider == "godror" || c.Provider == "oracle" {
+		return fmt.Sprintf("user=\"%s\" password=\"%s\" connectString=\"%s:%d/%s\"", c.User, c.Password, c.Host, c.Port, c.Database)
 	} else { //sqlite
-		return dbConfig.Host
+		return c.Host  // return sql.Open("sqlite3", c.Host)
 	}
 }
-func Connect(dialect string, uri string) (*gorm.DB, error) {
-	return gorm.Open(dialect, uri)
+// for ViewService
+
+func BuildFindById(table string, ids map[string]interface{}, modelType reflect.Type) (string, []interface{}) {
+	numField := modelType.NumField()
+	var idFieldNames []string
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		ormTag := field.Tag.Get("gorm")
+		tags := strings.Split(ormTag, ";")
+		for _, tag := range tags {
+			if strings.Compare(strings.TrimSpace(tag), "primary_key") == 0 {
+				idFieldNames = append(idFieldNames, field.Name)
+			}
+		}
+	}
+	query := make(map[string]interface{})
+	if len(idFieldNames) > 1 {
+		idsMap := make(map[string]interface{})
+		for i := 0; i < len(idFieldNames); i += 2 {
+			idsMap[idFieldNames[i]] = idFieldNames[i+1]
+		}
+		query = BuildQueryByMulId(idsMap, modelType)
+	} else {
+		query = BuildQueryBySingleId(ids[idFieldNames[0]], modelType, idFieldNames[0])
+	}
+	var queryArr []string
+	var values []interface{}
+	for key, value := range query {
+		queryArr = append(queryArr, fmt.Sprintf("%v=?", key))
+		values = append(values, value)
+	}
+	q := strings.Join(queryArr, " AND ")
+	return fmt.Sprintf("SELECT * FROM %v WHERE %v", table, q), values
+}
+
+func BuildSelectAllQuery(table string) string {
+	return fmt.Sprintf("SELECT * FROM %v", table)
+}
+
+func BuildQueryBySingleId(id interface{}, modelType reflect.Type, idName string) (query map[string]interface{}) {
+	columnName, _ := GetColumnName(modelType, idName)
+	return map[string]interface{}{columnName: id}
+}
+
+func BuildQueryByMulId(ids map[string]interface{}, modelType reflect.Type) (query map[string]interface{}) {
+	queryGen := make(map[string]interface{})
+	var columnName string
+	for colName, value := range ids {
+		columnName, _ = GetColumnName(modelType, colName)
+		queryGen[columnName] = value
+	}
+	return queryGen
+}
+
+func InitSingleResult(modelType reflect.Type) interface{} {
+	return reflect.New(modelType).Interface()
+}
+
+func InitArrayResults(modelsType reflect.Type) interface{} {
+	return reflect.New(modelsType).Interface()
 }
 
 func Exists(db *gorm.DB, table string, model interface{}, query interface{}) (bool, error) {
@@ -194,7 +242,7 @@ func Patch(db *sql.DB, table string, model map[string]interface{}, modelType ref
 	driverName := getDriver(db)
 	query := BuildPatch(table, model, fieldName, idJsonName, driverName)
 	if query == "" {
-		return 0, errors.New("Fail to build query")
+		return 0, errors.New("fail to build query")
 	}
 	result, err := db.Exec(query)
 	if err != nil {
@@ -814,5 +862,5 @@ func GetTag(field Field, tagName string) string {
 }
 
 func IsPrimary(field Field) bool {
-	return GetTag(field, PRIMARY_KEY) != ""
+	return GetTag(field, PrimaryKey) != ""
 }

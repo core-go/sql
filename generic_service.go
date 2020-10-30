@@ -32,7 +32,7 @@ func NewDefaultGenericService(db *sql.DB, modelType reflect.Type, tableName stri
 	return NewGenericService(db, modelType, tableName, "", nil)
 }
 
-func (s *GenericService) Insert(model interface{}) (interface{}, error) {
+func (s *GenericService) Insert(model interface{}) (int64, error) {
 	return Insert(s.Database, s.table, model)
 }
 
