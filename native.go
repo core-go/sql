@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/jinzhu/gorm"
 	"reflect"
@@ -194,12 +195,12 @@ func BuildDeleteQuery(db *gorm.DB, table string, query map[string]interface{}) (
 	return fmt.Sprintf("DELETE FROM %v WHERE %v", table, q), values
 }
 
-func BuildInsertSQL(db *gorm.DB, tableName string, model map[string]interface{}) (string, []interface{}) {
+func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}) (string, []interface{}) {
 	var cols []string
 	var values []interface{}
-	subScope := db.NewScope("")
+	//subScope := db.("")
 	for col, v := range model {
-		cols = append(cols, subScope.Quote(col))
+		cols = append(cols, "'"+strings.Replace(col, "'", "''", -1)+"'")
 		values = append(values, v)
 	}
 	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
@@ -209,5 +210,5 @@ func BuildInsertSQL(db *gorm.DB, tableName string, model map[string]interface{})
 		arrValue = append(arrValue, "?")
 	}
 	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
-	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", subScope.Quote(tableName), column, value), values
+	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", "'"+strings.Replace(tableName, "'", "''", -1)+"'", column, value), values
 }

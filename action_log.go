@@ -2,7 +2,7 @@ package sql
 
 import (
 	"context"
-	"github.com/jinzhu/gorm"
+	"database/sql"
 	"strings"
 	"time"
 )
@@ -27,7 +27,7 @@ type ActionLogConfig struct {
 }
 
 type ActionLogWriter struct {
-	Database  *gorm.DB
+	Database  *sql.DB
 	Table     string
 	Config    ActionLogConfig
 	Schema    ActionLogSchema
@@ -38,7 +38,7 @@ type IdGenerator interface {
 	Generate(ctx context.Context) (string, error)
 }
 
-func NewActionLogWriter(database *gorm.DB, tableName string, config ActionLogConfig, s ActionLogSchema, generator IdGenerator) *ActionLogWriter {
+func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConfig, s ActionLogSchema, generator IdGenerator) *ActionLogWriter {
 	s.Id = strings.ToLower(s.Id)
 	s.User = strings.ToLower(s.User)
 	s.Resource = strings.ToLower(s.Resource)
@@ -102,16 +102,16 @@ func (s *ActionLogWriter) SaveLog(ctx context.Context, resource string, action s
 		}
 	}
 	query, value := BuildInsertSQL(s.Database, s.Table, log)
-	tx := s.Database.Begin()
-	if tx.Error != nil {
-		return tx.Error
+	tx, err := s.Database.Begin()
+	if err != nil {
+		return err
 	}
-	result1 := tx.Exec(query, value...)
-	if err := result1.Error; err != nil {
+	_, err = tx.Exec(query, value...)
+	if err != nil {
 		tx.Rollback()
 		return err
 	}
-	return tx.Commit().Error
+	return tx.Commit()
 }
 
 func BuildExt(ctx context.Context, keys *[]string) map[string]interface{} {
