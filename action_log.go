@@ -71,7 +71,7 @@ func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConf
 	return &writer
 }
 
-func (s *ActionLogWriter) SaveLog(ctx context.Context, resource string, action string, success bool, desc string) error {
+func (s *ActionLogWriter) Write(ctx context.Context, resource string, action string, success bool, desc string) error {
 	log := make(map[string]interface{})
 	now := time.Now()
 	ch := s.Schema
