@@ -26,12 +26,24 @@ func OpenByConfig(c DatabaseConfig) (*sql.DB, error) {
 	}
 }
 func open(c DatabaseConfig) (*sql.DB, error) {
-	if len(c.DataSourceName) > 0 {
-		return sql.Open(c.Provider, c.DataSourceName)
-	} else {
-		dsn := BuildDataSourceName(c)
-		return sql.Open(c.Provider, dsn)
+	dsn := c.DataSourceName
+	if len(dsn) == 0 {
+		dsn = BuildDataSourceName(c)
 	}
+	db, err := sql.Open(c.Provider, dsn)
+	if err != nil {
+		return db, err
+	}
+	if c.ConnMaxLifetime > 0 {
+		db.SetConnMaxLifetime(time.Duration(c.ConnMaxLifetime) * time.Second)
+	}
+	if c.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(c.MaxIdleConns)
+	}
+	if c.MaxOpenConns > 0 {
+		db.SetMaxOpenConns(c.MaxOpenConns)
+	}
+	return db, err
 }
 func Open(c DatabaseConfig, retries ...time.Duration) (*sql.DB, error) {
 	if len(retries) == 0 {

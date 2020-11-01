@@ -17,6 +17,9 @@ type DatabaseConfig struct {
 	Database        string      `mapstructure:"database"`
 	User            string      `mapstructure:"user"`
 	Password        string      `mapstructure:"password"`
+	ConnMaxLifetime int64       `mapstructure:"conn_max_lifetime"`
+	MaxIdleConns    int         `mapstructure:"max_idle_conns"`
+	MaxOpenConns    int         `mapstructure:"max_open_conns"`
 	Retry           RetryConfig `mapstructure:"retry"`
 }
 type RetryConfig struct {
