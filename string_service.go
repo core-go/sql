@@ -1,7 +1,8 @@
 package sql
-
+/*
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"github.com/jinzhu/gorm"
 	"regexp"
@@ -9,26 +10,42 @@ import (
 )
 
 type StringService struct {
-	Database *gorm.DB
-	Table    string
-	Field    string
+	DB    *sql.DB
+	Table string
+	Field string
+	QuestionParam bool
 }
 
-func NewStringService(db *gorm.DB, table string, field string) *StringService {
-	return &StringService{db, table, field}
+func NewStringService(db *sql.DB, table string, field string, questionParam bool) *StringService {
+	return &StringService{DB: db, Table: table, Field: field, QuestionParam: questionParam}
 }
 
 func (s *StringService) Load(ctx context.Context, key string, max int64) ([]string, error) {
-	var nilArr []string
-	var urlIdArr []string
 	re := regexp.MustCompile(`\%|\?`)
 	key = re.ReplaceAllString(key, "")
 	key = key + "%"
-	err := s.Database.Table(s.Table).Set("gorm:auto_preload", true).Where(s.Field+" LIKE ?", key).Limit(max).Pluck(s.Field, &urlIdArr).Error
-	if err != nil {
-		return nilArr, err
+	vs := make([]string, 0)
+	var sql string
+	if s.QuestionParam {
+		sql = fmt.Sprintf("select %s from %s where %s like ? fetch next %d rows only", s.Field, s.Table, s.Field, max)
+	} else {
+		sql = fmt.Sprintf("select %s from %s where %s ilike $1 fetch next %d rows only", s.Field, s.Table, s.Field, max)
 	}
-	return urlIdArr, nil
+	rows, er1 := s.DB.Query(sql, key)
+	if er1 != nil {
+		return vs, er1
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if er2 := rows.Scan(&id); er2 == nil {
+			vs = append(vs, id)
+		} else {
+			return vs, er2
+		}
+	}
+	return vs, nil
 }
 
 func (s *StringService) Save(ctx context.Context, values []string) (int64, error) {
@@ -89,3 +106,4 @@ func (s *StringService) Delete(ctx context.Context, values []string) (int64, err
 	}
 	return rows.RowsAffected, nil
 }
+*/

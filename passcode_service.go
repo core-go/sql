@@ -1,5 +1,5 @@
 package sql
-
+/*
 import (
 	"context"
 	"fmt"
@@ -139,3 +139,4 @@ func (s *PasscodeService) Delete(ctx context.Context, id string) (int64, error) 
 	}
 	return rows.RowsAffected, nil
 }
+*/

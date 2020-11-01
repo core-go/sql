@@ -1,5 +1,5 @@
 package sql
-
+/*
 import "github.com/jinzhu/gorm"
 
 type UnitOfWork struct {
@@ -19,3 +19,4 @@ func (unitOfWork *UnitOfWork) BeginTransaction() *gorm.DB {
 func (unitOfWork *UnitOfWork) Commit() {
 	unitOfWork.Transaction.Commit()
 }
+*/

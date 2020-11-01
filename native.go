@@ -1,5 +1,5 @@
 package sql
-
+/*
 import (
 	"database/sql"
 	"fmt"
@@ -212,3 +212,4 @@ func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}) 
 	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
 	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", "'"+strings.Replace(tableName, "'", "''", -1)+"'", column, value), values
 }
+*/
