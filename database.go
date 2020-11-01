@@ -75,61 +75,34 @@ func BuildDataSourceName(c DatabaseConfig) string {
 	} else if c.Provider == "godror" || c.Provider == "oracle" {
 		return fmt.Sprintf("user=\"%s\" password=\"%s\" connectString=\"%s:%d/%s\"", c.User, c.Password, c.Host, c.Port, c.Database)
 	} else { //sqlite
-		return c.Host  // return sql.Open("sqlite3", c.Host)
+		return c.Host // return sql.Open("sqlite3", c.Host)
 	}
 }
+
 // for ViewService
 
-func BuildFindById(table string, ids map[string]interface{}, modelType reflect.Type) (string, []interface{}) {
-	numField := modelType.NumField()
-	var idFieldNames []string
-	for i := 0; i < numField; i++ {
-		field := modelType.Field(i)
-		ormTag := field.Tag.Get("gorm")
-		tags := strings.Split(ormTag, ";")
-		for _, tag := range tags {
-			if strings.Compare(strings.TrimSpace(tag), "primary_key") == 0 {
-				idFieldNames = append(idFieldNames, field.Name)
-			}
-		}
-	}
-	query := make(map[string]interface{})
-	if len(idFieldNames) > 1 {
-		idsMap := make(map[string]interface{})
-		for i := 0; i < len(idFieldNames); i += 2 {
-			idsMap[idFieldNames[i]] = idFieldNames[i+1]
-		}
-		query = BuildQueryByMulId(idsMap, modelType)
-	} else {
-		query = BuildQueryBySingleId(ids[idFieldNames[0]], modelType, idFieldNames[0])
-	}
-	var queryArr []string
+func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
+	var where string = ""
+	var driver = getDriver(db)
 	var values []interface{}
-	for key, value := range query {
-		queryArr = append(queryArr, fmt.Sprintf("%v=?", key))
-		values = append(values, value)
+	if len(keys) == 1 {
+		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildMarkByDriver(0, driver))
+		values = append(values, id)
+	} else {
+		queres := make([]string, 0)
+		var ids = id.(map[string]interface{})
+		for k, idk := range ids {
+			columnName := mapJsonColumnKeys[k]
+			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriver(0, driver)))
+			values = append(values, idk)
+		}
+		where = "WHERE " + strings.Join(queres, " AND ")
 	}
-	q := strings.Join(queryArr, " AND ")
-	return fmt.Sprintf("SELECT * FROM %v WHERE %v", table, q), values
+	return fmt.Sprintf("SELECT * FROM %v %v", table, where), values
 }
 
 func BuildSelectAllQuery(table string) string {
 	return fmt.Sprintf("SELECT * FROM %v", table)
-}
-
-func BuildQueryBySingleId(id interface{}, modelType reflect.Type, idName string) (query map[string]interface{}) {
-	columnName, _ := GetColumnName(modelType, idName)
-	return map[string]interface{}{columnName: id}
-}
-
-func BuildQueryByMulId(ids map[string]interface{}, modelType reflect.Type) (query map[string]interface{}) {
-	queryGen := make(map[string]interface{})
-	var columnName string
-	for colName, value := range ids {
-		columnName, _ = GetColumnName(modelType, colName)
-		queryGen[columnName] = value
-	}
-	return queryGen
 }
 
 func InitSingleResult(modelType reflect.Type) interface{} {

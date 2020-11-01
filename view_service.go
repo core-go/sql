@@ -41,11 +41,11 @@ func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 	return result, err
 }
 
-func (s *ViewService) FindById(ctx context.Context, ids map[string]interface{}) (interface{}, error) {
-	queryFindById, values := BuildFindById(s.table, ids, s.modelType)
-	row, err := s.Database.Query(queryFindById, values...)
-	result, err := ScanByModelType(row, s.modelType)
-	return result, err
+func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, error) {
+	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
+	row := s.Database.QueryRow(queryFindById, values...)
+	result, err2 := ScanRow(row, s.modelType)
+	return result, err2
 }
 
 func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
