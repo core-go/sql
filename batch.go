@@ -25,7 +25,23 @@ func InsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize i
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := insertObjSetSQL(db, tableName, objSet, false, excludeColumns...)
+		count, err := InsertObjSetSQL(db, tableName, objSet, false, excludeColumns...)
+		c = c + count
+		if err != nil {
+			return c, err
+		}
+	}
+	return c, nil
+}
+
+func TransactionInsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
+	// Split records with specified size not to exceed Database parameter limit
+	if chunkSize <= 0 {
+		chunkSize = len(objects)
+	}
+	var c int64 = 0
+	for _, objSet := range splitObjects(objects, chunkSize) {
+		count, err := TransactionInsertObjSetSQL(db, tableName, objSet, false, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -57,7 +73,7 @@ func RawInsertManySkipErrors(db *sql.DB, tableName string, objects []interface{}
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := insertObjSetSQL(db, tableName, objSet, true, excludeColumns...)
+		count, err := InsertObjSetSQL(db, tableName, objSet, true, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -66,7 +82,7 @@ func RawInsertManySkipErrors(db *sql.DB, tableName string, objects []interface{}
 	return c, nil
 }
 
-func insertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
+func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
 	if len(objects) == 0 {
 		return 0, nil
 	}
@@ -155,6 +171,111 @@ func insertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 	return x.RowsAffected()
 }
 
+func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
+	if len(objects) == 0 {
+		return 0, nil
+	}
+	driverName := getDriver(db)
+	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
+	if err != nil {
+		return 0, err
+	}
+
+	attrSize := len(firstAttrs)
+	modelType := reflect.TypeOf(objects[0])
+	pkey := FindIdFields(modelType)
+	// Scope to eventually run SQL
+	mainScope := Statement{}
+	// Store placeholders for embedding variables
+	placeholders := make([]string, 0, attrSize)
+
+	// Replace with database column name
+	dbColumns := make([]string, 0, attrSize)
+	for _, key := range SortedKeys(firstAttrs) {
+		dbColumns = append(dbColumns, QuoteColumnName(key))
+	}
+
+	for _, obj := range objects {
+		objAttrs, _, err := ExtractMapValue(obj, excludeColumns)
+		if err != nil {
+			return 0, err
+		}
+
+		// If object sizes are different, SQL statement loses consistency
+		if len(objAttrs) != attrSize {
+			return 0, errors.New("attribute sizes are inconsistent")
+		}
+
+		scope := Statement{}
+
+		// Append variables
+		variables := make([]string, 0, attrSize)
+		for _, key := range SortedKeys(objAttrs) {
+			scope.Values = append(scope.Values, objAttrs[key])
+			variables = append(variables, "?")
+		}
+
+		valueQuery := "(" + strings.Join(variables, ", ") + ")"
+		placeholders = append(placeholders, valueQuery)
+
+		// Also append variables to mainScope
+		mainScope.Values = append(mainScope.Values, scope.Values...)
+	}
+	var query string
+	if skipDuplicate {
+		if driverName == DRIVER_POSTGRES {
+			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
+				tableName,
+				strings.Join(dbColumns, ", "),
+				strings.Join(placeholders, ", "),
+			)
+
+		} else if driverName == DRIVER_MYSQL {
+			var qKey []string
+			for _, i2 := range pkey {
+				key := i2 + " = " + i2
+				qKey = append(qKey, key)
+			}
+			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
+				tableName,
+				strings.Join(dbColumns, ", "),
+				strings.Join(placeholders, ", "),
+				strings.Join(qKey, ", "),
+			)
+		} else {
+			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driverName)
+		}
+	}
+	{
+		query = fmt.Sprintf(fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+			tableName,
+			strings.Join(dbColumns, ", "),
+			strings.Join(placeholders, ", "),
+		))
+	}
+	mainScope.Query = query
+
+	tx, err := db.Begin()
+	if err != nil {
+		fmt.Println(err)
+		return 0, err
+	}
+
+	x, execErr := db.Exec(mainScope.Query, mainScope.Values...)
+	if execErr != nil {
+		_ = tx.Rollback()
+		fmt.Println(execErr)
+	}
+	err = tx.Commit()
+	if err != nil {
+		fmt.Println("sql: transaction has already been rolled back")
+		return 0, err
+	}
+	count, _ := x.RowsAffected()
+	fmt.Println(count, " Rows Updated")
+	return x.RowsAffected()
+}
+
 func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 	s := reflect.ValueOf(slice)
 	if s.Kind() != reflect.Slice {
@@ -212,13 +333,77 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, err
 	}
 
 	statement.Query = strings.Join(query, "; ")
-	fmt.Println("QUERY : ", statement.Query)
-	x, err := db.Exec(statement.Query)
-	fmt.Println(err)
+	x, err := db.Exec(statement.Query) // return just one success query
 	if err != nil {
 		return 0, err
 	}
 	return x.RowsAffected()
+}
+
+func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
+	var placeholder []string
+	driverName := getDriver(db)
+	var query []string
+	if len(objects) == 0 {
+		return 0, nil
+	}
+	valueDefault := objects[0]
+	statement := newStatement(valueDefault, placeholder...)
+	columns := make([]string, 0) // columns set value for update
+	for _, key := range SortedKeys(statement.Attributes) {
+		columns = append(columns, QuoteByDriver(key, driverName))
+	}
+	for _, obj := range objects {
+		scope := newStatement(obj, placeholder...)
+		// Append variables set column
+		for _, key := range SortedKeys(scope.Attributes) {
+			scope.Values = append(scope.Values, scope.Attributes[key])
+		}
+		// Append variables where
+		for _, key := range scope.Keys {
+			scope.Values = append(scope.Values, scope.AttributeKeys[key])
+		}
+		// Also append variables to mainScope
+		//statement.Values = append(statement.Values, scope.Values...)
+
+		n := len(scope.Columns)
+		sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+		if err1 != nil {
+			return 0, err1
+		}
+		columnsKeys := scope.Keys
+		where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+		if err2 != nil {
+			return 0, err2
+		}
+		query = append(query, fmt.Sprintf(fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+			tableName,
+			sets,
+			where,
+		)))
+	}
+
+	statement.Query = strings.Join(query, "; ")
+
+	tx, err := db.Begin()
+	if err != nil {
+		fmt.Println(err)
+		return 0, err
+	}
+	x, execErr := db.Exec(statement.Query)
+	if execErr != nil {
+		_ = tx.Rollback()
+		fmt.Println(execErr)
+	}
+	err = tx.Commit()
+	if err != nil {
+		fmt.Println("sql: transaction has already been rolled back")
+		return 0, err
+	}
+	_, err = x.RowsAffected()
+	total := int64(len(query))
+	fmt.Println(total, " Rows Inserted")
+	return total, err
 }
 
 func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string) (int64, error) {
