@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"reflect"
 	"strings"
@@ -32,15 +33,15 @@ func NewDefaultGenericService(db *sql.DB, modelType reflect.Type, tableName stri
 	return NewGenericService(db, modelType, tableName, "", nil)
 }
 
-func (s *GenericService) Insert(model interface{}) (int64, error) {
+func (s *GenericService) Insert(ctx context.Context, model interface{}) (int64, error) {
 	return Insert(s.Database, s.table, model)
 }
 
-func (s *GenericService) Update(model interface{}) (int64, error) {
+func (s *GenericService) Update(ctx context.Context, model interface{}) (int64, error) {
 	return Update(s.Database, s.table, model)
 }
 
-func (s *GenericService) Delete(id interface{}) (int64, error) {
+func (s *GenericService) Delete(ctx context.Context, id interface{}) (int64, error) {
 	l := len(s.keys)
 	if l == 1 {
 		return Delete(s.Database, s.table, BuildQueryById(id, s.modelType, s.keys[0]))
@@ -50,6 +51,6 @@ func (s *GenericService) Delete(id interface{}) (int64, error) {
 	}
 }
 
-func (s *GenericService) Patch(model map[string]interface{}) (int64, error) {
+func (s *GenericService) Patch(ctx context.Context, model map[string]interface{}) (int64, error) {
 	return Patch(s.Database, s.table, model, s.modelType)
 }

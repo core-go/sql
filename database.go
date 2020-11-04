@@ -97,17 +97,20 @@ func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys m
 	var driver = getDriver(db)
 	var values []interface{}
 	if len(keys) == 1 {
-		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildMarkByDriver(0, driver))
+		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildMarkByDriver(1, driver))
 		values = append(values, id)
 	} else {
 		queres := make([]string, 0)
-		var ids = id.(map[string]interface{})
-		for k, idk := range ids {
-			columnName := mapJsonColumnKeys[k]
-			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriver(0, driver)))
-			values = append(values, idk)
+		if ids, ok := id.(map[string]interface{}); ok {
+			for _, keyJson := range keys {
+				columnName := mapJsonColumnKeys[keyJson]
+				if idk, ok1 := ids[keyJson]; ok1 {
+					queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriver(1, driver)))
+					values = append(values, idk)
+				}
+			}
+			where = "WHERE " + strings.Join(queres, " AND ")
 		}
-		where = "WHERE " + strings.Join(queres, " AND ")
 	}
 	return fmt.Sprintf("SELECT * FROM %v %v", table, where), values
 }
@@ -123,6 +126,7 @@ func InitSingleResult(modelType reflect.Type) interface{} {
 func InitArrayResults(modelsType reflect.Type) interface{} {
 	return reflect.New(modelsType).Interface()
 }
+
 /*
 func Exists(db *gorm.DB, table string, model interface{}, query interface{}) (bool, error) {
 	var count int32
@@ -201,9 +205,9 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 }
 
 func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
-	queryInsert := BuildInsert(table, model)
+	queryInsert, values := BuildInsertOneQuery(table, model)
 
-	result, err := db.Exec(queryInsert)
+	result, err := db.Exec(queryInsert, values...)
 	if err != nil {
 		fmt.Println(err)
 		return -1, err
@@ -235,6 +239,7 @@ func Patch(db *sql.DB, table string, model map[string]interface{}, modelType ref
 	}
 	return result.RowsAffected()
 }
+
 /*
 func PatchObject(db *gorm.DB, model interface{}, updateModel interface{}) (int64, error) {
 	rs := db.Model(model).Updates(updateModel)
@@ -265,6 +270,7 @@ func Delete(db *sql.DB, table string, query map[string]interface{}) (int64, erro
 	}
 	return BuildResult(result.RowsAffected())
 }
+
 /*
 func FindOneWithResult(db *gorm.DB, table string, result interface{}, query interface{}) (bool, error) {
 	err := db.Table(table).Set("gorm:auto_preload", true).First(result, query).Error
@@ -310,63 +316,27 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	}
 	return -1, jsonName, jsonName
 }
-func BuildInsert(table string, model interface{}) string {
-	mapData, _ := BuildMapDataAndKeys(model)
-	var cols []string
-	var values []interface{}
-	for col, v := range mapData {
-		cols = append(cols, QuoteColumnName(col))
-		values = append(values, v)
-	}
-	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
-	numCol := len(cols)
-	var arrValue []string
-	for i := 0; i < numCol; i++ {
-		arrValue = append(arrValue, "?")
-	}
-	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
-	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", table, column, value)
-}
 
 func BuildUpdate(table string, model interface{}) (string, []interface{}) {
-	mapData, keys := BuildMapDataAndKeys(model)
-	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
-	idFields := FindIdColumns(modelType)
-	query := make(map[string]interface{})
-	if len(idFields) > 1 {
-		idsMap := make(map[string]interface{})
-		for i := 0; i < len(idFields); i += 2 {
-			idsMap[idFields[i]] = idFields[i+1]
-		}
-		query = MapToGORM(idsMap, modelType)
-	} else {
-		query = BuildQueryById(mapData[idFields[0]], modelType, idFields[0])
-	}
-
-	for _, gormColumnName := range idFields {
-		if _, exist := Find(idFields, gormColumnName); exist {
-			delete(mapData, gormColumnName)
-			keys = RemoveItem(keys, gormColumnName)
-		}
-	}
-
+	mapData, mapKey, _ := BuildMapDataAndKeys(model)
 	var values []interface{}
-	var updateQuery []string
-	for _, key := range keys {
-		if v, ok := mapData[key]; ok {
-			values = append(values, v)
-			updateQuery = append(updateQuery, fmt.Sprintf("%v=?", QuoteColumnName(key)))
-		}
+
+	colSet := make([]string, 0)
+	colQuery := make([]string, 0)
+
+	for colName, v1 := range mapData {
+		values = append(values, v1)
+		colSet = append(colSet, fmt.Sprintf("%v=?", QuoteColumnName(colName)))
 	}
 
-	setValueUpdate := strings.Join(updateQuery, ",")
-	var queryArr []string
-	for key, value := range query {
-		queryArr = append(queryArr, fmt.Sprintf("%v=?", key))
-		values = append(values, value)
+	for colName, v2 := range mapKey {
+		values = append(values, v2)
+		colQuery = append(colQuery, fmt.Sprintf("%v=?", QuoteColumnName(colName)))
 	}
-	q := strings.Join(queryArr, " AND ")
-	return fmt.Sprintf("UPDATE %v SET %v WHERE %v", table, setValueUpdate, q), values
+	queryWhere := strings.Join(colQuery, " AND ")
+	querySet := strings.Join(colSet, ",")
+	query := fmt.Sprintf("UPDATE %v SET %v WHERE %v", table, querySet, queryWhere)
+	return query, values
 }
 
 func BuildPatch(table string, model map[string]interface{}, idTagJsonNames []string, idColumNames []string, driverName string) string {
@@ -413,6 +383,7 @@ func BuildDelete(table string, ids map[string]interface{}) (string, []interface{
 	q := strings.Join(queryArr, " AND ")
 	return fmt.Sprintf("DELETE FROM %v WHERE %v", table, q), values
 }
+
 /*
 func HandleResult(result *gorm.DB) (int64, error) {
 	if err := result.Error; err != nil {
@@ -586,6 +557,7 @@ func FindIdColumns(modelType reflect.Type) []string {
 	}
 	return idFields
 }
+
 /*
 func BuildQueryMap(db *gorm.DB, object interface{}, onlyPrimaryKeys bool) map[string]interface{} {
 	objectValue := reflect.Indirect(reflect.ValueOf(object))
@@ -697,6 +669,7 @@ func GetTableName(object interface{}) string {
 	tableName := objectValue.MethodByName("TableName").Call([]reflect.Value{})
 	return tableName[0].String()
 }
+
 /*
 func UpdateAssociations(db *gorm.DB, obj interface{}, column string, newValues interface{}) error {
 	return db.Model(obj).Association(column).Replace(newValues).Error
@@ -706,7 +679,7 @@ func QueryOne(db *gorm.DB, model interface{}, sql string, values ...interface{})
 	return db.Raw(sql, values...).Scan(model).Error
 }
 */
-func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) error {
+/*func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) error {
 	rows, err1 := db.Query(sql, values...)
 	if err1 != nil {
 		return err1
@@ -726,64 +699,7 @@ func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) e
 		return err
 	}
 	return nil
-}
-
-// StructScan : transfer struct to slice for scan
-func StructScan(s interface{}) (r []interface{}) {
-	if s != nil {
-		vals := reflect.ValueOf(s).Elem()
-		for i := 0; i < vals.NumField(); i++ {
-			r = append(r, vals.Field(i).Addr().Interface())
-		}
-	}
-
-	return
-}
-
-func ScanType(rows *sql.Rows, tb interface{}) (t []interface{}, err error) {
-	for rows.Next() {
-		gTb := reflect.New(reflect.TypeOf(tb).Elem()).Interface()
-		if err = rows.Scan(StructScan(gTb)...); err == nil {
-			t = append(t, gTb)
-		}
-	}
-
-	return
-}
-
-func ScanByModelType(rows *sql.Rows, modelType reflect.Type) (t []interface{}, err error) {
-	for rows.Next() {
-		gTb := reflect.New(modelType).Interface()
-		if err = rows.Scan(StructScan(gTb)...); err == nil {
-			t = append(t, gTb)
-		}
-	}
-
-	return
-}
-
-func Scan(rows *sql.Rows, structType reflect.Type) (t []interface{}, err error) {
-	for rows.Next() {
-		gTb := reflect.New(structType).Interface()
-		if err = rows.Scan(StructScan(gTb)...); err == nil {
-			t = append(t, gTb)
-		}
-	}
-
-	return
-}
-
-func ScanRowType(row *sql.Row, tb interface{}) (t interface{}, err error) {
-	t = reflect.New(reflect.TypeOf(tb).Elem()).Interface()
-	err = row.Scan(StructScan(t)...)
-	return
-}
-
-func ScanRow(row *sql.Row, structType reflect.Type) (t interface{}, err error) {
-	t = reflect.New(structType).Interface()
-	err = row.Scan(StructScan(t)...)
-	return
-}
+}*/
 
 func BuildMarkByDriver(number int, driver string) string {
 	switch driver {
@@ -840,6 +756,7 @@ func SortedKeys(val map[string]interface{}) []string {
 	sort.Strings(keys)
 	return keys
 }
+
 /*
 func IsAutoIncrementField(field *gorm.Field) bool {
 	if value, ok := field.TagSettingsGet("AUTO_INCREMENT"); ok {

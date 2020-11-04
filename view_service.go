@@ -3,8 +3,8 @@ package sql
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
+	_ "github.com/sirupsen/logrus"
 	"reflect"
 	"strings"
 )
@@ -16,6 +16,7 @@ type ViewService struct {
 	modelsType        reflect.Type
 	keys              []string
 	mapJsonColumnKeys map[string]string
+	fieldsIndex       map[string]int
 	table             string
 }
 
@@ -23,7 +24,11 @@ func NewViewService(db *sql.DB, modelType reflect.Type, tableName string, mapper
 	_, idNames := FindNames(modelType)
 	mapJsonColumnKeys := mapJsonColumn(modelType)
 	modelsType := reflect.Zero(reflect.SliceOf(modelType)).Type()
-	return &ViewService{db, mapper, modelType, modelsType, idNames, mapJsonColumnKeys, tableName}
+	fieldsIndex, er0 := GetColumnIndexes(modelType)
+	if er0 != nil {
+		panic(er0)
+	}
+	return &ViewService{db, mapper, modelType, modelsType, idNames, mapJsonColumnKeys, fieldsIndex, tableName}
 }
 
 func NewDefaultViewService(db *sql.DB, modelType reflect.Type, tableName string) *ViewService {
@@ -36,16 +41,15 @@ func (s *ViewService) Keys() []string {
 
 func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 	queryGetAll := BuildSelectAllQuery(s.table)
-	row, err := s.Database.Query(queryGetAll)
-	result, err := ScanByModelType(row, s.modelType)
-	return result, err
+	models := reflect.New(s.modelsType).Interface()
+	err := Query(s.Database, models, s.modelType, s.fieldsIndex, queryGetAll)
+	return models, err
 }
 
 func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
-	row := s.Database.QueryRow(queryFindById, values...)
-	result, err2 := ScanRow(row, s.modelType)
-	return result, err2
+	result, err1 := QueryOne(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
+	return result, err1
 }
 
 func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
@@ -54,14 +58,14 @@ func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 	var driver = getDriver(s.Database)
 	var values []interface{}
 	if len(s.keys) == 1 {
-		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], BuildMarkByDriver(0, driver))
+		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], BuildMarkByDriver(1, driver))
 		values = append(values, id)
 	} else {
 		queres := make([]string, 0)
 		var ids = id.(map[string]interface{})
 		for k, idk := range ids {
 			columnName := s.mapJsonColumnKeys[k]
-			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriver(0, driver)))
+			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriver(1, driver)))
 			values = append(values, idk)
 		}
 		where = "where " + strings.Join(queres, " and ")
@@ -78,35 +82,13 @@ func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 }
 
 func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
-	l := len(s.keys)
 	var values []interface{}
-	var driver = getDriver(s.Database)
-	var where string = ""
-	if l <= 1 {
-		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], BuildMarkByDriver(0, driver))
-		values = append(values, id)
-	} else {
-		queres := make([]string, 0)
-		var ids = id.(map[string]interface{})
-		for k, idk := range ids {
-			columnName := s.mapJsonColumnKeys[k]
-			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriver(0, driver)))
-			values = append(values, idk)
-		}
-		where = "where " + strings.Join(queres, " and ")
-	}
-	row, err1 := s.Database.Query(fmt.Sprintf("SELECT * FROM %s %s LIMIT 1", s.table, where), values...)
+	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys)
+	rowData, err1 := QueryOne(s.Database, s.modelType, s.fieldsIndex, sql, values...)
 	if err1 != nil {
 		return false, err1
 	}
-	r, err2 := ScanByModelType(row, s.modelType)
-	if err2 != nil {
-		return false, err2
-	}
-	if len(r) == 0 {
-		return false, errors.New("record not found")
-	}
-	reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r[0]).Elem())
+	reflect.ValueOf(result).Elem().Set(reflect.ValueOf(rowData).Elem())
 	if s.Mapper != nil {
 		_, er3 := s.Mapper.DbToModel(ctx, result)
 		if er3 != nil {

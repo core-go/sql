@@ -30,7 +30,7 @@ func UpdateOne(db *sql.DB, table string, model interface{}) (int64, error) {
 }
 
 func BuildUpdateOneQuery(table string, model interface{}) (string, []interface{}) {
-	mapData, keys := BuildMapDataAndKeys(model)
+	mapData, _, keys := BuildMapDataAndKeys(model)
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
 	idFields := FindIdColumns(modelType)
 	query := make(map[string]interface{})
@@ -93,12 +93,18 @@ func Find(slice []string, val string) (int, bool) {
 }
 
 func BuildInsertOneQuery(table string, model interface{}) (string, []interface{}) {
-	mapData, _ := BuildMapDataAndKeys(model)
+	mapData, mapPrimaryKeyValue, keys := BuildMapDataAndKeys(model)
 	var cols []string
 	var values []interface{}
-	for col, v := range mapData {
-		cols = append(cols, QuoteColumnName(col))
-		values = append(values, v)
+	for _, columnName := range keys {
+		if value, ok := mapData[columnName]; ok {
+			cols = append(cols, QuoteColumnName(columnName))
+			values = append(values, value)
+		}
+	}
+	for columnName, value := range mapPrimaryKeyValue {
+		cols = append(cols, QuoteColumnName(columnName))
+		values = append(values, value)
 	}
 	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
 	numCol := len(cols)
@@ -122,22 +128,49 @@ func QuoteColumnName(str string) string {
 	return str
 }
 
-func BuildMapDataAndKeys(model interface{}) (map[string]interface{}, []string) {
+func BuildMapDataAndKeys(model interface{}) (map[string]interface{}, map[string]interface{}, []string) {
 	var mapValue = make(map[string]interface{})
-	keys := make([]string, 0)
+	var mapPrimaryKeyValue = make(map[string]interface{})
+	keysOfMapValue := make([]string, 0)
 	modelValue := reflect.Indirect(reflect.ValueOf(model))
 	modelType := modelValue.Type()
 	numField := modelType.NumField()
 	for index := 0; index < numField; index++ {
-		if colName, exist := GetColumnNameByIndex(modelType, index); exist {
-			fieldValue := modelValue.Field(index).Interface()
-			mapValue[colName] = fieldValue
-			keys = append(keys, colName)
+		if colName, isKey, exist := CheckByIndex(modelType, index); exist {
+			if colName != "-" {
+				fieldValue := modelValue.Field(index).Interface()
+				if !isKey {
+					mapValue[colName] = fieldValue
+					keysOfMapValue = append(keysOfMapValue, colName)
+				} else {
+					mapPrimaryKeyValue[colName] = fieldValue
+				}
+			}
 		} else {
 			panic("cannot find column name")
 		}
 	}
-	return mapValue, keys
+	return mapValue, mapPrimaryKeyValue, keysOfMapValue
+}
+
+func CheckByIndex(modelType reflect.Type, index int) (col string, isKey bool, colExist bool) {
+	fields := modelType.Field(index)
+	tag, _ := fields.Tag.Lookup("gorm")
+
+	if has := strings.Contains(tag, "column"); has {
+		str1 := strings.Split(tag, ";")
+		num := len(str1)
+		for i := 0; i < num; i++ {
+			str2 := strings.Split(str1[i], ":")
+			for j := 0; j < len(str2); j++ {
+				if str2[j] == "column" {
+					isKey := strings.Contains(tag, "primary_key")
+					return str2[j+1], isKey, true
+				}
+			}
+		}
+	}
+	return "", false, false
 }
 
 func QuoteByDriver(key, driver string) string {
