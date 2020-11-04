@@ -137,17 +137,13 @@ func BuildMapDataAndKeys(model interface{}) (map[string]interface{}, map[string]
 	numField := modelType.NumField()
 	for index := 0; index < numField; index++ {
 		if colName, isKey, exist := CheckByIndex(modelType, index); exist {
-			if colName != "-" {
-				fieldValue := modelValue.Field(index).Interface()
-				if !isKey {
-					mapValue[colName] = fieldValue
-					keysOfMapValue = append(keysOfMapValue, colName)
-				} else {
-					mapPrimaryKeyValue[colName] = fieldValue
-				}
+			fieldValue := modelValue.Field(index).Interface()
+			if !isKey {
+				mapValue[colName] = fieldValue
+				keysOfMapValue = append(keysOfMapValue, colName)
+			} else {
+				mapPrimaryKeyValue[colName] = fieldValue
 			}
-		} else {
-			panic("cannot find column name")
 		}
 	}
 	return mapValue, mapPrimaryKeyValue, keysOfMapValue
