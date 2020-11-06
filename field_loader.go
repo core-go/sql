@@ -2,7 +2,7 @@ package sql
 
 import (
 	"context"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 )
 
 type FieldLoader struct {

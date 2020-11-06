@@ -3,7 +3,6 @@ package sql
 import (
 	"fmt"
 	s "github.com/common-go/search"
-	"github.com/jinzhu/gorm"
 	"log"
 	"reflect"
 	"regexp"
@@ -68,7 +67,7 @@ func (b *DefaultDynamicQueryBuilder) BuildQuery(sm interface{}, resultModelType 
 						fields = fields[len(fields):]
 						break
 					} else if i == -1 {
-						columnName = gorm.ToColumnName(key)
+						columnName = GormToColumnName(key)
 					}
 					fields = append(fields, columnName)
 				}

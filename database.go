@@ -3,89 +3,40 @@ package sql
 import (
 	"errors"
 	"fmt"
-	"github.com/jinzhu/gorm"
-	"log"
+	"gorm.io/gorm"
+	schema "gorm.io/gorm/schema"
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 )
-func CreatePoolByConfig(c DatabaseConfig) (*gorm.DB, error) {
-	if c.Retry.Retry1 <= 0 {
-		return CreatePool(c)
-	} else {
-		durations := DurationsFromValue(c.Retry, "Retry", 9)
-		return CreatePoolWithRetries(c, durations)
-	}
-}
-func CreatePool(dbConfig DatabaseConfig) (*gorm.DB, error) {
-	if dbConfig.Dialect == "postgres" {
-		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", dbConfig.User, dbConfig.Database, dbConfig.Password, dbConfig.Host, dbConfig.Port)
-		fmt.Println("uri ", uri)
-		return gorm.Open("postgres", uri)
-	} else if dbConfig.Dialect == "mysql" {
-		uri := ""
-		if dbConfig.MultiStatements {
-			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
-			return gorm.Open("mysql", uri)
-		}
-		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
-		return gorm.Open("mysql", uri)
-	} else if dbConfig.Dialect == "mssql" { // mssql
-		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
-		return gorm.Open("mssql", uri)
-	} else { //sqlite
-		return gorm.Open("sqlite3", dbConfig.Host)
-	}
-}
-func CreatePoolWithRetries(c DatabaseConfig, retries []time.Duration) (*gorm.DB, error) {
-	if c.Retry.Retry1 <= 0 {
-		return CreatePool(c)
-	} else {
-		db, er1 := CreatePool(c)
-		if er1 == nil {
-			return db, er1
-		}
-		i := 0
-		err := Retry(retries, func() (err error) {
-			i = i + 1
-			db2, er2 := CreatePool(c)
-			if er2 == nil {
-				db = db2
-			}
-			return er2
-		})
-		if err != nil {
-			log.Printf("Cannot conect to database: %s.", err.Error())
-		}
-		return db, err
-	}
-}
-func BuildUri(dbConfig DatabaseConfig) string {
-	if dbConfig.Dialect == "postgres" {
-		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", dbConfig.User, dbConfig.Database, dbConfig.Password, dbConfig.Host, dbConfig.Port)
-		return uri
-	} else if dbConfig.Dialect == "mysql" {
-		uri := ""
-		if dbConfig.MultiStatements {
-			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
-			return uri
-		}
-		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
-		return uri
-	} else if dbConfig.Dialect == "mssql" { // mssql
-		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
-		return uri
-	} else { //sqlite
-		return dbConfig.Host
-	}
-}
-func Connect(dialect string, uri string) (*gorm.DB, error) {
-	return gorm.Open(dialect, uri)
-}
+
+//func CreatePool(dbConfig DatabaseConfig) (*gorm.DB, error) {
+//	if dbConfig.Dialect == "postgres" {
+//		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", dbConfig.User, dbConfig.Database, dbConfig.Password, dbConfig.Host, dbConfig.Port)
+//		fmt.Println("uri ", uri)
+//		return gorm.Open("postgres", uri)
+//	} else if dbConfig.Dialect == "mysql" {
+//		uri := ""
+//		if dbConfig.MultiStatements {
+//			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
+//			return gorm.Open("mysql", uri)
+//		}
+//		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
+//		return gorm.Open("mysql", uri)
+//	} else if dbConfig.Dialect == "mssql" { // mssql
+//		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
+//		return gorm.Open("mssql", uri)
+//	} else { //sqlite
+//		return gorm.Open("sqlite3", dbConfig.Host)
+//	}
+//}
+
+//func Connect(dialect string, uri string) (*gorm.DB, error) {
+//	return gorm.Open(dialect, uri)
+//}
 
 func Exists(db *gorm.DB, table string, model interface{}, query interface{}) (bool, error) {
-	var count int32
+	var count int64
 	if err := db.Table(table).Where(query).Count(&count).Error; err != nil {
 		return false, err
 	} else {
@@ -163,7 +114,7 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 func Insert(db *gorm.DB, table string, model interface{}) (int64, error) {
 	x := db.Table(table).Create(model)
 	if err := x.Error; err != nil {
-		dialect := db.Dialect().GetName()
+		dialect := db.Dialector.Name()
 		ers := err.Error() // log.Printf(err.Error())
 		if dialect == "postgres" && strings.Contains(ers, "pq: duplicate key value violates unique constraint") {
 			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
@@ -279,7 +230,7 @@ func HandleResult(result *gorm.DB) (int64, error) {
 }
 
 // Obtain columns and values required for insert from interface
-func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]interface{}, error) {
+func ExtractMapValue(db *gorm.DB,value interface{}, excludeColumns []string) (map[string]interface{}, error) {
 	rv := reflect.ValueOf(value)
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
@@ -290,24 +241,25 @@ func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]int
 	}
 
 	var attrs = map[string]interface{}{}
-
-	for _, field := range (&gorm.Scope{Value: value}).Fields() {
+	stmt := db.Session(&gorm.Session{DryRun: true}).Model(value).Statement
+	fields := stmt.Statement.Schema.Fields
+	for _, field := range fields {
 		// Exclude relational record because it's not directly contained in database columns
-		_, hasForeignKey := field.TagSettingsGet("FOREIGNKEY")
-
-		if !ContainString(excludeColumns, field.Struct.Name) && field.StructField.Relationship == nil && !hasForeignKey &&
-			!field.IsIgnored && !IsAutoIncrementField(field) && !IsPrimaryAndBlankField(field) {
-			if field.StructField.HasDefaultValue && field.IsBlank {
-				// If default value presents and field is empty, assign a default value
-				if val, ok := field.TagSettingsGet("DEFAULT"); ok {
-					attrs[field.DBName] = val
+		_, hasForeignKey  := field.TagSettings["FOREIGNKEY"]
+			if  !ContainString(excludeColumns, field.StructField.Name) && field.Schema.Relationships.Relations == nil && !hasForeignKey && !IsIgnored(field) && !field.AutoIncrement &&  !IsPrimaryAndBlankField(field) {
+				if field.HasDefaultValue && field.NotNull == false {  // isBlank
+					// If default value presents and field is empty, assign a default value
+					if val, ok := field.TagSettings["DEFAULT"]; ok {
+						attrs[field.DBName] = val
+					} else {
+						fieldValue := reflect.New(field.IndirectFieldType)
+						attrs[field.DBName] = fieldValue
+					}
 				} else {
-					attrs[field.DBName] = field.Field.Interface()
+					fieldValue := reflect.New(field.IndirectFieldType)
+					attrs[field.DBName] = fieldValue
 				}
-			} else {
-				attrs[field.DBName] = field.Field.Interface()
 			}
-		}
 	}
 	return attrs, nil
 }
@@ -317,7 +269,7 @@ func GetColumnName(modelType reflect.Type, fieldName string) (col string, colExi
 	field, ok := modelType.FieldByName(fieldName)
 	if !ok {
 		return fieldName, false
-		//return gorm.ToColumnName(fieldName), false
+		//return GormToColumnName(fieldName), false
 	}
 	tag2, ok2 := field.Tag.Lookup("gorm")
 	if !ok2 {
@@ -336,7 +288,7 @@ func GetColumnName(modelType reflect.Type, fieldName string) (col string, colExi
 			}
 		}
 	}
-	//return gorm.ToColumnName(fieldName), false
+	//return GormToColumnName(fieldName), false
 	return fieldName, false
 }
 
@@ -440,13 +392,12 @@ func BuildQueryMap(db *gorm.DB, object interface{}, onlyPrimaryKeys bool) map[st
 	modelType := objectValue.Type()
 
 	query := map[string]interface{}{}
-	newScope := db.NewScope(object)
-
-	for _, field := range newScope.Fields() {
-		if !field.IsIgnored && !field.IsBlank {
-			if !onlyPrimaryKeys || field.IsPrimaryKey {
+	newScope := db.Session(&gorm.Session{DryRun: true}).Model(object).Statement
+	for _, field := range newScope.Schema.Fields {
+		if field.Readable && field.NotNull {
+			if !onlyPrimaryKeys || field.PrimaryKey {
 				columnName, _ := GetColumnName(modelType, field.Name)
-				query[columnName] = field.Field.Interface()
+				query[columnName] = reflect.New(field.IndirectFieldType)
 			}
 		}
 	}
@@ -547,7 +498,7 @@ func GetTableName(object interface{}) string {
 }
 
 func UpdateAssociations(db *gorm.DB, obj interface{}, column string, newValues interface{}) error {
-	return db.Model(obj).Association(column).Replace(newValues).Error
+	return db.Model(obj).Association(column).Replace(newValues)
 }
 
 func QueryOne(db *gorm.DB, model interface{}, sql string, values ...interface{}) error {
@@ -605,13 +556,22 @@ func SortedKeys(val map[string]interface{}) []string {
 	return keys
 }
 
-func IsAutoIncrementField(field *gorm.Field) bool {
-	if value, ok := field.TagSettingsGet("AUTO_INCREMENT"); ok {
-		return strings.ToLower(value) != "false"
-	}
-	return false
+//func IsAutoIncrementField(field *gorm.Field) bool {
+//	if value, ok := field.TagSettingsGet("AUTO_INCREMENT"); ok {
+//		return strings.ToLower(value) != "false"
+//	}
+//	return false
+//}
+
+func IsPrimaryAndBlankField(field *schema.Field) bool {
+	return field.PrimaryKey && field.NotNull == false // isBlank
 }
 
-func IsPrimaryAndBlankField(field *gorm.Field) bool {
-	return field.IsPrimaryKey && field.IsBlank
+func IsIgnored(field *schema.Field) bool {
+	return field.Creatable == false || field.Updatable == false || field.Readable == false
+}
+
+var namingStrategy = schema.NamingStrategy{}
+func GormToColumnName(columnName string) string{
+	return namingStrategy.ColumnName("", columnName)
 }

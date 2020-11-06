@@ -1,6 +1,6 @@
 package sql
 
-import "github.com/jinzhu/gorm"
+import "gorm.io/gorm"
 
 type UnitOfWork struct {
 	DB          *gorm.DB

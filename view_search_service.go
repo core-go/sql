@@ -1,7 +1,7 @@
 package sql
 
 import (
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 	"reflect"
 )
 

@@ -2,7 +2,7 @@ package sql
 
 import (
 	"fmt"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 	"reflect"
 	"strings"
 )
@@ -10,18 +10,18 @@ import (
 // raw query
 func Save(db *gorm.DB, table string, model interface{}) (int64, error) {
 	placeholders := make([]string, 0)
-	attrs, err := ExtractMapValue(model, placeholders)
+	attrs, err := ExtractMapValue(db, model, placeholders)
 	if err != nil {
 		return 0, fmt.Errorf("cannot extract object's values: %w", err)
 	}
-	mainScope := db.NewScope(model)
+	mainScope := db.Session(&gorm.Session{DryRun: true}).Model(model).Statement
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
 	pkey := FindIdFields(modelType)
 	size := len(attrs)
 	dbColumns := make([]string, 0, size)
 	variables := make([]string, 0, size)
 	for _, key := range SortedKeys(attrs) {
-		mainScope.AddToVars(attrs[key])
+		mainScope.AddVar(mainScope, attrs[key])
 		dbColumns = append(dbColumns, mainScope.Quote(key))
 		variables = append(variables, "?")
 	}
@@ -31,7 +31,7 @@ func Save(db *gorm.DB, table string, model interface{}) (int64, error) {
 
 	// Also append variables to mainScope
 	var queryString string
-	if a := db.Dialect().GetName(); a == "postgres" || a == "sqlite3" {
+	if a := db.Dialector.Name(); a == "postgres" || a == "sqlite3" {
 		uniqueCols := make([]string, 0)
 		setColumns := make([]string, 0)
 		for _, key := range SortedKeys(attrs) {
@@ -41,7 +41,7 @@ func Save(db *gorm.DB, table string, model interface{}) (int64, error) {
 				}
 			}
 			setColumns = append(setColumns, mainScope.Quote(key)+" = ?")
-			mainScope.AddToVars(attrs[key])
+			mainScope.AddVar(mainScope,attrs[key])
 		}
 		queryString = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT (%s) DO UPDATE SET %s",
 			mainScope.Quote(table),
@@ -50,12 +50,12 @@ func Save(db *gorm.DB, table string, model interface{}) (int64, error) {
 			strings.Join(uniqueCols, ", "),
 			strings.Join(setColumns, ", "),
 		)
-	} else if db.Dialect().GetName() == "mysql" {
+	} else if db.Dialector.Name() == "mysql" {
 		var setColumns []string
 
 		for _, key := range SortedKeys(attrs) {
 			setColumns = append(setColumns, mainScope.Quote(key)+" = ?")
-			mainScope.AddToVars(attrs[key])
+			mainScope.AddVar(mainScope,attrs[key])
 		}
 		queryString = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
 			mainScope.Quote(table),
@@ -63,7 +63,7 @@ func Save(db *gorm.DB, table string, model interface{}) (int64, error) {
 			strings.Join(placeholders, ", "),
 			strings.Join(setColumns, ", "),
 		)
-	} else if db.Dialect().GetName() == "mssql" {
+	} else if db.Dialector.Name() == "mssql" {
 		uniqueCols := make([]string, 0)
 		setColumns := make([]string, 0)
 		for _, key := range SortedKeys(attrs) {
@@ -73,7 +73,7 @@ func Save(db *gorm.DB, table string, model interface{}) (int64, error) {
 					uniqueCols = append(uniqueCols, onDupe)
 				}
 			}
-			mainScope.AddToVars(attrs[key])
+			mainScope.AddVar(mainScope,attrs[key])
 			setColumns = append(setColumns, mainScope.Quote(key)+" = temp."+key)
 		}
 		queryString = fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
@@ -86,11 +86,11 @@ func Save(db *gorm.DB, table string, model interface{}) (int64, error) {
 			strings.Join(placeholders, ", "),
 		)
 	} else {
-		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", db.Dialect().GetName())
+		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", db.Dialector.Name())
 	}
 	mainScope.Raw(queryString)
 
-	x := db.Exec(mainScope.SQL, mainScope.SQLVars...)
+	x := db.Exec(mainScope.SQL.String(), mainScope.Vars...)
 	return x.RowsAffected, x.Error
 
 }
@@ -137,7 +137,7 @@ func BuildMapData(model interface{}) map[string]interface{} {
 
 func BuildInsertQuery(db *gorm.DB, table string, model interface{}) (string, []interface{}) {
 	mapData := BuildMapData(model)
-	mainScope := db.NewScope(model)
+	mainScope := db.Session(&gorm.Session{DryRun: true}).Model(model).Statement
 	var cols []string
 	var values []interface{}
 	for col, v := range mapData {
@@ -158,7 +158,7 @@ func BuildUpdateQuery(db *gorm.DB, table string, model interface{}, query map[st
 	mapData := BuildMapData(model)
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
 	idFields := FindIdFields(modelType)
-	mainScope := db.NewScope(model)
+	mainScope := db.Session(&gorm.Session{DryRun: true}).Model(model).Statement
 	for _, idField := range idFields {
 		if idCol, exist := GetColumnName(modelType, idField); exist {
 			delete(mapData, idCol)
@@ -185,7 +185,7 @@ func BuildUpdateQuery(db *gorm.DB, table string, model interface{}, query map[st
 func BuildDeleteQuery(db *gorm.DB, table string, query map[string]interface{}) (string, []interface{}) {
 	var values []interface{}
 	var queryArr []string
-	mainScope := db.NewScope("")
+	mainScope := db.Session(&gorm.Session{DryRun: true}).Statement
 	for key, value := range query {
 		queryArr = append(queryArr, fmt.Sprintf("%v=?", mainScope.Quote(key)))
 		values = append(values, value)
@@ -197,7 +197,7 @@ func BuildDeleteQuery(db *gorm.DB, table string, query map[string]interface{}) (
 func BuildInsertSQL(db *gorm.DB, tableName string, model map[string]interface{}) (string, []interface{}) {
 	var cols []string
 	var values []interface{}
-	subScope := db.NewScope("")
+	subScope := db.Session(&gorm.Session{DryRun: true}).Statement
 	for col, v := range model {
 		cols = append(cols, subScope.Quote(col))
 		values = append(values, v)

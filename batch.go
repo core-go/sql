@@ -3,7 +3,7 @@ package sql
 import (
 	"errors"
 	"fmt"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 	"reflect"
 	"strconv"
 	"strings"
@@ -55,7 +55,7 @@ func insertObjSet(db *gorm.DB, tableName string, objects []interface{}, skipDupl
 		return 0, nil
 	}
 
-	firstAttrs, err := ExtractMapValue(objects[0], excludeColumns)
+	firstAttrs, err := ExtractMapValue(db, objects[0], excludeColumns)
 	if err != nil {
 		return 0, err
 	}
@@ -64,18 +64,18 @@ func insertObjSet(db *gorm.DB, tableName string, objects []interface{}, skipDupl
 	modelType := reflect.TypeOf(objects[0])
 	pkey := FindIdFields(modelType)
 	// Scope to eventually run SQL
-	mainScope := db.NewScope(objects[0])
+	mainStmt := db.Session(&gorm.Session{DryRun: true}).Model(objects[0]).Statement
 	// Store placeholders for embedding variables
 	placeholders := make([]string, 0, attrSize)
 
 	// Replace with database column name
 	dbColumns := make([]string, 0, attrSize)
 	for _, key := range SortedKeys(firstAttrs) {
-		dbColumns = append(dbColumns, mainScope.Quote(key))
+		dbColumns = append(dbColumns, db.Statement.Quote(key))
 	}
 
 	for _, obj := range objects {
-		objAttrs, err := ExtractMapValue(obj, excludeColumns)
+		objAttrs, err := ExtractMapValue(db, obj, excludeColumns)
 		if err != nil {
 			return 0, err
 		}
@@ -85,12 +85,12 @@ func insertObjSet(db *gorm.DB, tableName string, objects []interface{}, skipDupl
 			return 0, errors.New("attribute sizes are inconsistent")
 		}
 
-		scope := db.NewScope(obj)
+		stmt := db.Session(&gorm.Session{DryRun: true}).Model(obj).Statement
 
 		// Append variables
 		variables := make([]string, 0, attrSize)
 		for _, key := range SortedKeys(objAttrs) {
-			scope.AddToVars(objAttrs[key])
+			stmt.AddVar(stmt, objAttrs[key])
 			variables = append(variables, "?")
 		}
 
@@ -98,18 +98,18 @@ func insertObjSet(db *gorm.DB, tableName string, objects []interface{}, skipDupl
 		placeholders = append(placeholders, valueQuery)
 
 		// Also append variables to mainScope
-		mainScope.SQLVars = append(mainScope.SQLVars, scope.SQLVars...)
+		mainStmt.Vars = append(mainStmt.Vars, stmt.Vars...)
 	}
 	var query string
 	if skipDuplicate {
-		if db.Dialect().GetName() == "postgres" {
+		if db.Dialector.Name() == "postgres" {
 			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 			)
 
-		} else if db.Dialect().GetName() == "mysql" {
+		} else if db.Dialector.Name() == "mysql" {
 			var qKey []string
 			for _, i2 := range pkey {
 				key := i2 + " = " + i2
@@ -122,19 +122,19 @@ func insertObjSet(db *gorm.DB, tableName string, objects []interface{}, skipDupl
 				strings.Join(qKey, ", "),
 			)
 		} else {
-			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", db.Dialect().GetName())
+			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", db.Dialector.Name())
 		}
 	}
 	{
 		query = fmt.Sprintf(fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
-			mainScope.QuotedTableName(),
+			mainStmt.Table,
 			strings.Join(dbColumns, ", "),
 			strings.Join(placeholders, ", "),
 		))
 	}
-	mainScope.Raw(query)
-
-	x := db.Exec(mainScope.SQL, mainScope.SQLVars...)
+	mainStmt.Raw(query)
+    // TODO CHECK mainScope.SQL
+	x := db.Exec(mainStmt.SQL.String(), mainStmt.Vars ...)
 	return x.RowsAffected, x.Error
 }
 
@@ -159,25 +159,25 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 		return 0, nil
 	}
 	var placeholder []string
-	firstAttrs, err := ExtractMapValue(objects[0], placeholder)
+	firstAttrs, err := ExtractMapValue(db, objects[0], placeholder)
 	if err != nil {
 		return 0, err
 	}
 	modelType := reflect.TypeOf(objects[0])
 	objAttrs := make(map[string]interface{})
 	pkey := FindIdFields(modelType)
-	mainScope := db.NewScope(objects[0])
+	mainStmt :=  db.Session(nil).Model(objects[0]).Statement
 	query := ""
 	dbColumns := make([]string, 0)
 	for _, key := range SortedKeys(firstAttrs) {
-		dbColumns = append(dbColumns, mainScope.Quote(key))
+		dbColumns = append(dbColumns, mainStmt.Quote(key))
 	}
 
 	for _, obj := range objects {
 		var keyValues string
 		sets := ""
 		var fields []string
-		objAttrs, err = ExtractMapValue(obj, placeholder)
+		objAttrs, err = ExtractMapValue(db, obj, placeholder)
 		if err != nil {
 			return 0, err
 		}
@@ -191,31 +191,31 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 					}
 					switch v := objAttrs[key].(type) {
 					case int:
-						where := mainScope.Quote(key) + " = " + strconv.Itoa(v)
+						where := mainStmt.Quote(key) + " = " + strconv.Itoa(v)
 						keys = append(keys, where)
 					case float64:
-						where := mainScope.Quote(key) + " = " + strconv.FormatFloat(v, 'f', -1, 64)
+						where := mainStmt.Quote(key) + " = " + strconv.FormatFloat(v, 'f', -1, 64)
 						keys = append(keys, where)
 					case bool:
-						where := mainScope.Quote(key) + " = " + strconv.FormatBool(v)
+						where := mainStmt.Quote(key) + " = " + strconv.FormatBool(v)
 						keys = append(keys, where)
 					case time.Time:
-						where := mainScope.Quote(key) + " = " + v.Format(formatDateUpdate)
+						where := mainStmt.Quote(key) + " = " + v.Format(formatDateUpdate)
 						keys = append(keys, where)
 					case *time.Time:
-						where := mainScope.Quote(key) + " = " + v.Format(formatDateUpdate)
+						where := mainStmt.Quote(key) + " = " + v.Format(formatDateUpdate)
 						keys = append(keys, where)
 					case string:
-						if db.Dialect().GetName() == "postgres" {
-							where := mainScope.Quote(key) + " = " + `E'` + EscapeString(v) + `'`
+						if db.Dialector.Name() == "postgres" {
+							where := mainStmt.Quote(key) + " = " + `E'` + EscapeString(v) + `'`
 							keys = append(keys, where)
 							break
-						} else if db.Dialect().GetName() == "mssql" {
-							where := mainScope.Quote(key) + " = " + `'` + EscapeStringForSelect(v) + `'`
+						} else if db.Dialector.Name() == "mssql" {
+							where := mainStmt.Quote(key) + " = " + `'` + EscapeStringForSelect(v) + `'`
 							keys = append(keys, where)
 							break
 						}
-						where := mainScope.Quote(key) + " = " + `'` + EscapeString(v) + `'`
+						where := mainStmt.Quote(key) + " = " + `'` + EscapeString(v) + `'`
 						keys = append(keys, where)
 					default:
 						return 0, errors.New("unsupported type")
@@ -254,10 +254,10 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 				//v = `'` + v + `'`
 				v = reflect.Indirect(reflect.ValueOf(v)).Interface()
 				if c, ok := v.(string); ok {
-					if db.Dialect().GetName() == "postgres" {
+					if db.Dialector.Name() == "postgres" {
 						fields = append(fields, fmt.Sprintf("%s = E'%s'", i2, EscapeString(c)))
 						break
-					} else if db.Dialect().GetName() == "mssql" {
+					} else if db.Dialector.Name() == "mssql" {
 						fields = append(fields, fmt.Sprintf("%s = '%s'", i2, EscapeStringForSelect(c)))
 						break
 					}
@@ -281,9 +281,9 @@ func UpdateMany(db *gorm.DB, tableName string, objects []interface{}) (int64, er
 
 	//query := fmt.Sprintf("update %s IN (%s)", strings.Join(pkey, ", "))
 	//db.Table(tableName).Where(query, ).Updates(objAttrs)
-	mainScope.Raw(query)
-	fmt.Print(fmt.Sprintf("mainScope.SQL:  %s", mainScope.SQL))
-	x := db.Exec(mainScope.SQL, mainScope.SQLVars...)
+	mainStmt.Raw(query)
+	fmt.Print(fmt.Sprintf("mainScope.SQL:  %s", mainStmt.SQL))
+	x := db.Exec(mainStmt.TableExpr.SQL, mainStmt.TableExpr.Vars ...)
 	return x.RowsAffected, x.Error
 }
 

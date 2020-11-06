@@ -3,7 +3,7 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 	"time"
 )
 
@@ -36,7 +36,7 @@ func (s *SqlHealthChecker) Check(ctx context.Context) (map[string]interface{}, e
 
 	res := make(map[string]interface{})
 	if s.provider {
-		res["provider"] = s.db.Dialect().GetName()
+		res["provider"] = s.db.Dialector.Name()
 	}
 	checkerChan := make(chan error)
 	go func() {

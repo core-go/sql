@@ -3,7 +3,7 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 	"strings"
 	"time"
 )
@@ -31,20 +31,20 @@ func NewDefaultPasscodeService(db *gorm.DB, tableName string) *PasscodeService {
 }
 
 func (s *PasscodeService) Save(ctx context.Context, id string, passcode string, expireAt time.Time) (int64, error) {
-	mainScope := s.db.NewScope("")
+	mainScope := s.db.Session(&gorm.Session{DryRun: true}).Statement
 	var placeholder []string
 	columns := []string{s.idName, s.passcodeName, s.expiredAtName}
 	for i := 0; i < 3; i++ {
 		placeholder = append(placeholder, "?")
 	}
-	mainScope.AddToVars(id)
-	mainScope.AddToVars(passcode)
-	mainScope.AddToVars(expireAt)
-	mainScope.AddToVars(id)
-	mainScope.AddToVars(passcode)
-	mainScope.AddToVars(expireAt)
+	mainScope.AddVar(mainScope, id)
+	mainScope.AddVar(mainScope,passcode)
+	mainScope.AddVar(mainScope,expireAt)
+	mainScope.AddVar(mainScope,id)
+	mainScope.AddVar(mainScope,passcode)
+	mainScope.AddVar(mainScope,expireAt)
 	var queryString string
-	if a := s.db.Dialect().GetName(); a == "postgres" || a == "sqlite3" {
+	if a := s.db.Dialector.Name(); a == "postgres" || a == "sqlite3" {
 		setColumns := make([]string, 0)
 		for _, key := range columns {
 			setColumns = append(setColumns, mainScope.Quote(key)+" = ?")
@@ -56,7 +56,7 @@ func (s *PasscodeService) Save(ctx context.Context, id string, passcode string, 
 			mainScope.Quote(s.idName),
 			strings.Join(setColumns, ", "),
 		)
-	} else if s.db.Dialect().GetName() == "mysql" {
+	} else if s.db.Dialector.Name() == "mysql" {
 		setColumns := make([]string, 0)
 		for _, key := range columns {
 			setColumns = append(setColumns, mainScope.Quote(key)+" = ?")
@@ -68,7 +68,7 @@ func (s *PasscodeService) Save(ctx context.Context, id string, passcode string, 
 			"("+strings.Join(placeholder, ", ")+")",
 			strings.Join(setColumns, ", "),
 		)
-	} else if s.db.Dialect().GetName() == "mssql" {
+	} else if s.db.Dialector.Name() == "mssql" {
 		setColumns := make([]string, 0)
 		onDupe := mainScope.Quote(s.tableName) + "." + mainScope.Quote(s.idName) + " = " + "temp." + mainScope.Quote(s.idName)
 		for _, key := range columns {
@@ -84,11 +84,11 @@ func (s *PasscodeService) Save(ctx context.Context, id string, passcode string, 
 			strings.Join(placeholder, ", "),
 		)
 	} else {
-		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", s.db.Dialect().GetName())
+		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", s.db.Dialector.Name())
 	}
 	mainScope.Raw(queryString)
 
-	x := s.db.Exec(mainScope.SQL, mainScope.SQLVars...)
+	x := s.db.Exec(mainScope.SQL.String(), mainScope.Vars...)
 	return x.RowsAffected, x.Error
 }
 

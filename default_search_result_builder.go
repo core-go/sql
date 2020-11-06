@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	s "github.com/common-go/search"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 )
 
 type DefaultSearchResultBuilder struct {

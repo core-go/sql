@@ -2,7 +2,8 @@ package sql
 
 import (
 	s "github.com/common-go/search"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
+	schema "gorm.io/gorm/schema"
 	"reflect"
 	"strings"
 )
@@ -40,7 +41,7 @@ func GetColumnNameForSearch(modelType reflect.Type, sortField string) string {
 	if i > -1 {
 		return column
 	}
-	return gorm.ToColumnName(sortField)
+	return GormToColumnName(sortField)
 }
 
 func GetSortType(sortType string) string {

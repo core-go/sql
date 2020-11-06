@@ -3,7 +3,7 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/jinzhu/gorm"
+	"gorm.io/gorm"
 	"regexp"
 	"strings"
 )
@@ -24,7 +24,7 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 	re := regexp.MustCompile(`\%|\?`)
 	key = re.ReplaceAllString(key, "")
 	key = key + "%"
-	err := s.Database.Table(s.Table).Set("gorm:auto_preload", true).Where(s.Field+" LIKE ?", key).Limit(max).Pluck(s.Field, &urlIdArr).Error
+	err := s.Database.Table(s.Table).Set("gorm:auto_preload", true).Where(s.Field+" LIKE ?", key).Limit(int(max)).Pluck(s.Field, &urlIdArr).Error
 	if err != nil {
 		return nilArr, err
 	}
@@ -33,26 +33,26 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 
 func (s *StringService) Save(ctx context.Context, values []string) (int64, error) {
 	//err := s.Database.Table(s.Table).columnWhere(s.Field+" LIKE ?", key).Limit(max).Pluck(s.Field, &urlIdArr).Error
-	mainScope := s.Database.NewScope(values)
+	mainScope := s.Database.Session(&gorm.Session{DryRun: true}).Model(values).Statement
 	var placeholder []string
 	for _, e := range values {
 		placeholder = append(placeholder, "(?)")
-		mainScope.AddToVars(e)
+		mainScope.AddVar(mainScope, e)
 	}
 	query := ""
-	if s.Database.Dialect().GetName() == "postgres" {
+	if s.Database.Dialector.Name() == "postgres" {
 		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
 			mainScope.Quote(s.Table),
 			mainScope.Quote(s.Field),
 			strings.Join(placeholder, ", "),
 		)
-	} else if s.Database.Dialect().GetName() == "sqlite3" {
+	} else if s.Database.Dialector.Name() == "sqlite3" {
 		query = fmt.Sprintf("INSERT OR IGNORE INTO %s (%s) VALUES %s",
 			mainScope.Quote(s.Table),
 			mainScope.Quote(s.Field),
 			strings.Join(placeholder, ", "),
 		)
-	} else if s.Database.Dialect().GetName() == "mysql" {
+	} else if s.Database.Dialector.Name() == "mysql" {
 		qKey := mainScope.Quote(s.Field) + " = " + mainScope.Quote(s.Field)
 		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
 			mainScope.Quote(s.Table),
@@ -61,7 +61,7 @@ func (s *StringService) Save(ctx context.Context, values []string) (int64, error
 			qKey,
 		)
 
-	} else if s.Database.Dialect().GetName() == "mssql" {
+	} else if s.Database.Dialector.Name() == "mssql" {
 		onDupe := mainScope.Quote(s.Table) + "." + mainScope.Quote(s.Field) + " = " + "temp." + mainScope.Quote(s.Field)
 		value := "temp." + mainScope.Quote(s.Field)
 		query = fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s);",
@@ -73,11 +73,11 @@ func (s *StringService) Save(ctx context.Context, values []string) (int64, error
 			value,
 		)
 	} else {
-		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", s.Database.Dialect().GetName())
+		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", s.Database.Dialector.Name())
 	}
 	mainScope.Raw(query)
 
-	x := s.Database.Exec(mainScope.SQL, mainScope.SQLVars...)
+	x := s.Database.Exec(mainScope.SQL.String(), mainScope.Vars...)
 	return x.RowsAffected, x.Error
 }
 
