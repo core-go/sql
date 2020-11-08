@@ -20,9 +20,9 @@ type ViewService struct {
 	table             string
 }
 
-func NewViewService(db *sql.DB, modelType reflect.Type, tableName string, mapper Mapper) *ViewService {
+func NewViewServiceWithMapper(db *sql.DB, modelType reflect.Type, tableName string, mapper Mapper) *ViewService {
 	_, idNames := FindNames(modelType)
-	mapJsonColumnKeys := mapJsonColumn(modelType)
+	mapJsonColumnKeys := MapJsonColumn(modelType)
 	modelsType := reflect.Zero(reflect.SliceOf(modelType)).Type()
 	fieldsIndex, er0 := GetColumnIndexes(modelType)
 	if er0 != nil {
@@ -31,8 +31,8 @@ func NewViewService(db *sql.DB, modelType reflect.Type, tableName string, mapper
 	return &ViewService{db, mapper, modelType, modelsType, idNames, mapJsonColumnKeys, fieldsIndex, tableName}
 }
 
-func NewDefaultViewService(db *sql.DB, modelType reflect.Type, tableName string) *ViewService {
-	return NewViewService(db, modelType, tableName, nil)
+func NewViewService(db *sql.DB, modelType reflect.Type, tableName string) *ViewService {
+	return NewViewServiceWithMapper(db, modelType, tableName, nil)
 }
 
 func (s *ViewService) Keys() []string {
@@ -48,7 +48,7 @@ func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 
 func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
-	if getDriverName(s.Database) == DRIVER_ORACLE {
+	if GetDriverName(s.Database) == DRIVER_ORACLE {
 		for i := 0; i < len(values); i++ {
 			count := i + 1
 			queryFindById = strings.Replace(queryFindById, "?", ":val"+fmt.Sprintf("%v", count), 1)
@@ -61,7 +61,7 @@ func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, e
 func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 	var count int32
 	var where string
-	var driver = getDriverName(s.Database)
+	var driver = GetDriverName(s.Database)
 	var values []interface{}
 	colNumber := 1
 	if len(s.keys) == 1 {
@@ -107,7 +107,7 @@ func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result 
 	return true, nil
 }
 
-func mapJsonColumn(modelType reflect.Type) map[string]string {
+func MapJsonColumn(modelType reflect.Type) map[string]string {
 	numField := modelType.NumField()
 	columnNameKeys := make(map[string]string)
 	for i := 0; i < numField; i++ {

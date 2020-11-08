@@ -8,7 +8,7 @@ import (
 )
 
 func InsertOne(db *sql.DB, table string, model interface{}) (int64, error) {
-	var driverName = getDriverName(db)
+	var driverName = GetDriverName(db)
 	query, values := BuildInsertSql(table, model, driverName)
 
 	result, err := db.Exec(query, values...)
@@ -20,7 +20,7 @@ func InsertOne(db *sql.DB, table string, model interface{}) (int64, error) {
 }
 
 func UpdateOne(db *sql.DB, table string, model interface{}) (int64, error) {
-	driverName := getDriverName(db)
+	driverName := GetDriverName(db)
 	query, values := BuildUpdateSql(table, model, driverName)
 
 	result, err := db.Exec(query, values...)

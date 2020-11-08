@@ -80,7 +80,7 @@ func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 	if len(objects) == 0 {
 		return 0, nil
 	}
-	driverName := getDriverName(db)
+	driverName := GetDriverName(db)
 	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
 	if err != nil {
 		return 0, err
@@ -169,7 +169,7 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 	if len(objects) == 0 {
 		return 0, nil
 	}
-	driverName := getDriverName(db)
+	driverName := GetDriverName(db)
 	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
 	if err != nil {
 		return 0, err
@@ -285,7 +285,7 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 
 func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	var placeholder []string
-	driverName := getDriverName(db)
+	driverName := GetDriverName(db)
 	var query []string
 	if len(objects) == 0 {
 		return 0, nil
@@ -336,7 +336,7 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, err
 
 func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	var placeholder []string
-	driverName := getDriverName(db)
+	driverName := GetDriverName(db)
 	var query []string
 	if len(objects) == 0 {
 		return 0, nil
@@ -401,7 +401,7 @@ func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) 
 }
 
 func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string) (int64, error) {
-	driverName := getDriverName(db)
+	driverName := GetDriverName(db)
 	var query []string
 	if len(objects) == 0 {
 		return 0, nil

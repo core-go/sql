@@ -23,18 +23,18 @@ func (w *SqlBatchUpdate) WriteBatch(ctx context.Context, models interface{}) ([]
 	_models, err1 := InterfaceSlice(models)
 	if err1 != nil {
 		// Return full fail
-		failIndices = toArrayIndex(s, failIndices)
+		failIndices = ToArrayIndex(s, failIndices)
 		return successIndices, failIndices, err1
 	}
 	_, err := UpdateMany(w.db, w.tableName, _models)
 
 	if err == nil {
 		// Return full success
-		successIndices = toArrayIndex(s, successIndices)
+		successIndices = ToArrayIndex(s, successIndices)
 		return successIndices, failIndices, err
 	} else {
 		// Return full fail
-		failIndices = toArrayIndex(s, failIndices)
+		failIndices = ToArrayIndex(s, failIndices)
 	}
 	return successIndices, failIndices, err
 }

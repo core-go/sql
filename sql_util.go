@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func getDriverName(db *sql.DB) string {
+func GetDriverName(db *sql.DB) string {
 	driver := reflect.TypeOf(db.Driver()).String()
 	switch driver {
 	case "*pq.Driver":
@@ -24,62 +24,62 @@ func getDriverName(db *sql.DB) string {
 }
 
 func Query(db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) error {
-	rows, err1 := db.Query(sql, values...)
-	if err1 != nil {
-		return err1
+	rows, er1 := db.Query(sql, values...)
+	if er1 != nil {
+		return er1
 	}
 	defer rows.Close()
 	if fieldsIndex == nil {
-		tb, err2 := ScanByModelType(rows, modelType)
-		if err2 != nil {
-			return err2
+		tb, er2 := ScanByModelType(rows, modelType)
+		if er2 != nil {
+			return er2
 		}
 		for _, element := range tb {
 			appendToArray(results, element)
 		}
 	} else {
-		tb, err2 := Scans(rows, modelType, fieldsIndex)
-		if err2 != nil {
-			return err2
+		tb, er3 := Scans(rows, modelType, fieldsIndex)
+		if er3 != nil {
+			return er3
 		}
 		for _, element := range tb {
 			appendToArray(results, element)
 		}
 	}
-	rerr := rows.Close()
-	if rerr != nil {
-		return rerr
+	er4 := rows.Close()
+	if er4 != nil {
+		return er4
 	}
 	// Rows.Err will report the last error encountered by Rows.Scan.
-	if err := rows.Err(); err != nil {
-		return err
+	if er5 := rows.Err(); er5 != nil {
+		return er5
 	}
 	return nil
 }
 
 func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
 	strSQL := "LIMIT 1"
-	if getDriverName(db) == DRIVER_ORACLE {
+	if GetDriverName(db) == DRIVER_ORACLE {
 		strSQL = "AND ROWNUM = 1"
 	}
-	rows, err1 := db.Query(sql+" " +strSQL, values...)
-	if err1 != nil {
-		return nil, err1
+	rows, er1 := db.Query(sql+" " +strSQL, values...)
+	if er1 != nil {
+		return nil, er1
 	}
-	tb, err2 := Scan(rows, modelType, fieldsIndex)
-	if err2 != nil {
-		return nil, err2
+	tb, er2 := Scan(rows, modelType, fieldsIndex)
+	if er2 != nil {
+		return nil, er2
 	}
-	rerr := rows.Close()
-	if rerr != nil {
-		return nil, rerr
+	er3 := rows.Close()
+	if er3 != nil {
+		return nil, er3
 	}
 	// Rows.Err will report the last error encountered by Rows.Scan.
 	if err := rows.Err(); err != nil {
-		return nil, rerr
+		return nil, er3
 	}
 	if tb == nil {
-		return nil, errors.New("Not found record.")
+		return nil, errors.New("not found record")
 	}
 	return tb, nil
 }
@@ -183,7 +183,10 @@ func StructScanByIndex(s interface{}, fieldsIndex map[string]int, columns []stri
 }
 
 func Scans(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int) (t []interface{}, err error) {
-	columns, _ := rows.Columns()
+	columns, er0 := rows.Columns()
+	if er0 != nil {
+		return nil, er0
+	}
 	for rows.Next() {
 		initModel := reflect.New(modelType).Interface()
 		if err = rows.Scan(StructScanByIndex(initModel, fieldsIndex, columns)...); err == nil {

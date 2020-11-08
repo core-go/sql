@@ -99,7 +99,7 @@ func BuildDataSourceName(c DatabaseConfig) string {
 
 func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
 	var where string = ""
-	var driver = getDriverName(db)
+	var driver = GetDriverName(db)
 	var values []interface{}
 	if len(keys) == 1 {
 		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildMarkByDriverWithIndex(1, driver))
@@ -212,7 +212,7 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 }
 
 func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
-	var driverName = getDriverName(db)
+	var driverName = GetDriverName(db)
 	queryInsert, values := BuildInsertSql(table, model, driverName)
 
 	result, err := db.Exec(queryInsert, values...)
@@ -224,7 +224,7 @@ func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 }
 
 func Update(db *sql.DB, table string, model interface{}) (int64, error) {
-	driverName := getDriverName(db)
+	driverName := GetDriverName(db)
 	query, values := BuildUpdateSql(table, model, driverName)
 
 	result, err := db.Exec(query, values...)
@@ -238,7 +238,7 @@ func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 func Patch(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type) (int64, error) {
 	idcolumNames, idJsonName := FindNames(modelType)
 	columNames := FindJsonName(modelType)
-	driverName := getDriverName(db)
+	driverName := GetDriverName(db)
 	query := BuildPatch(table, model, columNames, idJsonName, idcolumNames, driverName)
 	if query == "" {
 		return 0, errors.New("fail to build query")
@@ -664,7 +664,7 @@ func MapColumnToJson(query map[string]interface{}) interface{} {
 		for i := 0; i < dem; i++ {
 			if strings.Index(k, "_") > -1 {
 				hoa := []rune(strings.ToUpper(string(k[strings.Index(k, "_")+1])))
-				k = replaceAtIndex(k, hoa[0], strings.Index(k, "_")+1)
+				k = ReplaceAtIndex(k, hoa[0], strings.Index(k, "_")+1)
 				k = strings.Replace(k, "_", "", 1)
 			}
 		}
@@ -672,7 +672,7 @@ func MapColumnToJson(query map[string]interface{}) interface{} {
 	}
 	return result
 }
-func replaceAtIndex(str string, replacement rune, index int) string {
+func ReplaceAtIndex(str string, replacement rune, index int) string {
 	out := []rune(str)
 	out[index] = replacement
 	return string(out)

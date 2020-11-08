@@ -23,23 +23,23 @@ func (w *SqlBatchInsert) WriteBatch(ctx context.Context, models interface{}) ([]
 	_models, err1 := InterfaceSlice(models)
 	if err1 != nil {
 		// Return full fail
-		failIndices = toArrayIndex(s, failIndices)
+		failIndices = ToArrayIndex(s, failIndices)
 		return successIndices, failIndices, err1
 	}
 	_, err := InsertMany(w.db, w.tableName, _models, 0)
 
 	if err == nil {
 		// Return full success
-		successIndices = toArrayIndex(s, successIndices)
+		successIndices = ToArrayIndex(s, successIndices)
 		return successIndices, failIndices, err
 	} else {
 		// Return full fail
-		failIndices = toArrayIndex(s, failIndices)
+		failIndices = ToArrayIndex(s, failIndices)
 	}
 	return successIndices, failIndices, err
 }
 
-func toArrayIndex(value reflect.Value, indices []int) []int {
+func ToArrayIndex(value reflect.Value, indices []int) []int {
 	for i := 0; i < value.Len(); i++ {
 		indices = append(indices, i)
 	}
