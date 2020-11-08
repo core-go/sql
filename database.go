@@ -15,6 +15,11 @@ import (
 const (
 	DBName     = "column"
 	PrimaryKey = "primary_key"
+
+	DRIVER_POSTGRES = "postgres"
+	DRIVER_MYSQL    = "mysql"
+	DRIVER_MSSQL    = "mssql"
+	DRIVER_ORACLE   = "oracle"
 )
 
 func OpenByConfig(c DatabaseConfig) (*sql.DB, error) {
@@ -94,19 +99,21 @@ func BuildDataSourceName(c DatabaseConfig) string {
 
 func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
 	var where string = ""
-	var driver = getDriver(db)
+	var driver = getDriverName(db)
 	var values []interface{}
 	if len(keys) == 1 {
-		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildMarkByDriver(1, driver))
+		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildMarkByDriverWithIndex(1, driver))
 		values = append(values, id)
 	} else {
 		queres := make([]string, 0)
 		if ids, ok := id.(map[string]interface{}); ok {
+			j := 0
 			for _, keyJson := range keys {
 				columnName := mapJsonColumnKeys[keyJson]
 				if idk, ok1 := ids[keyJson]; ok1 {
-					queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriver(1, driver)))
+					queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriverWithIndex(j, driver)))
 					values = append(values, idk)
+					j++
 				}
 			}
 			where = "WHERE " + strings.Join(queres, " AND ")
@@ -205,7 +212,8 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 }
 
 func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
-	queryInsert, values := BuildInsertOneQuery(table, model)
+	var driverName = getDriverName(db)
+	queryInsert, values := BuildInsertSql(table, model, driverName)
 
 	result, err := db.Exec(queryInsert, values...)
 	if err != nil {
@@ -216,7 +224,8 @@ func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 }
 
 func Update(db *sql.DB, table string, model interface{}) (int64, error) {
-	query, values := BuildUpdate(table, model)
+	driverName := getDriverName(db)
+	query, values := BuildUpdateSql(table, model, driverName)
 
 	result, err := db.Exec(query, values...)
 
@@ -227,9 +236,10 @@ func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 }
 
 func Patch(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type) (int64, error) {
-	fieldName, idJsonName := FindNames(modelType)
-	driverName := getDriver(db)
-	query := BuildPatch(table, model, fieldName, idJsonName, driverName)
+	idcolumNames, idJsonName := FindNames(modelType)
+	columNames := FindJsonName(modelType)
+	driverName := getDriverName(db)
+	query := BuildPatch(table, model, columNames, idJsonName, idcolumNames, driverName)
 	if query == "" {
 		return 0, errors.New("fail to build query")
 	}
@@ -317,21 +327,23 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	return -1, jsonName, jsonName
 }
 
-func BuildUpdate(table string, model interface{}) (string, []interface{}) {
+func BuildUpdateSql(table string, model interface{}, driverName string) (string, []interface{}) {
 	mapData, mapKey, _ := BuildMapDataAndKeys(model)
 	var values []interface{}
 
 	colSet := make([]string, 0)
 	colQuery := make([]string, 0)
-
+	colNumber := 1
 	for colName, v1 := range mapData {
 		values = append(values, v1)
-		colSet = append(colSet, fmt.Sprintf("%v=?", QuoteColumnName(colName)))
+		colSet = append(colSet, fmt.Sprintf("%v="+BuildMarkByDriverWithIndex(colNumber, driverName), QuoteColumnName(colName)))
+		colNumber++
 	}
 
 	for colName, v2 := range mapKey {
 		values = append(values, v2)
-		colQuery = append(colQuery, fmt.Sprintf("%v=?", QuoteColumnName(colName)))
+		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildMarkByDriverWithIndex(colNumber, driverName), QuoteColumnName(colName)))
+		colNumber++
 	}
 	queryWhere := strings.Join(colQuery, " AND ")
 	querySet := strings.Join(colSet, ",")
@@ -339,13 +351,15 @@ func BuildUpdate(table string, model interface{}) (string, []interface{}) {
 	return query, values
 }
 
-func BuildPatch(table string, model map[string]interface{}, idTagJsonNames []string, idColumNames []string, driverName string) string {
+func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, driverName string) string {
 	scope := statement()
 	// Append variables set column
 	for key, _ := range model {
 		if _, ok := Find(idTagJsonNames, key); !ok {
-			scope.Columns = append(scope.Columns, key)
-			scope.Values = append(scope.Values, model[key])
+			if columName, ok2 := mapJsonColum[key]; ok2 {
+				scope.Columns = append(scope.Columns, columName)
+				scope.Values = append(scope.Values, model[key])
+			}
 		}
 	}
 	// Append variables where
@@ -675,7 +689,7 @@ func UpdateAssociations(db *gorm.DB, obj interface{}, column string, newValues i
 	return db.Model(obj).Association(column).Replace(newValues).Error
 }
 
-func QueryOne(db *gorm.DB, model interface{}, sql string, values ...interface{}) error {
+func QueryRow(db *gorm.DB, model interface{}, sql string, values ...interface{}) error {
 	return db.Raw(sql, values...).Scan(model).Error
 }
 */
@@ -701,10 +715,20 @@ func QueryOne(db *gorm.DB, model interface{}, sql string, values ...interface{})
 	return nil
 }*/
 
-func BuildMarkByDriver(number int, driver string) string {
+func BuildParameters(numCol int, driver string) string {
+	var arrValue []string
+	for i := 0; i < numCol; i++ {
+		arrValue = append(arrValue, BuildMarkByDriverWithIndex(i+1, driver))
+	}
+	return strings.Join(arrValue, ",")
+}
+
+func BuildMarkByDriverWithIndex(index int, driver string) string {
 	switch driver {
 	case DRIVER_POSTGRES:
-		return "$" + strconv.Itoa(number)
+		return "$" + strconv.Itoa(index)
+	case DRIVER_ORACLE:
+		return ":val" + strconv.Itoa(index)
 	default:
 		return "?"
 	}

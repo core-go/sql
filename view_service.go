@@ -48,25 +48,34 @@ func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 
 func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
-	result, err1 := QueryOne(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
+	if getDriverName(s.Database) == DRIVER_ORACLE {
+		for i := 0; i < len(values); i++ {
+			count := i + 1
+			queryFindById = strings.Replace(queryFindById, "?", ":val"+fmt.Sprintf("%v", count), 1)
+		}
+	}
+	result, err1 := QueryRow(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
 	return result, err1
 }
 
 func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 	var count int32
 	var where string
-	var driver = getDriver(s.Database)
+	var driver = getDriverName(s.Database)
 	var values []interface{}
+	colNumber := 1
 	if len(s.keys) == 1 {
-		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], BuildMarkByDriver(1, driver))
+		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], BuildMarkByDriverWithIndex(colNumber, driver))
 		values = append(values, id)
+		colNumber++
 	} else {
 		queres := make([]string, 0)
 		var ids = id.(map[string]interface{})
 		for k, idk := range ids {
 			columnName := s.mapJsonColumnKeys[k]
-			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriver(1, driver)))
+			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriverWithIndex(colNumber, driver)))
 			values = append(values, idk)
+			colNumber++
 		}
 		where = "where " + strings.Join(queres, " and ")
 	}
@@ -84,7 +93,7 @@ func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
 	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys)
-	rowData, err1 := QueryOne(s.Database, s.modelType, s.fieldsIndex, sql, values...)
+	rowData, err1 := QueryRow(s.Database, s.modelType, s.fieldsIndex, sql, values...)
 	if err1 != nil {
 		return false, err1
 	}

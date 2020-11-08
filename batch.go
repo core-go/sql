@@ -12,12 +12,6 @@ import (
 
 var formatDateUpdate = "2006-01-02 15:04:05"
 
-const (
-	DRIVER_POSTGRES = "postgres"
-	DRIVER_MYSQL    = "mysql"
-	DRIVER_MSSQL    = "mssql"
-)
-
 func InsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
@@ -86,7 +80,7 @@ func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 	if len(objects) == 0 {
 		return 0, nil
 	}
-	driverName := getDriver(db)
+	driverName := getDriverName(db)
 	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
 	if err != nil {
 		return 0, err
@@ -175,7 +169,7 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 	if len(objects) == 0 {
 		return 0, nil
 	}
-	driverName := getDriver(db)
+	driverName := getDriverName(db)
 	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
 	if err != nil {
 		return 0, err
@@ -291,7 +285,7 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 
 func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	var placeholder []string
-	driverName := getDriver(db)
+	driverName := getDriverName(db)
 	var query []string
 	if len(objects) == 0 {
 		return 0, nil
@@ -342,7 +336,7 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, err
 
 func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	var placeholder []string
-	driverName := getDriver(db)
+	driverName := getDriverName(db)
 	var query []string
 	if len(objects) == 0 {
 		return 0, nil
@@ -407,7 +401,7 @@ func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) 
 }
 
 func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string) (int64, error) {
-	driverName := getDriver(db)
+	driverName := getDriverName(db)
 	var query []string
 	if len(objects) == 0 {
 		return 0, nil
@@ -452,19 +446,6 @@ func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, i
 	return x.RowsAffected()
 }
 
-func getDriver(db *sql.DB) string {
-	driver := reflect.TypeOf(db.Driver()).String()
-	switch driver {
-	case "*postgres.Driver":
-		return DRIVER_POSTGRES
-	case "*mysql.MySQLDriver":
-		return DRIVER_MYSQL
-	case "*mssql.Driver":
-		return DRIVER_MSSQL
-	default:
-		return "no support"
-	}
-}
 
 func getValueColumn(value interface{}, driverName string) (string, error) {
 	str := ""

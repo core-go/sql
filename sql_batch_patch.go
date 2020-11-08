@@ -73,3 +73,22 @@ func FindNames(modelType reflect.Type) ([]string, []string) {
 	}
 	return idColumnFields, idJsons
 }
+
+func FindJsonName(modelType reflect.Type) map[string]string {
+	numField := modelType.NumField()
+	 mapJsonColumn  := make(map[string]string)
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		ormTag := field.Tag.Get("gorm")
+		column, ok := findTag(ormTag, "column")
+		if ok {
+			tag1, ok1 := field.Tag.Lookup("json")
+			tagJsons := strings.Split(tag1, ",")
+			if ok1 && len(tagJsons) > 0 {
+				mapJsonColumn[tagJsons[0]] = column
+			}
+		}
+	}
+	return mapJsonColumn
+}
+

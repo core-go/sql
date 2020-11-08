@@ -7,6 +7,22 @@ import (
 	"strings"
 )
 
+func getDriverName(db *sql.DB) string {
+	driver := reflect.TypeOf(db.Driver()).String()
+	switch driver {
+	case "*pq.Driver":
+		return DRIVER_POSTGRES
+	case "*mysql.MySQLDriver":
+		return DRIVER_MYSQL
+	case "*mssql.Driver":
+		return DRIVER_MSSQL
+	case "*godror.drv":
+		return DRIVER_ORACLE
+	default:
+		return "no support"
+	}
+}
+
 func Query(db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) error {
 	rows, err1 := db.Query(sql, values...)
 	if err1 != nil {
@@ -41,8 +57,12 @@ func Query(db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex 
 	return nil
 }
 
-func QueryOne(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
-	rows, err1 := db.Query(sql+" LIMIT 1", values...)
+func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
+	strSQL := "LIMIT 1"
+	if getDriverName(db) == DRIVER_ORACLE {
+		strSQL = "AND ROWNUM = 1"
+	}
+	rows, err1 := db.Query(sql+" " +strSQL, values...)
 	if err1 != nil {
 		return nil, err1
 	}
@@ -149,6 +169,7 @@ func StructScanByIndex(s interface{}, fieldsIndex map[string]int, columns []stri
 		maps := reflect.Indirect(reflect.ValueOf(s))
 		fieldsIndexSelected := make([]int, 0)
 		for _, columnsName := range columns {
+			columnsName = strings.ToLower(columnsName)
 			if index, ok := fieldsIndex[columnsName]; ok {
 				fieldsIndexSelected = append(fieldsIndexSelected, index)
 				r = append(r, maps.Field(index).Addr().Interface())

@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 )
 
@@ -17,7 +18,7 @@ func NewSqlHealthChecker(db *sql.DB, name string, timeout time.Duration) *SqlHea
 }
 
 func NewDefaultSqlHealthChecker(db *sql.DB) *SqlHealthChecker {
-	return &SqlHealthChecker{db, "sql", 5 * time.Second}
+	return &SqlHealthChecker{db, "sql", 4 * time.Second}
 }
 
 func (s *SqlHealthChecker) Name() string {
@@ -25,18 +26,31 @@ func (s *SqlHealthChecker) Name() string {
 }
 
 func (s *SqlHealthChecker) Check(ctx context.Context) (map[string]interface{}, error) {
-	res := make(map[string]interface{})
-	err := s.db.Ping()
-	if err != nil {
-		return nil, err
+	res := make(map[string]interface{}, 0)
+	if s.timeout > 0 {
+		ctx, _ = context.WithTimeout(ctx, s.timeout)
 	}
-	res["status"] = "success"
-	return res, nil
+
+	checkerChan := make(chan error)
+	go func() {
+		err := s.db.Ping()
+		checkerChan <- err
+	}()
+	select {
+	case err := <-checkerChan:
+		if err != nil {
+			return res, err
+		}
+		res["status"] = "success"
+		return res, err
+	case <-ctx.Done():
+		return nil, errors.New("Connection timout")
+	}
 }
 
 func (s *SqlHealthChecker) Build(ctx context.Context, data map[string]interface{}, err error) map[string]interface{} {
-	if err == nil {
-		return data
+	if data == nil {
+		data = make(map[string]interface{}, 0)
 	}
 	data["error"] = err.Error()
 	return data

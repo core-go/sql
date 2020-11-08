@@ -15,6 +15,6 @@ func NewSqlUpdater(database *sql.DB, tableName string) *SqlUpdater {
 }
 
 func (w *SqlUpdater) Write(ctx context.Context, models interface{}) error {
-	_, err := UpdateOne(w.db, w.tableName, models)
+	_, err := Update(w.db, w.tableName, models)
 	return err
 }

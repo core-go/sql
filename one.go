@@ -8,7 +8,8 @@ import (
 )
 
 func InsertOne(db *sql.DB, table string, model interface{}) (int64, error) {
-	query, values := BuildInsertOneQuery(table, model)
+	var driverName = getDriverName(db)
+	query, values := BuildInsertSql(table, model, driverName)
 
 	result, err := db.Exec(query, values...)
 
@@ -19,7 +20,8 @@ func InsertOne(db *sql.DB, table string, model interface{}) (int64, error) {
 }
 
 func UpdateOne(db *sql.DB, table string, model interface{}) (int64, error) {
-	query, values := BuildUpdateOneQuery(table, model)
+	driverName := getDriverName(db)
+	query, values := BuildUpdateSql(table, model, driverName)
 
 	result, err := db.Exec(query, values...)
 
@@ -27,47 +29,6 @@ func UpdateOne(db *sql.DB, table string, model interface{}) (int64, error) {
 		return -1, err
 	}
 	return result.RowsAffected()
-}
-
-func BuildUpdateOneQuery(table string, model interface{}) (string, []interface{}) {
-	mapData, _, keys := BuildMapDataAndKeys(model)
-	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
-	idFields := FindIdColumns(modelType)
-	query := make(map[string]interface{})
-	if len(idFields) > 1 {
-		idsMap := make(map[string]interface{})
-		for i := 0; i < len(idFields); i += 2 {
-			idsMap[idFields[i]] = idFields[i+1]
-		}
-		query = MapToGORM(idsMap, modelType)
-	} else {
-		query = BuildQueryById(mapData[idFields[0]], modelType, idFields[0])
-	}
-
-	for _, gormColumnName := range idFields {
-		if _, exist := Find(idFields, gormColumnName); exist {
-			delete(mapData, gormColumnName)
-			keys = RemoveItem(keys, gormColumnName)
-		}
-	}
-
-	var values []interface{}
-	var updateQuery []string
-	for _, key := range keys {
-		if v, ok := mapData[key]; ok {
-			values = append(values, v)
-			updateQuery = append(updateQuery, fmt.Sprintf("%v=?", QuoteColumnName(key)))
-		}
-	}
-
-	setValueUpdate := strings.Join(updateQuery, ",")
-	var queryArr []string
-	for key, value := range query {
-		queryArr = append(queryArr, fmt.Sprintf("%v=?", key))
-		values = append(values, value)
-	}
-	q := strings.Join(queryArr, " AND ")
-	return fmt.Sprintf("UPDATE %v SET %v WHERE %v", table, setValueUpdate, q), values
 }
 
 func RemoveIndex(s []string, index int) []string {
@@ -92,7 +53,7 @@ func Find(slice []string, val string) (int, bool) {
 	return -1, false
 }
 
-func BuildInsertOneQuery(table string, model interface{}) (string, []interface{}) {
+func BuildInsertSql(table string, model interface{}, driverName string) (string, []interface{}) {
 	mapData, mapPrimaryKeyValue, keys := BuildMapDataAndKeys(model)
 	var cols []string
 	var values []interface{}
@@ -108,11 +69,7 @@ func BuildInsertOneQuery(table string, model interface{}) (string, []interface{}
 	}
 	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
 	numCol := len(cols)
-	var arrValue []string
-	for i := 0; i < numCol; i++ {
-		arrValue = append(arrValue, "?")
-	}
-	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
+	value := fmt.Sprintf("(%v)", BuildParameters(numCol, driverName))
 	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", table, column, value), values
 }
 
