@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 )
+const desc = "DESC"
+const asc = "ASC"
 
 //func CreatePool(dbConfig DatabaseConfig) (*gorm.DB, error) {
 //	if dbConfig.Provider == "postgres" {
@@ -594,4 +596,36 @@ func IsIgnored(field *schema.Field) bool {
 var namingStrategy = schema.NamingStrategy{}
 func GormToColumnName(columnName string) string{
 	return namingStrategy.ColumnName("", columnName)
+}
+
+func BuildSort(sortString string, modelType reflect.Type) string {
+	var sort = make([]string, 0)
+	sorts := strings.Split(sortString, ",")
+	for i := 0; i < len(sorts); i++ {
+		sortField := strings.TrimSpace(sorts[i])
+		fieldName := sortField
+		c := sortField[0:1]
+		if c == "-" || c == "+" {
+			fieldName = sortField[1:]
+		}
+		columnName := GetColumnNameForSearch(modelType, fieldName)
+		sortType := GetSortType(c)
+		sort = append(sort, columnName+" "+sortType)
+	}
+	return ` ORDER BY ` + strings.Join(sort, ",")
+}
+func GetColumnNameForSearch(modelType reflect.Type, sortField string) string {
+	sortField = strings.TrimSpace(sortField)
+	i, _, column := GetFieldByJson(modelType, sortField)
+	if i > -1 {
+		return column
+	}
+	return GormToColumnName(sortField)
+}
+func GetSortType(sortType string) string {
+	if sortType == "-" {
+		return desc
+	} else  {
+		return asc
+	}
 }
