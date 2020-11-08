@@ -1,4 +1,4 @@
-package sql
+package orm
 
 import (
 	"context"
@@ -56,8 +56,10 @@ func (b *DefaultSearchResultDynamicBuilder) findAndCount(db *gorm.DB, tableName 
 		count int64
 	}
 	countWithFind := false
-
-	queryDb := db.Table(tableName).Offset(pageSize * (pageIndex - 1)).Order(sort).Limit(pageSize)
+	x := pageSize * (pageIndex - 1)
+	offset := int(x)
+	x3 := int(pageSize)
+	queryDb := db.Table(tableName).Offset(offset).Order(sort).Limit(x3)
 	countDb := db.Table(tableName)
 	fields := make([]string, 0)
 

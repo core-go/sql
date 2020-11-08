@@ -1,4 +1,4 @@
-package sql
+package orm
 
 import (
 	"errors"
@@ -11,11 +11,11 @@ import (
 )
 
 //func CreatePool(dbConfig DatabaseConfig) (*gorm.DB, error) {
-//	if dbConfig.Dialect == "postgres" {
+//	if dbConfig.Provider == "postgres" {
 //		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", dbConfig.User, dbConfig.Database, dbConfig.Password, dbConfig.Host, dbConfig.Port)
 //		fmt.Println("uri ", uri)
 //		return gorm.Open("postgres", uri)
-//	} else if dbConfig.Dialect == "mysql" {
+//	} else if dbConfig.Provider == "mysql" {
 //		uri := ""
 //		if dbConfig.MultiStatements {
 //			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
@@ -23,7 +23,7 @@ import (
 //		}
 //		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
 //		return gorm.Open("mysql", uri)
-//	} else if dbConfig.Dialect == "mssql" { // mssql
+//	} else if dbConfig.Provider == "mssql" { // mssql
 //		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
 //		return gorm.Open("mssql", uri)
 //	} else { //sqlite
@@ -34,7 +34,27 @@ import (
 //func Connect(dialect string, uri string) (*gorm.DB, error) {
 //	return gorm.Open(dialect, uri)
 //}
-
+func BuildDataSourceName(c DatabaseConfig) string {
+	if c.Provider == "postgres" {
+		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", c.User, c.Database, c.Password, c.Host, c.Port)
+		return uri
+	} else if c.Provider == "mysql" {
+		uri := ""
+		if c.MultiStatements {
+			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", c.User, c.Password, c.Host, c.Port, c.Database)
+			return uri
+		}
+		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", c.User, c.Password, c.Host, c.Port, c.Database)
+		return uri
+	} else if c.Provider == "mssql" { // mssql
+		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", c.User, c.Password, c.Host, c.Port, c.Database)
+		return uri
+	} else if c.Provider == "godror" || c.Provider == "oracle" {
+		return fmt.Sprintf("user=\"%s\" password=\"%s\" connectString=\"%s:%d/%s\"", c.User, c.Password, c.Host, c.Port, c.Database)
+	} else { //sqlite
+		return c.Host // return sql.Open("sqlite3", c.Host)
+	}
+}
 func Exists(db *gorm.DB, table string, model interface{}, query interface{}) (bool, error) {
 	var count int64
 	if err := db.Table(table).Where(query).Count(&count).Error; err != nil {

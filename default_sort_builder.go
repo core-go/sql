@@ -1,9 +1,7 @@
-package sql
+package orm
 
 import (
 	s "github.com/common-go/search"
-	"gorm.io/gorm"
-	schema "gorm.io/gorm/schema"
 	"reflect"
 	"strings"
 )
