@@ -3,7 +3,6 @@ package sql
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -102,17 +101,9 @@ func (s *ActionLogWriter) Write(ctx context.Context, resource string, action str
 			log[k] = v
 		}
 	}
-	query, value := BuildInsertSQL(s.Database, s.Table, log)
-	tx, err := s.Database.Begin()
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(query, value...)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	return tx.Commit()
+	_, err := InsertOne(s.Database, s.Table, log)
+
+	return err
 }
 
 func BuildExt(ctx context.Context, keys *[]string) map[string]interface{} {
@@ -142,20 +133,21 @@ func GetString(ctx context.Context, key string) string {
 	}
 	return ""
 }
-func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}) (string, []interface{}) {
-	var cols []string
-	var values []interface{}
-	//subScope := db.("")
-	for col, v := range model {
-		cols = append(cols, "'"+strings.Replace(col, "'", "''", -1)+"'")
-		values = append(values, v)
-	}
-	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
-	numCol := len(cols)
-	var arrValue []string
-	for i := 0; i < numCol; i++ {
-		arrValue = append(arrValue, "?")
-	}
-	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
-	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", "'"+strings.Replace(tableName, "'", "''", -1)+"'", column, value), values
-}
+//}
+//func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}) (string, []interface{}) {
+//	var cols []string
+//	var values []interface{}
+//	//subScope := db.("")
+//	for col, v := range model {
+//		cols = append(cols, "'"+strings.Replace(col, "'", "''", -1)+"'")
+//		values = append(values, v)
+//	}
+//	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
+//	numCol := len(cols)
+//	var arrValue []string
+//	for i := 0; i < numCol; i++ {
+//		arrValue = append(arrValue, "?")
+//	}
+//	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
+//	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", "'"+strings.Replace(tableName, "'", "''", -1)+"'", column, value), values
+//}
