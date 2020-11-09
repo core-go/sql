@@ -217,8 +217,18 @@ func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 
 	result, err := db.Exec(queryInsert, values...)
 	if err != nil {
-		fmt.Println(err)
-		return -1, err
+		errstr := err.Error()
+		driverName := GetDriverName(db)
+		if driverName == DRIVER_POSTGRES && strings.Contains(errstr, "pq: duplicate key value violates unique constraint") {
+			return -1, nil //pq: duplicate key value violates unique constraint "aa_pkey"
+		} else if driverName == DRIVER_MYSQL && strings.Contains(errstr, "Error 1062: Duplicate entry") {
+			return -1, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+		} else if driverName == DRIVER_ORACLE && strings.Contains(errstr, "ORA-00001: unique constraint") {
+			return -1, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+		} else {
+			return -1, nil
+		}
+		return 0, err
 	}
 	return result.RowsAffected()
 }
