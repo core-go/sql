@@ -48,7 +48,7 @@ func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 
 func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
-	if GetDriverName(s.Database) == DRIVER_ORACLE {
+	if GetDriverName(s.Database) == DriverOracle {
 		for i := 0; i < len(values); i++ {
 			count := i + 1
 			queryFindById = strings.Replace(queryFindById, "?", ":val"+fmt.Sprintf("%v", count), 1)

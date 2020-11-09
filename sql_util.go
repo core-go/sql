@@ -11,13 +11,13 @@ func GetDriverName(db *sql.DB) string {
 	driver := reflect.TypeOf(db.Driver()).String()
 	switch driver {
 	case "*pq.Driver":
-		return DRIVER_POSTGRES
+		return DriverPostgres
 	case "*mysql.MySQLDriver":
-		return DRIVER_MYSQL
+		return DriverMysql
 	case "*mssql.Driver":
-		return DRIVER_MSSQL
+		return DriverMssql
 	case "*godror.drv":
-		return DRIVER_ORACLE
+		return DriverOracle
 	default:
 		return "no support"
 	}
@@ -59,7 +59,7 @@ func Query(db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex 
 
 func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
 	strSQL := "LIMIT 1"
-	if GetDriverName(db) == DRIVER_ORACLE {
+	if GetDriverName(db) == DriverOracle {
 		strSQL = "AND ROWNUM = 1"
 	}
 	rows, er1 := db.Query(sql+" " +strSQL, values...)

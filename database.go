@@ -16,10 +16,10 @@ const (
 	DBName     = "column"
 	PrimaryKey = "primary_key"
 
-	DRIVER_POSTGRES = "postgres"
-	DRIVER_MYSQL    = "mysql"
-	DRIVER_MSSQL    = "mssql"
-	DRIVER_ORACLE   = "oracle"
+	DriverPostgres = "postgres"
+	DriverMysql    = "mysql"
+	DriverMssql    = "mssql"
+	DriverOracle   = "oracle"
 )
 
 func OpenByConfig(c DatabaseConfig) (*sql.DB, error) {
@@ -219,13 +219,13 @@ func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 	if err != nil {
 		errstr := err.Error()
 		driverName := GetDriverName(db)
-		if driverName == DRIVER_POSTGRES && strings.Contains(errstr, "pq: duplicate key value violates unique constraint") {
+		if driverName == DriverPostgres && strings.Contains(errstr, "pq: duplicate key value violates unique constraint") {
 			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
-		} else if driverName == DRIVER_MYSQL && strings.Contains(errstr, "Error 1062: Duplicate entry") {
+		} else if driverName == DriverMysql && strings.Contains(errstr, "Error 1062: Duplicate entry") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driverName == DRIVER_ORACLE && strings.Contains(errstr, "ORA-00001: unique constraint") {
+		} else if driverName == DriverOracle && strings.Contains(errstr, "ORA-00001: unique constraint") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driverName == DRIVER_MSSQL && strings.Contains(errstr, "Violation of PRIMARY KEY constraint") {
+		} else if driverName == DriverMssql && strings.Contains(errstr, "Violation of PRIMARY KEY constraint") {
 			return 0, nil  //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
 		} else {
 			return 0, err
@@ -736,9 +736,9 @@ func BuildParameters(numCol int, driver string) string {
 
 func BuildMarkByDriverWithIndex(index int, driver string) string {
 	switch driver {
-	case DRIVER_POSTGRES:
+	case DriverPostgres:
 		return "$" + strconv.Itoa(index)
-	case DRIVER_ORACLE:
+	case DriverOracle:
 		return ":val" + strconv.Itoa(index)
 	default:
 		return "?"

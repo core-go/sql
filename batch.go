@@ -128,14 +128,14 @@ func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 	}
 	var query string
 	if skipDuplicate {
-		if driverName == DRIVER_POSTGRES {
+		if driverName == DriverPostgres {
 			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 			)
 
-		} else if driverName == DRIVER_MYSQL {
+		} else if driverName == DriverMysql {
 			var qKey []string
 			for _, i2 := range pkey {
 				key := i2 + " = " + i2
@@ -217,14 +217,14 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 	}
 	var query string
 	if skipDuplicate {
-		if driverName == DRIVER_POSTGRES {
+		if driverName == DriverPostgres {
 			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 			)
 
-		} else if driverName == DRIVER_MYSQL {
+		} else if driverName == DriverMysql {
 			var qKey []string
 			for _, i2 := range pkey {
 				key := i2 + " = " + i2
@@ -461,9 +461,9 @@ func getValueColumn(value interface{}, driverName string) (string, error) {
 	case *time.Time:
 		str = v.Format(formatDateUpdate)
 	case string:
-		if driverName == DRIVER_POSTGRES {
+		if driverName == DriverPostgres {
 			str = `E'` + EscapeString(v) + `'`
-		} else if driverName == DRIVER_MSSQL {
+		} else if driverName == DriverMssql {
 			str = `'` + EscapeStringForSelect(v) + `'`
 		} else {
 			str = `'` + EscapeString(v) + `'`
