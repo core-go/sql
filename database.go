@@ -213,7 +213,7 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 
 func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 	var driverName = GetDriverName(db)
-	queryInsert, values := BuildInsertSql(table, model, driverName)
+	queryInsert, values := BuildInsertSql(table, model, 0, driverName)
 
 	result, err := db.Exec(queryInsert, values...)
 	if err != nil {
@@ -226,7 +226,7 @@ func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 		} else if driverName == DriverOracle && strings.Contains(errstr, "ORA-00001: unique constraint") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 		} else if driverName == DriverMssql && strings.Contains(errstr, "Violation of PRIMARY KEY constraint") {
-			return 0, nil  //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
 		} else {
 			return 0, err
 		}
@@ -236,7 +236,7 @@ func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 
 func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 	driverName := GetDriverName(db)
-	query, values := BuildUpdateSql(table, model, driverName)
+	query, values := BuildUpdateSql(table, model, 0, driverName)
 
 	result, err := db.Exec(query, values...)
 
@@ -338,7 +338,7 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	return -1, jsonName, jsonName
 }
 
-func BuildUpdateSql(table string, model interface{}, driverName string) (string, []interface{}) {
+func BuildUpdateSql(table string, model interface{}, i int, driverName string) (string, []interface{}) {
 	mapData, mapKey, _ := BuildMapDataAndKeys(model)
 	var values []interface{}
 
@@ -347,13 +347,13 @@ func BuildUpdateSql(table string, model interface{}, driverName string) (string,
 	colNumber := 1
 	for colName, v1 := range mapData {
 		values = append(values, v1)
-		colSet = append(colSet, fmt.Sprintf("%v="+BuildParam(colNumber, driverName), QuoteColumnName(colName)))
+		colSet = append(colSet, fmt.Sprintf("%v="+BuildParametersFrom(i, colNumber, driverName), QuoteColumnName(colName)))
 		colNumber++
 	}
 
 	for colName, v2 := range mapKey {
 		values = append(values, v2)
-		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildParam(colNumber, driverName), QuoteColumnName(colName)))
+		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildParametersFrom(i, colNumber, driverName), QuoteColumnName(colName)))
 		colNumber++
 	}
 	queryWhere := strings.Join(colQuery, " AND ")
@@ -730,6 +730,14 @@ func BuildParameters(numCol int, driver string) string {
 	var arrValue []string
 	for i := 0; i < numCol; i++ {
 		arrValue = append(arrValue, BuildParam(i+1, driver))
+	}
+	return strings.Join(arrValue, ",")
+}
+
+func BuildParametersFrom(i int, numCol int, driver string) string {
+	var arrValue []string
+	for j := 0; j < numCol; j++ {
+		arrValue = append(arrValue, BuildParam(i+j+1, driver))
 	}
 	return strings.Join(arrValue, ",")
 }
