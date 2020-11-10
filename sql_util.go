@@ -98,9 +98,6 @@ func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sq
 	if err := rows.Err(); err != nil {
 		return nil, er3
 	}
-	if tb == nil {
-		return nil, errors.New("not found record")
-	}
 	return tb, nil
 }
 
