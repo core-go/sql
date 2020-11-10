@@ -23,28 +23,48 @@ func GetDriverName(db *sql.DB) string {
 	}
 }
 
-func Query(db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) error {
+func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) error {
 	rows, er1 := db.Query(sql, values...)
 	if er1 != nil {
 		return er1
 	}
 	defer rows.Close()
-	if fieldsIndex == nil {
-		tb, er2 := ScanByModelType(rows, modelType)
-		if er2 != nil {
-			return er2
-		}
-		for _, element := range tb {
-			appendToArray(results, element)
-		}
-	} else {
-		tb, er3 := Scans(rows, modelType, fieldsIndex)
-		if er3 != nil {
-			return er3
-		}
-		for _, element := range tb {
-			appendToArray(results, element)
-		}
+	modelType := reflect.TypeOf(results).Elem().Elem()
+	fieldsIndex, er0 := GetColumnIndexes(modelType)
+	if er0 != nil {
+		return er0
+	}
+
+	tb, er2 := Scans(rows, modelType, fieldsIndex)
+	if er2 != nil {
+		return er2
+	}
+	for _, element := range tb {
+		appendToArray(results, element)
+	}
+	er4 := rows.Close()
+	if er4 != nil {
+		return er4
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if er5 := rows.Err(); er5 != nil {
+		return er5
+	}
+	return nil
+}
+
+func QueryWithType(db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) error {
+	rows, er1 := db.Query(sql, values...)
+	if er1 != nil {
+		return er1
+	}
+	defer rows.Close()
+	tb, er3 := Scans(rows, modelType, fieldsIndex)
+	if er3 != nil {
+		return er3
+	}
+	for _, element := range tb {
+		appendToArray(results, element)
 	}
 	er4 := rows.Close()
 	if er4 != nil {

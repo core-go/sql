@@ -42,7 +42,7 @@ func (s *ViewService) Keys() []string {
 func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 	queryGetAll := BuildSelectAllQuery(s.table)
 	models := reflect.New(s.modelsType).Interface()
-	err := Query(s.Database, models, s.modelType, s.fieldsIndex, queryGetAll)
+	err := QueryWithType(s.Database, models, s.modelType, s.fieldsIndex, queryGetAll)
 	return models, err
 }
 
