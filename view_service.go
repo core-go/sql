@@ -65,7 +65,7 @@ func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 	var values []interface{}
 	colNumber := 1
 	if len(s.keys) == 1 {
-		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], BuildMarkByDriverWithIndex(colNumber, driver))
+		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], BuildParam(colNumber, driver))
 		values = append(values, id)
 		colNumber++
 	} else {
@@ -73,7 +73,7 @@ func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 		var ids = id.(map[string]interface{})
 		for k, idk := range ids {
 			columnName := s.mapJsonColumnKeys[k]
-			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriverWithIndex(colNumber, driver)))
+			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildParam(colNumber, driver)))
 			values = append(values, idk)
 			colNumber++
 		}

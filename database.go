@@ -102,7 +102,7 @@ func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys m
 	var driver = GetDriverName(db)
 	var values []interface{}
 	if len(keys) == 1 {
-		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildMarkByDriverWithIndex(1, driver))
+		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildParam(1, driver))
 		values = append(values, id)
 	} else {
 		queres := make([]string, 0)
@@ -111,7 +111,7 @@ func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys m
 			for _, keyJson := range keys {
 				columnName := mapJsonColumnKeys[keyJson]
 				if idk, ok1 := ids[keyJson]; ok1 {
-					queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildMarkByDriverWithIndex(j, driver)))
+					queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildParam(j, driver)))
 					values = append(values, idk)
 					j++
 				}
@@ -347,13 +347,13 @@ func BuildUpdateSql(table string, model interface{}, driverName string) (string,
 	colNumber := 1
 	for colName, v1 := range mapData {
 		values = append(values, v1)
-		colSet = append(colSet, fmt.Sprintf("%v="+BuildMarkByDriverWithIndex(colNumber, driverName), QuoteColumnName(colName)))
+		colSet = append(colSet, fmt.Sprintf("%v="+BuildParam(colNumber, driverName), QuoteColumnName(colName)))
 		colNumber++
 	}
 
 	for colName, v2 := range mapKey {
 		values = append(values, v2)
-		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildMarkByDriverWithIndex(colNumber, driverName), QuoteColumnName(colName)))
+		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildParam(colNumber, driverName), QuoteColumnName(colName)))
 		colNumber++
 	}
 	queryWhere := strings.Join(colQuery, " AND ")
@@ -729,12 +729,12 @@ func QueryRow(db *gorm.DB, model interface{}, sql string, values ...interface{})
 func BuildParameters(numCol int, driver string) string {
 	var arrValue []string
 	for i := 0; i < numCol; i++ {
-		arrValue = append(arrValue, BuildMarkByDriverWithIndex(i+1, driver))
+		arrValue = append(arrValue, BuildParam(i+1, driver))
 	}
 	return strings.Join(arrValue, ",")
 }
 
-func BuildMarkByDriverWithIndex(index int, driver string) string {
+func BuildParam(index int, driver string) string {
 	switch driver {
 	case DriverPostgres:
 		return "$" + strconv.Itoa(index)
@@ -744,7 +744,10 @@ func BuildMarkByDriverWithIndex(index int, driver string) string {
 		return "?"
 	}
 }
-
+func BuildParamByDB(n int, db *sql.DB) string {
+	driverName := GetDriverName(db)
+	return BuildParam(n, driverName)
+}
 func EscapeString(value string) string {
 	//replace := map[string]string{"'": `\'`, "\\0": "\\\\0", "\n": "\\n", "\r": "\\r", `"`: `\"`, "\x1a": "\\Z"}
 	//if strings.Contains(value, `\\`) {
