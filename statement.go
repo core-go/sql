@@ -1,11 +1,13 @@
 package sql
 
 import (
+	"context"
+	"database/sql"
 	"reflect"
 	"strings"
 )
 
-type Statement struct {
+type BatchStatement struct {
 	Query         string
 	Values        []interface{}
 	Keys          []string
@@ -14,7 +16,7 @@ type Statement struct {
 	AttributeKeys map[string]interface{}
 }
 
-func newStatement(value interface{}, excludeColumns ...string) Statement {
+func newStatement(value interface{}, excludeColumns ...string) BatchStatement {
 	attribute, attributeKey, _ := ExtractMapValue(value, excludeColumns)
 	attrSize := len(attribute)
 	modelType := reflect.TypeOf(value)
@@ -25,14 +27,14 @@ func newStatement(value interface{}, excludeColumns ...string) Statement {
 		dbColumns = append(dbColumns, QuoteColumnName(key))
 	}
 	// Scope to eventually run SQL
-	statement := Statement{Keys: keys, Columns: dbColumns, Attributes: attribute, AttributeKeys: attributeKey}
+	statement := BatchStatement{Keys: keys, Columns: dbColumns, Attributes: attribute, AttributeKeys: attributeKey}
 	return statement
 }
 
-func statement() Statement {
+func statement() BatchStatement {
 	attributes := make(map[string]interface{})
 	attributeKeys := make(map[string]interface{})
-	return Statement{Keys: []string{}, Columns: []string{}, Attributes: attributes, AttributeKeys: attributeKeys}
+	return BatchStatement{Keys: []string{}, Columns: []string{}, Attributes: attributes, AttributeKeys: attributeKeys}
 }
 
 func FindDBColumNames(modelType reflect.Type) []string {
@@ -104,4 +106,42 @@ func GetMapField(object interface{}) []Field {
 		}
 	}
 	return result
+}
+
+type Statement struct {
+	Sql  string        `mapstructure:"sql" json:"sql,omitempty" gorm:"column:sql" bson:"sql,omitempty" dynamodbav:"sql,omitempty" firestore:"sql,omitempty"`
+	Args []interface{} `mapstructure:"args" json:"args,omitempty" gorm:"column:args" bson:"args,omitempty" dynamodbav:"args,omitempty" firestore:"args,omitempty"`
+}
+type Statements interface {
+	Exec(ctx context.Context, db *sql.DB) (int64, error)
+	Add(sql string, args []interface{}) Statements
+	Clear() Statements
+}
+
+func NewStatements(successFirst bool) Statements {
+	stms := make([]Statement, 0)
+	s := &DefaultStatements{Statements: stms, SuccessFirst: successFirst}
+	return s
+}
+
+type DefaultStatements struct {
+	Statements   []Statement
+	SuccessFirst bool
+}
+
+func (s *DefaultStatements) Exec(ctx context.Context, db *sql.DB) (int64, error) {
+	if s.SuccessFirst {
+		return ExecuteStatements(ctx, db, s.Statements)
+	} else {
+		return ExecuteAll(ctx, db, s.Statements)
+	}
+}
+func (s *DefaultStatements) Add(sql string, args []interface{}) Statements {
+	var stm = Statement{Sql: sql, Args: args}
+	s.Statements = append(s.Statements, stm)
+	return s
+}
+func (s *DefaultStatements) Clear() Statements {
+	s.Statements = s.Statements[:0]
+	return s
 }

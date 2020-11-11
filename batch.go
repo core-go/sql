@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -11,6 +12,74 @@ import (
 )
 
 var formatDateUpdate = "2006-01-02 15:04:05"
+
+func ExecuteStatements(ctx context.Context, db *sql.DB, sts []Statement) (int64, error) {
+	return ExecuteBatch(ctx, db, sts, true, false)
+}
+func ExecuteAll(ctx context.Context, db *sql.DB, sts []Statement) (int64, error) {
+	return ExecuteBatch(ctx, db, sts, false, true)
+}
+func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSuccess bool, countAll bool) (int64, error) {
+	if sts == nil || len(sts) == 0 {
+		return 0, nil
+	}
+	driver := GetDriverName(db)
+	tx, er0 := db.Begin()
+	if er0 != nil {
+		return 0, er0
+	}
+	result, er1 := db.Exec(sts[0].Sql, sts[0].Args...)
+	if er1 != nil {
+		_ = tx.Rollback()
+		str := er1.Error()
+		if driver == DriverPostgres && strings.Contains(str, "pq: duplicate key value violates unique constraint") {
+			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
+		} else if driver == DriverMysql && strings.Contains(str, "Error 1062: Duplicate entry") {
+			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+		} else if driver == DriverOracle && strings.Contains(str, "ORA-00001: unique constraint") {
+			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+		} else if driver == DriverMssql && strings.Contains(str, "Violation of PRIMARY KEY constraint") {
+			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+		} else {
+			return 0, er1
+		}
+	}
+	rowAffected, er2 := result.RowsAffected()
+	if er2 != nil {
+		tx.Rollback()
+		return 0, er2
+	}
+	if firstRowSuccess {
+		if rowAffected == 0 {
+			return 0, nil
+		}
+	}
+	count := rowAffected
+	for i := 1; i < len(sts); i++ {
+		r2, er3 := db.Exec(sts[i].Sql, sts[i].Args...)
+		if er3 != nil {
+			er4 := tx.Rollback()
+			if er4 != nil {
+				return count, er4
+			}
+			return count, er3
+		}
+		a2, er5 := r2.RowsAffected()
+		if er5 != nil {
+			tx.Rollback()
+			return count, er5
+		}
+		count = count + a2
+	}
+	er6 := tx.Commit()
+	if er6 != nil {
+		return count, er6
+	}
+	if countAll {
+		return count, nil
+	}
+	return 1, nil
+}
 
 func InsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
@@ -90,7 +159,7 @@ func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 	modelType := reflect.TypeOf(objects[0])
 	pkey := FindIdFields(modelType)
 	// Scope to eventually run SQL
-	mainScope := Statement{}
+	mainScope := BatchStatement{}
 	// Store placeholders for embedding variables
 	placeholders := make([]string, 0, attrSize)
 
@@ -111,7 +180,7 @@ func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 			return 0, errors.New("attribute sizes are inconsistent")
 		}
 
-		scope := Statement{}
+		scope := BatchStatement{}
 
 		// Append variables
 		variables := make([]string, 0, attrSize)
@@ -179,7 +248,7 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 	modelType := reflect.TypeOf(objects[0])
 	pkey := FindIdFields(modelType)
 	// Scope to eventually run SQL
-	mainScope := Statement{}
+	mainScope := BatchStatement{}
 	// Store placeholders for embedding variables
 	placeholders := make([]string, 0, attrSize)
 
@@ -200,7 +269,7 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 			return 0, errors.New("attribute sizes are inconsistent")
 		}
 
-		scope := Statement{}
+		scope := BatchStatement{}
 
 		// Append variables
 		variables := make([]string, 0, attrSize)
@@ -445,7 +514,6 @@ func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, i
 	}
 	return x.RowsAffected()
 }
-
 
 func getValueColumn(value interface{}, driverName string) (string, error) {
 	str := ""
