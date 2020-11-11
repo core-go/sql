@@ -515,7 +515,7 @@ func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, i
 	return x.RowsAffected()
 }
 
-func getValueColumn(value interface{}, driverName string) (string, error) {
+func GetValueColumn(value interface{}, driverName string) (string, error) {
 	str := ""
 	switch v := value.(type) {
 	case int:
@@ -547,7 +547,7 @@ func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, 
 	j := start
 	for i, _ := range arr {
 		columnName := columns[i]
-		value, err := getValueColumn(values[j], driverName)
+		value, err := GetValueColumn(values[j], driverName)
 		if err == nil {
 			arr[i] = fmt.Sprintf("%s = %s", columnName, value)
 		} else {

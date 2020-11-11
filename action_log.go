@@ -33,6 +33,7 @@ type ActionLogWriter struct {
 	Config    ActionLogConfig
 	Schema    ActionLogSchema
 	Generator IdGenerator
+	Driver    string
 }
 
 type IdGenerator interface {
@@ -47,6 +48,7 @@ func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConf
 	s.Timestamp = strings.ToLower(s.Timestamp)
 	s.Status = strings.ToLower(s.Status)
 	s.Desc = strings.ToLower(s.Desc)
+	driver := GetDriverName(database)
 	if len(s.Id) == 0 {
 		s.Id = "id"
 	}
@@ -68,7 +70,7 @@ func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConf
 	if len(s.Desc) == 0 {
 		s.Desc = "desc"
 	}
-	writer := ActionLogWriter{Database: database, Table: tableName, Config: config, Schema: s, Generator: generator}
+	writer := ActionLogWriter{Database: database, Table: tableName, Config: config, Schema: s, Generator: generator, Driver: driver}
 	return &writer
 }
 
@@ -102,7 +104,7 @@ func (s *ActionLogWriter) Write(ctx context.Context, resource string, action str
 			log[k] = v
 		}
 	}
-	query, vars := BuildInsertSQL(s.Database, s.Table, log)
+	query, vars := BuildInsertSQL(s.Database, s.Table, log, s.Driver)
 	_, err := s.Database.Exec(query, vars...)
 	return err
 }
@@ -134,12 +136,11 @@ func GetString(ctx context.Context, key string) string {
 	}
 	return ""
 }
-func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}) (string, []interface{}) {
+func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}, driver string) (string, []interface{}) {
 	var cols []string
 	var values []interface{}
-	//subScope := db.("")
 	for col, v := range model {
-		cols = append(cols, "`"+strings.Replace(col, "`", "``", -1)+"`")
+		cols = append(cols, QuoteString(col, driver))
 		values = append(values, v)
 	}
 	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
@@ -149,5 +150,28 @@ func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}) 
 		arrValue = append(arrValue, "?")
 	}
 	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
-	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", "`"+strings.Replace(tableName, "`", "``", -1)+"`", column, value), values
+	strSQL := fmt.Sprintf("INSERT INTO %v %v VALUES %v", QuoteString(tableName, driver), column, value)
+	return ReplaceQueryparam(driver, strSQL, len(values)), values
+}
+
+func QuoteString( name string, driver string) string {
+	if driver == DriverPostgres {
+		name =	"`"+strings.Replace(name, "`", "``", -1)+"`"
+	}
+	return name
+}
+func ReplaceQueryparam(driver string, query string, n int) string {
+	if driver == DriverOracle || driver == DriverPostgres {
+		var x string
+		if driver == DriverOracle {
+			x = ":val"
+		} else {
+			x = "$"
+		}
+		for i := 0; i < n; i++ {
+			count := i + 1
+			query = strings.Replace(query, "?", x+fmt.Sprintf("%v", count), 1)
+		}
+	}
+	return query
 }
