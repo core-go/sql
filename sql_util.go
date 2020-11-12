@@ -8,6 +8,9 @@ import (
 )
 
 func GetDriverName(db *sql.DB) string {
+	if db == nil {
+		return DriverNotSupport
+	}
 	driver := reflect.TypeOf(db.Driver()).String()
 	switch driver {
 	case "*pq.Driver":
@@ -19,7 +22,7 @@ func GetDriverName(db *sql.DB) string {
 	case "*godror.drv":
 		return DriverOracle
 	default:
-		return "no support"
+		return DriverNotSupport
 	}
 }
 
@@ -82,7 +85,7 @@ func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sq
 	if GetDriverName(db) == DriverOracle {
 		strSQL = "AND ROWNUM = 1"
 	}
-	rows, er1 := db.Query(sql+" " +strSQL, values...)
+	rows, er1 := db.Query(sql+" "+strSQL, values...)
 	if er1 != nil {
 		return nil, er1
 	}

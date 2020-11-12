@@ -16,13 +16,17 @@ const (
 	DBName     = "column"
 	PrimaryKey = "primary_key"
 
-	DriverPostgres = "postgres"
-	DriverMysql    = "mysql"
-	DriverMssql    = "mssql"
-	DriverOracle   = "oracle"
+	DriverPostgres   = "postgres"
+	DriverMysql      = "mysql"
+	DriverMssql      = "mssql"
+	DriverOracle     = "oracle"
+	DriverNotSupport = "no support"
 )
 
 func OpenByConfig(c DatabaseConfig) (*sql.DB, error) {
+	if c.Mock {
+		return nil, nil
+	}
 	if c.Retry.Retry1 <= 0 {
 		return open(c)
 	} else {
@@ -51,6 +55,9 @@ func open(c DatabaseConfig) (*sql.DB, error) {
 	return db, err
 }
 func Open(c DatabaseConfig, retries ...time.Duration) (*sql.DB, error) {
+	if c.Mock {
+		return nil, nil
+	}
 	if len(retries) == 0 {
 		return open(c)
 	} else {
