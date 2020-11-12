@@ -347,13 +347,13 @@ func BuildUpdateSql(table string, model interface{}, i int, driverName string) (
 	colNumber := 1
 	for colName, v1 := range mapData {
 		values = append(values, v1)
-		colSet = append(colSet, fmt.Sprintf("%v="+BuildParam(colNumber+ i, driverName), QuoteColumnName(colName)))
+		colSet = append(colSet, fmt.Sprintf("%v="+BuildParam(colNumber+i, driverName), QuoteColumnName(colName)))
 		colNumber++
 	}
 
 	for colName, v2 := range mapKey {
 		values = append(values, v2)
-		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildParam(colNumber+ i, driverName), QuoteColumnName(colName)))
+		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildParam(colNumber+i, driverName), QuoteColumnName(colName)))
 		colNumber++
 	}
 	queryWhere := strings.Join(colQuery, " AND ")
@@ -820,4 +820,27 @@ func GetTag(field Field, tagName string) string {
 
 func IsPrimary(field Field) bool {
 	return GetTag(field, PrimaryKey) != ""
+}
+func ReplaceQueryArgs(driver string, query string) string {
+	if driver == DriverOracle || driver == DriverPostgres {
+		var x string
+		if driver == DriverOracle {
+			x = ":val"
+		} else {
+			x = "$"
+		}
+		i := 1
+		k := strings.Index(query, "?")
+		if k >= 0 {
+			for {
+				query = strings.Replace(query, "?", x+fmt.Sprintf("%v", i), 1)
+				i = i + 1
+				k := strings.Index(query, "?")
+				if k < 0 {
+					return query
+				}
+			}
+		}
+	}
+	return query
 }
