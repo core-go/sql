@@ -13,12 +13,14 @@ type SqlHealthChecker struct {
 	timeout time.Duration
 }
 
-func NewSqlHealthChecker(db *sql.DB, name string, timeout time.Duration) *SqlHealthChecker {
+func NewHealthCheckerWithTimeout(db *sql.DB, name string, timeout time.Duration) *SqlHealthChecker {
 	return &SqlHealthChecker{db, name, timeout}
 }
-
-func NewDefaultSqlHealthChecker(db *sql.DB) *SqlHealthChecker {
-	return &SqlHealthChecker{db, "sql", 4 * time.Second}
+func NewSqlHealthChecker(db *sql.DB, name string) *SqlHealthChecker {
+	return NewHealthCheckerWithTimeout(db, name, 4 * time.Second)
+}
+func NewHealthChecker(db *sql.DB) *SqlHealthChecker {
+	return NewHealthCheckerWithTimeout(db, "sql", 4 * time.Second)
 }
 
 func (s *SqlHealthChecker) Name() string {
@@ -44,7 +46,7 @@ func (s *SqlHealthChecker) Check(ctx context.Context) (map[string]interface{}, e
 		res["status"] = "success"
 		return res, err
 	case <-ctx.Done():
-		return nil, errors.New("Connection timout")
+		return nil, errors.New("connection timout")
 	}
 }
 

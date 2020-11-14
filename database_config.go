@@ -22,6 +22,7 @@ type DatabaseConfig struct {
 	MaxOpenConns    int         `mapstructure:"max_open_conns"`
 	Retry           RetryConfig `mapstructure:"retry"`
 	Mock            bool        `mapstructure:"mock"`
+	Log             bool        `mapstructure:"log"`
 }
 type RetryConfig struct {
 	Retry1 int64 `mapstructure:"1" json:"retry1,omitempty" gorm:"column:retry1" bson:"retry1,omitempty" dynamodbav:"retry1,omitempty" firestore:"retry1,omitempty"`
