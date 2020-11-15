@@ -128,9 +128,9 @@ func CheckByIndex(modelType reflect.Type, index int) (col string, isKey bool, co
 
 func QuoteByDriver(key, driver string) string {
 	switch driver {
-	case "mysql":
-		return fmt.Sprintf("%s", key)
-	case "mssql":
+	case DriverMysql:
+		return fmt.Sprintf("`%s`", key)
+	case DriverMssql:
 		return fmt.Sprintf(`[%s]`, key)
 	default:
 		return fmt.Sprintf(`"%s"`, key)

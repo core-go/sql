@@ -141,39 +141,6 @@ func InitArrayResults(modelsType reflect.Type) interface{} {
 	return reflect.New(modelsType).Interface()
 }
 
-/*
-func Exists(db *gorm.DB, table string, model interface{}, query interface{}) (bool, error) {
-	var count int32
-	if err := db.Table(table).Where(query).Count(&count).Error; err != nil {
-		return false, err
-	} else {
-		if count >= 1 {
-			return true, nil
-		}
-		return false, nil
-	}
-}
-*/
-//func InsertWithVersion(db *gorm.DB, table string, model interface{}, versionIndex int) (int64, error) {
-//	var defaultVersion interface{}
-//	modelType := reflect.TypeOf(model).Elem()
-//	versionType := modelType.Field(versionIndex).Type
-//	switch versionType.String() {
-//	case "int":
-//		defaultVersion = int(1)
-//	case "int32":
-//		defaultVersion = int32(1)
-//	case "int64":
-//		defaultVersion = int64(1)
-//	default:
-//		panic("not support type's version")
-//	}
-//	model, err := setValue(model, versionIndex, defaultVersion)
-//	if err != nil {
-//		return 0, err
-//	}
-//	return Insert(db, table, model)
-//}
 func setValue(model interface{}, index int, value interface{}) (interface{}, error) {
 	valueObject := reflect.Indirect(reflect.ValueOf(model))
 	switch reflect.ValueOf(model).Kind() {
@@ -268,25 +235,6 @@ func Patch(db *sql.DB, table string, model map[string]interface{}, modelType ref
 	return result.RowsAffected()
 }
 
-/*
-func PatchObject(db *gorm.DB, model interface{}, updateModel interface{}) (int64, error) {
-	rs := db.Model(model).Updates(updateModel)
-	if err := rs.Error; err != nil {
-		return rs.RowsAffected, err
-	}
-	return rs.RowsAffected, nil
-}
-*/
-//func InsertOrUpdate(db *gorm.DB, table string, model interface{}, query map[string]interface{}) (int64, error) {
-//	//var queryModel = reflect.New(reflect.ValueOf(model).Elem().Type()).Interface()
-//	if isExist, _ := Exists(db, table, model, query); isExist {
-//		return Update(db, table, model, query)
-//	} else {
-//		return Insert(db, table, model)
-//	}
-//	//db.Table(table).Where(query).Assign(modelNonPointer).FirstOrCreate(&modelNonPointer)
-//}
-
 func Delete(db *sql.DB, table string, query map[string]interface{}) (int64, error) {
 	queryDelete, values := BuildDelete(table, query)
 
@@ -299,26 +247,6 @@ func Delete(db *sql.DB, table string, query map[string]interface{}) (int64, erro
 	return BuildResult(result.RowsAffected())
 }
 
-/*
-func FindOneWithResult(db *gorm.DB, table string, result interface{}, query interface{}) (bool, error) {
-	err := db.Table(table).Set("gorm:auto_preload", true).First(result, query).Error
-	if err == nil {
-		return true, nil
-	}
-	if err.Error() == "record not found" { //record not found
-		return false, err
-	}
-	return true, err
-}
-
-func FindWithResults(db *gorm.DB, table string, results interface{}, query ...interface{}) error {
-	if err := db.Table(table).Set("gorm:auto_preload", true).Find(results, query...).Error; err == nil {
-		return nil
-	} else {
-		return err
-	}
-}
-*/
 func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, string) {
 	numField := modelType.NumField()
 	for i := 0; i < numField; i++ {
@@ -416,15 +344,6 @@ func BuildDelete(table string, ids map[string]interface{}) (string, []interface{
 	return fmt.Sprintf("DELETE FROM %v WHERE %v", table, q), values
 }
 
-/*
-func HandleResult(result *gorm.DB) (int64, error) {
-	if err := result.Error; err != nil {
-		return result.RowsAffected, err
-	} else {
-		return result.RowsAffected, nil
-	}
-}
-*/
 // Obtain columns and values required for insert from interface
 func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]interface{}, map[string]interface{}, error) {
 	rv := reflect.ValueOf(value)
@@ -450,20 +369,6 @@ func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]int
 				attrsKey[dBName] = field.Value.Interface()
 			}
 		}
-		// Exclude relational record because it's not directly contained in database columns
-		//_, hasForeignKey := field.TagSettingsGet("FOREIGNKEY")
-		/*if !ContainString(excludeColumns, field.Struct.Name) && field.StructField.Relationship == nil && !hasForeignKey &&
-			!field.IsIgnored && !IsAutoIncrementField(field) && !IsPrimaryAndBlankField(field) {
-			if field.StructField.HasDefaultValue && field.IsBlank {
-				// If default value presents and field is empty, assign a default value
-				if val, ok := field.TagSettingsGet("DEFAULT"); ok {
-					attrs[field.DBName] = val
-				} else {
-				}
-			} else {
-				attrs[field.DBName] = field.Field.Interface()
-			}
-		}*/
 	}
 	return attrs, attrsKey, nil
 }
@@ -590,26 +495,6 @@ func FindIdColumns(modelType reflect.Type) []string {
 	return idFields
 }
 
-/*
-func BuildQueryMap(db *gorm.DB, object interface{}, onlyPrimaryKeys bool) map[string]interface{} {
-	objectValue := reflect.Indirect(reflect.ValueOf(object))
-	modelType := objectValue.Type()
-
-	query := map[string]interface{}{}
-	newScope := db.NewScope(object)
-
-	for _, field := range newScope.Fields() {
-		if !field.IsIgnored && !field.IsBlank {
-			if !onlyPrimaryKeys || field.IsPrimaryKey {
-				columnName, _ := GetColumnName(modelType, field.Name)
-				query[columnName] = field.Field.Interface()
-			}
-		}
-	}
-
-	return query
-}
-*/
 func BuildQueryById(id interface{}, modelType reflect.Type, idName string) (query map[string]interface{}) {
 	columnName, _ := GetColumnName(modelType, idName)
 	return map[string]interface{}{columnName: id}
@@ -702,37 +587,6 @@ func GetTableName(object interface{}) string {
 	return tableName[0].String()
 }
 
-/*
-func UpdateAssociations(db *gorm.DB, obj interface{}, column string, newValues interface{}) error {
-	return db.Model(obj).Association(column).Replace(newValues).Error
-}
-
-func QueryRow(db *gorm.DB, model interface{}, sql string, values ...interface{}) error {
-	return db.Raw(sql, values...).Scan(model).Error
-}
-*/
-/*func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) error {
-	rows, err1 := db.Query(sql, values...)
-	if err1 != nil {
-		return err1
-	}
-	defer rows.Close()
-	tb, err2 := ScanType(rows, results)
-	if err2 != nil {
-		return err2
-	}
-	results = tb
-	rerr := rows.Close()
-	if rerr != nil {
-		return rerr
-	}
-	// Rows.Err will report the last error encountered by Rows.Scan.
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	return nil
-}*/
-
 func BuildParameters(numCol int, driver string) string {
 	var arrValue []string
 	for i := 0; i < numCol; i++ {
@@ -810,14 +664,6 @@ func SortedKeys(val map[string]interface{}) []string {
 	return keys
 }
 
-/*
-func IsAutoIncrementField(field *gorm.Field) bool {
-	if value, ok := field.TagSettingsGet("AUTO_INCREMENT"); ok {
-		return strings.ToLower(value) != "false"
-	}
-	return false
-}
-*/
 func GetTag(field Field, tagName string) string {
 	if tag, ok := field.Tags[tagName]; ok {
 		return tag
