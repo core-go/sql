@@ -28,7 +28,7 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	if er0 != nil {
 		return 0, er0
 	}
-	result, er1 := db.Exec(sts[0].Sql, sts[0].Args...)
+	result, er1 := tx.Exec(sts[0].Sql, sts[0].Args...)
 	if er1 != nil {
 		_ = tx.Rollback()
 		str := er1.Error()
@@ -56,7 +56,7 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	}
 	count := rowAffected
 	for i := 1; i < len(sts); i++ {
-		r2, er3 := db.Exec(sts[i].Sql, sts[i].Args...)
+		r2, er3 := tx.Exec(sts[i].Sql, sts[i].Args...)
 		if er3 != nil {
 			er4 := tx.Rollback()
 			if er4 != nil {
@@ -324,7 +324,7 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 		return 0, err
 	}
 
-	x, execErr := db.Exec(mainScope.Query, mainScope.Values...)
+	x, execErr := tx.Exec(mainScope.Query)
 	if execErr != nil {
 		_ = tx.Rollback()
 		fmt.Println(execErr)
