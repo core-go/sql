@@ -3,7 +3,10 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+
 	"fmt"
+	_ "github.com/sirupsen/logrus"
 	"reflect"
 	"strings"
 )
@@ -87,10 +90,15 @@ func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result 
 	var values []interface{}
 	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys)
 	rowData, err1 := QueryRow(s.Database, s.modelType, s.fieldsIndex, sql, values...)
-	if err1 != nil {
+	if err1 != nil || rowData == nil {
 		return false, err1
 	}
-	reflect.ValueOf(result).Elem().Set(reflect.ValueOf(rowData).Elem())
+	byteData, _ := json.Marshal(rowData)
+	err := json.Unmarshal(byteData, &result)
+	if err1 != nil{
+		return false, err
+	}
+	//reflect.ValueOf(result).Elem().Set(reflect.ValueOf(rowData).Elem())
 	if s.Mapper != nil {
 		_, er3 := s.Mapper.DbToModel(ctx, result)
 		if er3 != nil {
