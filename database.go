@@ -373,20 +373,30 @@ func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]int
 	return attrs, attrsKey, nil
 }
 
-// For ViewDefaultRepository
-func GetColumnName(modelType reflect.Type, fieldName string) (col string, colExist bool) {
-	field, ok := modelType.FieldByName(fieldName)
-	if !ok {
-		return fieldName, false
-		//return gorm.ToColumnName(fieldName), false
+func GetIndexByTag(tag, key string, modelType reflect.Type) (index int) {
+	for i := 0; i < modelType.NumField(); i++ {
+		f := modelType.Field(i)
+		v := strings.Split(f.Tag.Get(tag), ",")[0]
+		if v == key {
+			return i
+		}
 	}
-	tag2, ok2 := field.Tag.Lookup("gorm")
+	return -1
+}
+
+// For ViewDefaultRepository
+func GetColumnName(modelType reflect.Type, jsonName string) (col string, colExist bool) {
+	index := GetIndexByTag("json", jsonName, modelType)
+	if index == -1 {
+		return jsonName, false
+	}
+	field := modelType.Field(index)
+	ormTag, ok2 := field.Tag.Lookup("gorm")
 	if !ok2 {
 		return "", true
 	}
-
-	if has := strings.Contains(tag2, "column"); has {
-		str1 := strings.Split(tag2, ";")
+	if has := strings.Contains(ormTag, "column"); has {
+		str1 := strings.Split(ormTag, ";")
 		num := len(str1)
 		for i := 0; i < num; i++ {
 			str2 := strings.Split(str1[i], ":")
@@ -397,8 +407,7 @@ func GetColumnName(modelType reflect.Type, fieldName string) (col string, colExi
 			}
 		}
 	}
-	//return gorm.ToColumnName(fieldName), false
-	return fieldName, false
+	return jsonName, false
 }
 
 func GetColumnNameByIndex(ModelType reflect.Type, index int) (col string, colExist bool) {
