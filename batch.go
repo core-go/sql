@@ -247,18 +247,23 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 	attrSize := len(firstAttrs)
 	modelType := reflect.TypeOf(objects[0])
 	pkey := FindIdFields(modelType)
-	// Scope to eventually run SQL
-	mainScope := BatchStatement{}
-	// Store placeholders for embedding variables
-	placeholders := make([]string, 0, attrSize)
-
 	// Replace with database column name
 	dbColumns := make([]string, 0, attrSize)
 	for _, key := range SortedKeys(firstAttrs) {
 		dbColumns = append(dbColumns, QuoteColumnName(key))
 	}
 
+	tx, err := db.Begin()
+	if err != nil {
+		fmt.Println(err)
+		return 0, err
+	}
+
 	for _, obj := range objects {
+		// Scope to eventually run SQL
+		mainScope := BatchStatement{}
+		// Store placeholders for embedding variables
+		placeholders := make([]string, 0, attrSize)
 		objAttrs, _, err := ExtractMapValue(obj, excludeColumns)
 		if err != nil {
 			return 0, err
@@ -283,60 +288,56 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 
 		// Also append variables to mainScope
 		mainScope.Values = append(mainScope.Values, scope.Values...)
-	}
-	var query string
-	if skipDuplicate {
-		if driverName == DriverPostgres {
-			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
-				tableName,
-				strings.Join(dbColumns, ", "),
-				strings.Join(placeholders, ", "),
-			)
 
-		} else if driverName == DriverMysql {
-			var qKey []string
-			for _, i2 := range pkey {
-				key := i2 + " = " + i2
-				qKey = append(qKey, key)
+		var query string
+		if skipDuplicate {
+			if driverName == DriverPostgres {
+				query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
+					tableName,
+					strings.Join(dbColumns, ", "),
+					strings.Join(placeholders, ", "),
+				)
+
+			} else if driverName == DriverMysql {
+				var qKey []string
+				for _, i2 := range pkey {
+					key := i2 + " = " + i2
+					qKey = append(qKey, key)
+				}
+				query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
+					tableName,
+					strings.Join(dbColumns, ", "),
+					strings.Join(placeholders, ", "),
+					strings.Join(qKey, ", "),
+				)
+			} else {
+				return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driverName)
 			}
-			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
+		} else {
+			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
-				strings.Join(qKey, ", "),
 			)
-		} else {
-			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driverName)
 		}
-	}
-	{
-		query = fmt.Sprintf(fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
-			tableName,
-			strings.Join(dbColumns, ", "),
-			strings.Join(placeholders, ", "),
-		))
-	}
-	mainScope.Query = query
+		query = ReplaceQueryparam(driverName, query, len(mainScope.Values))
+		mainScope.Query = query
 
-	tx, err := db.Begin()
-	if err != nil {
-		fmt.Println(err)
-		return 0, err
-	}
-
-	x, execErr := tx.Exec(mainScope.Query)
-	if execErr != nil {
-		_ = tx.Rollback()
-		fmt.Println(execErr)
+		_, execErr := tx.Exec(mainScope.Query, mainScope.Values...)
+		if execErr != nil {
+			_ = tx.Rollback()
+			fmt.Println(execErr)
+			break
+		}
 	}
 	err = tx.Commit()
 	if err != nil {
 		fmt.Println("sql: transaction has already been rolled back")
 		return 0, err
 	}
-	count, _ := x.RowsAffected()
+	count := len(objects)
 	fmt.Println(count, " Rows Updated")
-	return x.RowsAffected()
+	return int64(count), err
 }
 
 func InterfaceSlice(slice interface{}) ([]interface{}, error) {
@@ -445,27 +446,28 @@ func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) 
 			where,
 		)))
 	}
-
-	statement.Query = strings.Join(query, "; ")
-
 	tx, err := db.Begin()
 	if err != nil {
 		fmt.Println(err)
 		return 0, err
 	}
-	x, execErr := db.Exec(statement.Query)
-	if execErr != nil {
-		_ = tx.Rollback()
-		fmt.Println(execErr)
+
+	for i := 0; i < len(query); i++ {
+		_, execErr := tx.Exec(query[i])
+		if execErr != nil {
+			_ = tx.Rollback()
+			fmt.Println(execErr)
+			break
+		}
 	}
+
 	err = tx.Commit()
 	if err != nil {
 		fmt.Println("sql: transaction has already been rolled back")
 		return 0, err
 	}
-	_, err = x.RowsAffected()
 	total := int64(len(query))
-	fmt.Println(total, " Rows Inserted")
+	fmt.Println(total, " Rows Updated")
 	return total, err
 }
 
