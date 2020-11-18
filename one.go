@@ -7,6 +7,11 @@ import (
 	"strings"
 )
 
+const (
+	ACTION_INSERT = "insert"
+	ACTION_UPDATE = "update"
+)
+
 func InsertOne(db *sql.DB, table string, model interface{}) (int64, error) {
 	var driverName = GetDriverName(db)
 	query, values := BuildInsertSql(table, model,0,  driverName)
@@ -54,7 +59,7 @@ func Find(slice []string, val string) (int, bool) {
 }
 
 func BuildInsertSql(table string, model interface{}, i int, driverName string) (string, []interface{}) {
-	mapData, mapPrimaryKeyValue, keys := BuildMapDataAndKeys(model)
+	mapData, mapPrimaryKeyValue, keys := BuildMapDataAndKeys(model, ACTION_INSERT)
 	var cols []string
 	var values []interface{}
 	for _, columnName := range keys {
@@ -85,7 +90,7 @@ func QuoteColumnName(str string) string {
 	return str
 }
 
-func BuildMapDataAndKeys(model interface{}) (map[string]interface{}, map[string]interface{}, []string) {
+func BuildMapDataAndKeys(model interface{}, action string) (map[string]interface{}, map[string]interface{}, []string) {
 	var mapValue = make(map[string]interface{})
 	var mapPrimaryKeyValue = make(map[string]interface{})
 	keysOfMapValue := make([]string, 0)
@@ -93,7 +98,7 @@ func BuildMapDataAndKeys(model interface{}) (map[string]interface{}, map[string]
 	modelType := modelValue.Type()
 	numField := modelType.NumField()
 	for index := 0; index < numField; index++ {
-		if colName, isKey, exist := CheckByIndex(modelType, index); exist {
+		if colName, isKey, exist := CheckByIndex(modelType, index, action); exist {
 			fieldValue := modelValue.Field(index).Interface()
 			if !isKey {
 				mapValue[colName] = fieldValue
@@ -106,8 +111,13 @@ func BuildMapDataAndKeys(model interface{}) (map[string]interface{}, map[string]
 	return mapValue, mapPrimaryKeyValue, keysOfMapValue
 }
 
-func CheckByIndex(modelType reflect.Type, index int) (col string, isKey bool, colExist bool) {
+func CheckByIndex(modelType reflect.Type, index int, action string) (col string, isKey bool, colExist bool) {
 	fields := modelType.Field(index)
+	if action == ACTION_UPDATE {
+		if _, ok := fields.Tag.Lookup("unusable"); ok {
+			return "", false, false
+		}
+	}
 	tag, _ := fields.Tag.Lookup("gorm")
 
 	if has := strings.Contains(tag, "column"); has {

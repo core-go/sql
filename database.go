@@ -274,7 +274,7 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 }
 
 func BuildUpdateSql(table string, model interface{}, i int, driverName string) (string, []interface{}) {
-	mapData, mapKey, _ := BuildMapDataAndKeys(model)
+	mapData, mapKey, _ := BuildMapDataAndKeys(model, ACTION_UPDATE)
 	var values []interface{}
 
 	colSet := make([]string, 0)
