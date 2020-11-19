@@ -1,18 +1,17 @@
 package sql
-/*
+
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/jinzhu/gorm"
 	"regexp"
 	"strings"
 )
 
 type StringService struct {
-	DB    *sql.DB
-	Table string
-	Field string
+	DB            *sql.DB
+	Table         string
+	Field         string
 	QuestionParam bool
 }
 
@@ -27,9 +26,9 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 	vs := make([]string, 0)
 	var sql string
 	if s.QuestionParam {
-		sql = fmt.Sprintf("select %s from %s where %s like ? fetch next %d rows only", s.Field, s.Table, s.Field, max)
+		sql = fmt.Sprintf("select %s from %s where %s like ? limit %d", s.Field, s.Table, s.Field, max)
 	} else {
-		sql = fmt.Sprintf("select %s from %s where %s ilike $1 fetch next %d rows only", s.Field, s.Table, s.Field, max)
+		sql = fmt.Sprintf("select %s from %s where %s like $1 fetch next %d rows only", s.Field, s.Table, s.Field, max)
 	}
 	rows, er1 := s.DB.Query(sql, key)
 	if er1 != nil {
@@ -49,61 +48,68 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 }
 
 func (s *StringService) Save(ctx context.Context, values []string) (int64, error) {
-	//err := s.Database.Table(s.Table).columnWhere(s.Field+" LIKE ?", key).Limit(max).Pluck(s.Field, &urlIdArr).Error
-	mainScope := s.Database.NewScope(values)
+	mainScope := BatchStatement{}
 	var placeholder []string
+	driverName := GetDriverName(s.DB)
 	for _, e := range values {
 		placeholder = append(placeholder, "(?)")
-		mainScope.AddToVars(e)
+		mainScope.Values = append(mainScope.Values, e)
 	}
 	query := ""
-	if s.Database.Dialect().GetName() == "postgres" {
+	if driverName == DriverPostgres {
 		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
-			mainScope.Quote(s.Table),
-			mainScope.Quote(s.Field),
+			s.Table,
+			s.Field,
 			strings.Join(placeholder, ", "),
 		)
-	} else if s.Database.Dialect().GetName() == "sqlite3" {
+	} else if driverName == "sqlite3" {
 		query = fmt.Sprintf("INSERT OR IGNORE INTO %s (%s) VALUES %s",
-			mainScope.Quote(s.Table),
-			mainScope.Quote(s.Field),
+			s.Table,
+			s.Field,
 			strings.Join(placeholder, ", "),
 		)
-	} else if s.Database.Dialect().GetName() == "mysql" {
-		qKey := mainScope.Quote(s.Field) + " = " + mainScope.Quote(s.Field)
+	} else if driverName == DriverMysql {
+		qKey := s.Field + " = " + s.Field
 		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
-			mainScope.Quote(s.Table),
-			mainScope.Quote(s.Field),
+			s.Table,
+			s.Field,
 			strings.Join(placeholder, ", "),
 			qKey,
 		)
-
-	} else if s.Database.Dialect().GetName() == "mssql" {
-		onDupe := mainScope.Quote(s.Table) + "." + mainScope.Quote(s.Field) + " = " + "temp." + mainScope.Quote(s.Field)
-		value := "temp." + mainScope.Quote(s.Field)
+	} else if driverName == "mssql" {
+		onDupe := s.Table + "." + s.Field + " = " + "temp." + s.Field
+		value := "temp." + s.Field
 		query = fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s);",
-			mainScope.Quote(s.Table),
+			s.Table,
 			strings.Join(placeholder, ", "),
-			mainScope.Quote(s.Field),
+			s.Field,
 			onDupe,
-			mainScope.Quote(s.Field),
+			s.Field,
 			value,
 		)
 	} else {
-		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", s.Database.Dialect().GetName())
+		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", driverName)
 	}
-	mainScope.Raw(query)
 
-	x := s.Database.Exec(mainScope.SQL, mainScope.SQLVars...)
-	return x.RowsAffected, x.Error
+	query = ReplaceQueryparam(driverName, query, len(mainScope.Values))
+	mainScope.Query = query
+	x, err := s.DB.Exec(mainScope.Query, mainScope.Values...)
+	if err != nil {
+		return 0, err
+	}
+	return x.RowsAffected()
 }
 
 func (s *StringService) Delete(ctx context.Context, values []string) (int64, error) {
-	var result map[string]interface{}
-	rows := s.Database.Table(s.Table).Set("gorm:auto_preload", true).Where(s.Field+" IN (?)", values).Delete(&result)
-	if rows.Error != nil {
-		return 0, rows.Error
+	strSQL := ""
+	for i := 0; i < len(values); i++ {
+		strSQL += `'` + values[i] + `',`
 	}
-	return rows.RowsAffected, nil
+	strSQL = strings.TrimRight(strSQL, ",")
+	query := `DELETE FROM ` + s.Table + ` WHERE ` + s.Field + ` IN (` + strSQL + `)`
+	x, err := s.DB.Exec(query)
+	if err != nil {
+		return 0, err
+	}
+	return x.RowsAffected()
 }
-*/
