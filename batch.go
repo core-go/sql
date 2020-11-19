@@ -527,21 +527,26 @@ func GetValueColumn(value interface{}, driverName string) (string, error) {
 	case bool:
 		str = strconv.FormatBool(v)
 	case time.Time:
-		str = v.Format(formatDateUpdate)
+		str = formatStringByDriver(v.Format(formatDateUpdate), driverName)
 	case *time.Time:
-		str = v.Format(formatDateUpdate)
+		str = formatStringByDriver(v.Format(formatDateUpdate), driverName)
 	case string:
-		if driverName == DriverPostgres {
-			str = `E'` + EscapeString(v) + `'`
-		} else if driverName == DriverMssql {
-			str = `'` + EscapeStringForSelect(v) + `'`
-		} else {
-			str = `'` + EscapeString(v) + `'`
-		}
+		str = formatStringByDriver(v, driverName)
 	default:
 		return "", errors.New("unsupported type")
 	}
 	return str, nil
+}
+
+func formatStringByDriver(v, driverName string) string {
+	if driverName == DriverPostgres {
+		return `E'` + EscapeString(v) + `'`
+	} else if driverName == DriverMssql {
+		return `'` + EscapeStringForSelect(v) + `'`
+	} else {
+		return `'` + EscapeString(v) + `'`
+	}
+	return v
 }
 
 func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, start int, driverName string, joinStr string) (string, error) {
