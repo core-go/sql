@@ -56,6 +56,38 @@ func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) e
 	return nil
 }
 
+func QueryAndCount(db *sql.DB, results interface{}, count *int64, sql string, values ...interface{}) error {
+	rows, er1 := db.Query(sql, values...)
+	if er1 != nil {
+		return er1
+	}
+	defer rows.Close()
+	modelType := reflect.TypeOf(results).Elem().Elem()
+
+	fieldsIndex, er0 := GetColumnIndexes(modelType)
+	if er0 != nil {
+		return er0
+	}
+
+	tb, c, er2 := ScansAndCount(rows, modelType, fieldsIndex)
+	*count = c
+	if er2 != nil {
+		return er2
+	}
+	for _, element := range tb {
+		appendToArray(results, element)
+	}
+	er4 := rows.Close()
+	if er4 != nil {
+		return er4
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if er5 := rows.Err(); er5 != nil {
+		return er5
+	}
+	return nil
+}
+
 func QueryWithType(db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) error {
 	rows, er1 := db.Query(sql, values...)
 	if er1 != nil {
@@ -132,6 +164,21 @@ func GetColumnIndexes(modelType reflect.Type) (map[string]int, error) {
 	return mapp, nil
 }
 
+func GetIndexesByTagJson(modelType reflect.Type) (map[string]int, error) {
+	mapp := make(map[string]int, 0)
+	if modelType.Kind() != reflect.Struct {
+		return mapp, errors.New("bad type")
+	}
+	for i := 0; i < modelType.NumField(); i++ {
+		field := modelType.Field(i)
+		tagJson := field.Tag.Get("json")
+		if len(tagJson) > 0 {
+			mapp[tagJson] = i
+		}
+	}
+	return mapp, nil
+}
+
 func FindTag(tag string, key string) (string, bool) {
 	if has := strings.Contains(tag, key); has {
 		str1 := strings.Split(tag, ";")
@@ -202,6 +249,28 @@ func StructScanByIndex(s interface{}, fieldsIndex map[string]int, columns []stri
 	return
 }
 
+// StructScan : transfer struct to slice for scan
+func StructScanWithIndexIgnore(s interface{}, fieldsIndex map[string]int, columns []string, indexIgnore int) (r []interface{}) {
+	if s != nil {
+		maps := reflect.Indirect(reflect.ValueOf(s))
+		fieldsIndexSelected := make([]int, 0)
+		for i, columnsName := range columns {
+			columnsName = strings.ToLower(columnsName)
+			if i == indexIgnore {
+				continue
+			}
+			if index, ok := fieldsIndex[columnsName]; ok {
+				fieldsIndexSelected = append(fieldsIndexSelected, index)
+				r = append(r, maps.Field(index).Addr().Interface())
+			} else {
+				var t interface{}
+				r = append(r, &t)
+			}
+		}
+	}
+	return
+}
+
 func Scans(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int) (t []interface{}, err error) {
 	columns, er0 := rows.Columns()
 	if er0 != nil {
@@ -214,6 +283,25 @@ func Scans(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int) (
 		}
 	}
 	return
+}
+
+func ScansAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int) ([]interface{}, int64, error) {
+	var t []interface{}
+	columns, er0 := rows.Columns()
+	if er0 != nil {
+		return nil, 0, er0
+	}
+	var count int64
+	for rows.Next() {
+		initModel := reflect.New(modelType).Interface()
+		var c []interface{}
+		c = append(c, &count)
+		c = append(c, StructScanWithIndexIgnore(initModel, fieldsIndex, columns, 0)...)
+		if err := rows.Scan(c...); err == nil {
+			t = append(t, initModel)
+		}
+	}
+	return t, count, nil
 }
 
 //Rows
