@@ -12,11 +12,12 @@ type StringService struct {
 	DB            *sql.DB
 	Table         string
 	Field         string
-	QuestionParam bool
+	Driver        string
 }
 
 func NewStringService(db *sql.DB, table string, field string, questionParam bool) *StringService {
-	return &StringService{DB: db, Table: table, Field: field, QuestionParam: questionParam}
+	driver := GetDriver(db)
+	return &StringService{DB: db, Table: table, Field: field, Driver: driver}
 }
 
 func (s *StringService) Load(ctx context.Context, key string, max int64) ([]string, error) {
@@ -25,10 +26,12 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 	key = key + "%"
 	vs := make([]string, 0)
 	var sql string
-	if s.QuestionParam {
-		sql = fmt.Sprintf("select %s from %s where %s like ? limit %d", s.Field, s.Table, s.Field, max)
+	if s.Driver == DriverPostgres {
+		sql = fmt.Sprintf("select %s from %s where %s ilike $1 fetch next %d rows only", s.Field, s.Table, s.Field, max)
+	} else if s.Driver == DriverOracle {
+		sql = fmt.Sprintf("select %s from %s where %s ilike :val1 fetch next %d rows only", s.Field, s.Table, s.Field, max)
 	} else {
-		sql = fmt.Sprintf("select %s from %s where %s like $1 fetch next %d rows only", s.Field, s.Table, s.Field, max)
+		sql = fmt.Sprintf("select %s from %s where %s like ? limit %d", s.Field, s.Table, s.Field, max)
 	}
 	rows, er1 := s.DB.Query(sql, key)
 	if er1 != nil {
@@ -50,36 +53,36 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 func (s *StringService) Save(ctx context.Context, values []string) (int64, error) {
 	mainScope := BatchStatement{}
 	var placeholder []string
-	driverName := GetDriverName(s.DB)
+	driver := s.Driver
 	for _, e := range values {
 		placeholder = append(placeholder, "(?)")
 		mainScope.Values = append(mainScope.Values, e)
 	}
 	query := ""
-	if driverName == DriverPostgres {
-		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
+	if driver == DriverPostgres {
+		query = fmt.Sprintf("insert into %s (%s) values %s on conflict do nothing",
 			s.Table,
 			s.Field,
 			strings.Join(placeholder, ", "),
 		)
-	} else if driverName == "sqlite3" {
-		query = fmt.Sprintf("INSERT OR IGNORE INTO %s (%s) VALUES %s",
+	} else if driver == "sqlite3" {
+		query = fmt.Sprintf("insert or ignore into %s (%s) values %s",
 			s.Table,
 			s.Field,
 			strings.Join(placeholder, ", "),
 		)
-	} else if driverName == DriverMysql {
+	} else if driver == DriverMysql {
 		qKey := s.Field + " = " + s.Field
-		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
+		query = fmt.Sprintf("insert into %s (%s) values %s on duplicate key update %s",
 			s.Table,
 			s.Field,
 			strings.Join(placeholder, ", "),
 			qKey,
 		)
-	} else if driverName == "mssql" {
+	} else if driver == "mssql" {
 		onDupe := s.Table + "." + s.Field + " = " + "temp." + s.Field
 		value := "temp." + s.Field
-		query = fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s);",
+		query = fmt.Sprintf("merge into %s using (values %s) as temp (%s) on %s when not matched then insert (%s) values (%s);",
 			s.Table,
 			strings.Join(placeholder, ", "),
 			s.Field,
@@ -88,10 +91,10 @@ func (s *StringService) Save(ctx context.Context, values []string) (int64, error
 			value,
 		)
 	} else {
-		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", driverName)
+		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", driver)
 	}
 
-	query = ReplaceQueryparam(driverName, query, len(mainScope.Values))
+	query = ReplaceParameters(driver, query, len(mainScope.Values))
 	mainScope.Query = query
 	x, err := s.DB.Exec(mainScope.Query, mainScope.Values...)
 	if err != nil {
@@ -101,12 +104,13 @@ func (s *StringService) Save(ctx context.Context, values []string) (int64, error
 }
 
 func (s *StringService) Delete(ctx context.Context, values []string) (int64, error) {
-	strSQL := ""
-	for i := 0; i < len(values); i++ {
-		strSQL += `'` + values[i] + `',`
+	var arrValue []string
+	le := len(values)
+	for i := 1; i <= le; i++ {
+		param := BuildParam(i, s.Driver)
+		arrValue = append(arrValue, param)
 	}
-	strSQL = strings.TrimRight(strSQL, ",")
-	query := `DELETE FROM ` + s.Table + ` WHERE ` + s.Field + ` IN (` + strSQL + `)`
+	query := `delete from ` + s.Table + ` where ` + s.Field + ` in (` + strings.Join(arrValue, ",") + `)`
 	x, err := s.DB.Exec(query)
 	if err != nil {
 		return 0, err

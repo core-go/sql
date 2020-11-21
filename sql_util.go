@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func GetDriverName(db *sql.DB) string {
+func GetDriver(db *sql.DB) string {
 	if db == nil {
 		return DriverNotSupport
 	}
@@ -113,8 +113,9 @@ func QueryWithType(db *sql.DB, results interface{}, modelType reflect.Type, fiel
 }
 
 func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
-	strSQL := "LIMIT 1"
-	if GetDriverName(db) == DriverOracle {
+	strSQL := "limit 1"
+	driver := GetDriver(db)
+	if driver == DriverOracle {
 		strSQL = "AND ROWNUM = 1"
 	}
 	rows, er1 := db.Query(sql+" "+strSQL, values...)

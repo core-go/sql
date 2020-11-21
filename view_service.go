@@ -57,7 +57,7 @@ func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, e
 func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 	var count int32
 	var where string
-	var driver = GetDriverName(s.Database)
+	var driver = GetDriver(s.Database)
 	var values []interface{}
 	colNumber := 1
 	if len(s.keys) == 1 {

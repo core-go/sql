@@ -23,7 +23,7 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	if sts == nil || len(sts) == 0 {
 		return 0, nil
 	}
-	driver := GetDriverName(db)
+	driver := GetDriver(db)
 	tx, er0 := db.Begin()
 	if er0 != nil {
 		return 0, er0
@@ -88,7 +88,7 @@ func InsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize i
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := InsertObjSetSQL(db, tableName, objSet, false, excludeColumns...)
+		count, err := InsertManyRaw(db, tableName, objSet, false, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -104,7 +104,7 @@ func TransactionInsertMany(db *sql.DB, tableName string, objects []interface{}, 
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := TransactionInsertObjSetSQL(db, tableName, objSet, false, excludeColumns...)
+		count, err := InsertInTransaction(db, tableName, objSet, false, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -129,14 +129,14 @@ func splitObjects(objArr []interface{}, size int) [][]interface{} {
 	return chunkSet
 }
 
-func RawInsertManySkipErrors(db *sql.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
+func InsertManySkipErrors(db *sql.DB, tableName string, objects []interface{}, chunkSize int, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
 		chunkSize = len(objects)
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := InsertObjSetSQL(db, tableName, objSet, true, excludeColumns...)
+		count, err := InsertManyRaw(db, tableName, objSet, true, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -145,11 +145,11 @@ func RawInsertManySkipErrors(db *sql.DB, tableName string, objects []interface{}
 	return c, nil
 }
 
-func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
+func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
 	if len(objects) == 0 {
 		return 0, nil
 	}
-	driverName := GetDriverName(db)
+	driverName := GetDriver(db)
 	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
 	if err != nil {
 		return 0, err
@@ -198,7 +198,7 @@ func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 	var query string
 	if skipDuplicate {
 		if driverName == DriverPostgres {
-			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
+			query = fmt.Sprintf("insert into %s (%s) values %s on conflict do nothing",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
@@ -210,7 +210,7 @@ func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 				key := i2 + " = " + i2
 				qKey = append(qKey, key)
 			}
-			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
+			query = fmt.Sprintf("insert into %s (%s) values %s on duplicate key update %s",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
@@ -221,7 +221,7 @@ func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 		}
 	}
 	{
-		query = fmt.Sprintf(fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+		query = fmt.Sprintf(fmt.Sprintf("insert into %s (%s) values %s",
 			tableName,
 			strings.Join(dbColumns, ", "),
 			strings.Join(placeholders, ", "),
@@ -230,15 +230,17 @@ func InsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDu
 	mainScope.Query = query
 
 	x, err := db.Exec(mainScope.Query, mainScope.Values...)
-	fmt.Println(err)
+	if err != nil {
+		return -1, err
+	}
 	return x.RowsAffected()
 }
 
-func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
+func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
 	if len(objects) == 0 {
 		return 0, nil
 	}
-	driverName := GetDriverName(db)
+	driver := GetDriver(db)
 	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
 	if err != nil {
 		return 0, err
@@ -255,7 +257,6 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 
 	tx, err := db.Begin()
 	if err != nil {
-		fmt.Println(err)
 		return 0, err
 	}
 
@@ -291,52 +292,49 @@ func TransactionInsertObjSetSQL(db *sql.DB, tableName string, objects []interfac
 
 		var query string
 		if skipDuplicate {
-			if driverName == DriverPostgres {
-				query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT DO NOTHING",
+			if driver == DriverPostgres {
+				query = fmt.Sprintf("insert into %s (%s) values %s on conflict do nothing",
 					tableName,
 					strings.Join(dbColumns, ", "),
 					strings.Join(placeholders, ", "),
 				)
 
-			} else if driverName == DriverMysql {
+			} else if driver == DriverMysql {
 				var qKey []string
 				for _, i2 := range pkey {
 					key := i2 + " = " + i2
 					qKey = append(qKey, key)
 				}
-				query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
+				query = fmt.Sprintf("insert into %s (%s) values %s on duplicate key update %s",
 					tableName,
 					strings.Join(dbColumns, ", "),
 					strings.Join(placeholders, ", "),
 					strings.Join(qKey, ", "),
 				)
 			} else {
-				return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driverName)
+				return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driver)
 			}
 		} else {
-			query = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+			query = fmt.Sprintf("insert into %s (%s) values %s",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 			)
 		}
-		query = ReplaceQueryparam(driverName, query, len(mainScope.Values))
+		query = ReplaceParameters(driver, query, len(mainScope.Values))
 		mainScope.Query = query
 
 		_, execErr := tx.Exec(mainScope.Query, mainScope.Values...)
 		if execErr != nil {
 			_ = tx.Rollback()
-			fmt.Println(execErr)
-			break
+			return 0, execErr
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		fmt.Println("sql: transaction has already been rolled back")
 		return 0, err
 	}
 	count := len(objects)
-	fmt.Println(count, " Rows Updated")
 	return int64(count), err
 }
 
@@ -355,7 +353,7 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 
 func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	var placeholder []string
-	driverName := GetDriverName(db)
+	driverName := GetDriver(db)
 	var query []string
 	if len(objects) == 0 {
 		return 0, nil
@@ -389,7 +387,7 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, err
 		if err2 != nil {
 			return 0, err2
 		}
-		query = append(query, fmt.Sprintf(fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+		query = append(query, fmt.Sprintf(fmt.Sprintf("update %s set %s where %s",
 			tableName,
 			sets,
 			where,
@@ -404,9 +402,9 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, err
 	return x.RowsAffected()
 }
 
-func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
+func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	var placeholder []string
-	driverName := GetDriverName(db)
+	driverName := GetDriver(db)
 	var query []string
 	if len(objects) == 0 {
 		return 0, nil
@@ -440,7 +438,7 @@ func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) 
 		if err2 != nil {
 			return 0, err2
 		}
-		query = append(query, fmt.Sprintf(fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+		query = append(query, fmt.Sprintf(fmt.Sprintf("update %s set %s where %s",
 			tableName,
 			sets,
 			where,
@@ -448,7 +446,6 @@ func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) 
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		fmt.Println(err)
 		return 0, err
 	}
 
@@ -456,23 +453,20 @@ func TransactionUpdateMany(db *sql.DB, tableName string, objects []interface{}) 
 		_, execErr := tx.Exec(query[i])
 		if execErr != nil {
 			_ = tx.Rollback()
-			fmt.Println(execErr)
-			break
+			return 0, execErr
 		}
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		fmt.Println("sql: transaction has already been rolled back")
 		return 0, err
 	}
 	total := int64(len(query))
-	fmt.Println(total, " Rows Updated")
 	return total, err
 }
 
 func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string) (int64, error) {
-	driverName := GetDriverName(db)
+	driverName := GetDriver(db)
 	var query []string
 	if len(objects) == 0 {
 		return 0, nil
@@ -502,7 +496,7 @@ func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, i
 		if err2 != nil {
 			return 0, err2
 		}
-		query = append(query, fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+		query = append(query, fmt.Sprintf("update %s set %s where %s",
 			tableName,
 			sets,
 			where,

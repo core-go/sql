@@ -105,8 +105,8 @@ func BuildDataSourceName(c DatabaseConfig) string {
 // for ViewService
 
 func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
-	var where string = ""
-	var driver = GetDriverName(db)
+	var where = ""
+	var driver = GetDriver(db)
 	var values []interface{}
 	if len(keys) == 1 {
 		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildParam(1, driver))
@@ -123,14 +123,14 @@ func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys m
 					j++
 				}
 			}
-			where = "WHERE " + strings.Join(queres, " AND ")
+			where = "where " + strings.Join(queres, " and ")
 		}
 	}
-	return fmt.Sprintf("SELECT * FROM %v %v", table, where), values
+	return fmt.Sprintf("select * from %v %v", table, where), values
 }
 
 func BuildSelectAllQuery(table string) string {
-	return fmt.Sprintf("SELECT * FROM %v", table)
+	return fmt.Sprintf("select * from %v", table)
 }
 
 func InitSingleResult(modelType reflect.Type) interface{} {
@@ -186,20 +186,20 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 }
 
 func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
-	var driverName = GetDriverName(db)
+	var driverName = GetDriver(db)
 	queryInsert, values := BuildInsertSql(table, model, 0, driverName)
 
 	result, err := db.Exec(queryInsert, values...)
 	if err != nil {
-		errstr := err.Error()
-		driverName := GetDriverName(db)
-		if driverName == DriverPostgres && strings.Contains(errstr, "pq: duplicate key value violates unique constraint") {
+		x := err.Error()
+		driverName := GetDriver(db)
+		if driverName == DriverPostgres && strings.Contains(x, "pq: duplicate key value violates unique constraint") {
 			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
-		} else if driverName == DriverMysql && strings.Contains(errstr, "Error 1062: Duplicate entry") {
+		} else if driverName == DriverMysql && strings.Contains(x, "Error 1062: Duplicate entry") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driverName == DriverOracle && strings.Contains(errstr, "ORA-00001: unique constraint") {
+		} else if driverName == DriverOracle && strings.Contains(x, "ORA-00001: unique constraint") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driverName == DriverMssql && strings.Contains(errstr, "Violation of PRIMARY KEY constraint") {
+		} else if driverName == DriverMssql && strings.Contains(x, "Violation of PRIMARY KEY constraint") {
 			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
 		} else {
 			return 0, err
@@ -209,7 +209,7 @@ func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 }
 
 func Update(db *sql.DB, table string, model interface{}) (int64, error) {
-	driverName := GetDriverName(db)
+	driverName := GetDriver(db)
 	query, values := BuildUpdateSql(table, model, 0, driverName)
 
 	result, err := db.Exec(query, values...)
@@ -223,7 +223,7 @@ func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 func Patch(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type) (int64, error) {
 	idcolumNames, idJsonName := FindNames(modelType)
 	columNames := FindJsonName(modelType)
-	driverName := GetDriverName(db)
+	driverName := GetDriver(db)
 	query := BuildPatch(table, model, columNames, idJsonName, idcolumNames, driverName)
 	if query == "" {
 		return 0, errors.New("fail to build query")
@@ -241,7 +241,6 @@ func Delete(db *sql.DB, table string, query map[string]interface{}) (int64, erro
 	result, err := db.Exec(queryDelete, values...)
 
 	if err != nil {
-		fmt.Println(err)
 		return -1, err
 	}
 	return BuildResult(result.RowsAffected())
@@ -291,9 +290,9 @@ func BuildUpdateSql(table string, model interface{}, i int, driverName string) (
 		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildParam(colNumber+i, driverName), QuoteColumnName(colName)))
 		colNumber++
 	}
-	queryWhere := strings.Join(colQuery, " AND ")
+	queryWhere := strings.Join(colQuery, " and ")
 	querySet := strings.Join(colSet, ",")
-	query := fmt.Sprintf("UPDATE %v SET %v WHERE %v", table, querySet, queryWhere)
+	query := fmt.Sprintf("update %v set %v where %v", table, querySet, queryWhere)
 	return query, values
 }
 
@@ -324,7 +323,7 @@ func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[str
 	if err2 != nil {
 		return ""
 	}
-	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
+	query := fmt.Sprintf("update %s set %s where %s",
 		table,
 		sets,
 		where,
@@ -340,8 +339,8 @@ func BuildDelete(table string, ids map[string]interface{}) (string, []interface{
 		queryArr = append(queryArr, fmt.Sprintf("%v=?", QuoteColumnName(key)))
 		values = append(values, value)
 	}
-	q := strings.Join(queryArr, " AND ")
-	return fmt.Sprintf("DELETE FROM %v WHERE %v", table, q), values
+	q := strings.Join(queryArr, " and ")
+	return fmt.Sprintf("delete from %v where %v", table, q), values
 }
 
 // Obtain columns and values required for insert from interface
@@ -623,7 +622,7 @@ func BuildParam(index int, driver string) string {
 	}
 }
 func BuildParamByDB(n int, db *sql.DB) string {
-	driverName := GetDriverName(db)
+	driverName := GetDriver(db)
 	return BuildParam(n, driverName)
 }
 func EscapeString(value string) string {

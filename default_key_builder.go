@@ -46,10 +46,6 @@ func (b *DefaultKeyBuilder) BuildKey(object interface{}) string {
 			values = append(values, fmt.Sprint(objectValue.Field(position).Interface()))
 		}
 	}
-	/*result, _ := json.Marshal(ids)
-	return string(result)
-	id, _ := json.Marshal(object)
-	return string(id)*/
 	return strings.Join(values, "-")
 }
 

@@ -48,7 +48,7 @@ func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConf
 	s.Timestamp = strings.ToLower(s.Timestamp)
 	s.Status = strings.ToLower(s.Status)
 	s.Desc = strings.ToLower(s.Desc)
-	driver := GetDriverName(database)
+	driver := GetDriver(database)
 	if len(s.Id) == 0 {
 		s.Id = "id"
 	}
@@ -146,12 +146,13 @@ func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}, 
 	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
 	numCol := len(cols)
 	var arrValue []string
-	for i := 0; i < numCol; i++ {
-		arrValue = append(arrValue, "?")
+	for i := 1; i <= numCol; i++ {
+		param := BuildParam(i, driver)
+		arrValue = append(arrValue, param)
 	}
 	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
-	strSQL := fmt.Sprintf("INSERT INTO %v %v VALUES %v", QuoteString(tableName, driver), column, value)
-	return ReplaceQueryparam(driver, strSQL, len(values)), values
+	strSQL := fmt.Sprintf("insert into %v %v values %v", QuoteString(tableName, driver), column, value)
+	return strSQL, values
 }
 
 func QuoteString( name string, driver string) string {
@@ -160,7 +161,7 @@ func QuoteString( name string, driver string) string {
 	}
 	return name
 }
-func ReplaceQueryparam(driver string, query string, n int) string {
+func ReplaceParameters(driver string, query string, n int) string {
 	if driver == DriverOracle || driver == DriverPostgres {
 		var x string
 		if driver == DriverOracle {

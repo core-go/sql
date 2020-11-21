@@ -42,7 +42,7 @@ func Save(db *sql.DB, table string, model interface{}) (int64, error) {
 	// Also append variables to mainScope
 
 	var setColumns []string
-	dialect := GetDriverName(db)
+	dialect := GetDriver(db)
 	switch dialect {
 	case "mysql":
 		for _, key := range sorted {

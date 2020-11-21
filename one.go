@@ -8,7 +8,7 @@ import (
 )
 
 func InsertOne(db *sql.DB, table string, model interface{}) (int64, error) {
-	var driverName = GetDriverName(db)
+	var driverName = GetDriver(db)
 	query, values := BuildInsertSql(table, model,0,  driverName)
 
 	result, err := db.Exec(query, values...)
@@ -20,7 +20,7 @@ func InsertOne(db *sql.DB, table string, model interface{}) (int64, error) {
 }
 
 func UpdateOne(db *sql.DB, table string, model interface{}) (int64, error) {
-	driverName := GetDriverName(db)
+	driverName := GetDriver(db)
 	query, values := BuildUpdateSql(table, model,0, driverName)
 
 	result, err := db.Exec(query, values...)
@@ -70,7 +70,7 @@ func BuildInsertSql(table string, model interface{}, i int, driverName string) (
 	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
 	numCol := len(cols)
 	value := fmt.Sprintf("(%v)", BuildParametersFrom(i, numCol, driverName))
-	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", table, column, value), values
+	return fmt.Sprintf("insert into %v %v values %v", table, column, value), values
 }
 
 func QuoteColumnName(str string) string {
