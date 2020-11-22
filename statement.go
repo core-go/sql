@@ -117,13 +117,14 @@ type Statements interface {
 	Add(sql string, args []interface{}) Statements
 	Clear() Statements
 }
-
-func NewStatements(successFirst bool) Statements {
+func NewDefaultStatements(successFirst bool) *DefaultStatements {
 	stms := make([]Statement, 0)
 	s := &DefaultStatements{Statements: stms, SuccessFirst: successFirst}
 	return s
 }
-
+func NewStatements(successFirst bool) Statements {
+	return NewDefaultStatements(successFirst)
+}
 type DefaultStatements struct {
 	Statements   []Statement
 	SuccessFirst bool

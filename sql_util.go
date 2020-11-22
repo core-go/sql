@@ -27,7 +27,14 @@ func GetDriver(db *sql.DB) string {
 }
 
 func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) error {
-	rows, er1 := db.Query(sql, values...)
+	stm, err := db.Prepare(sql)
+	if err != nil {
+		return err
+	}
+	return QueryByStatement(stm, results, values...)
+}
+func QueryByStatement(stm *sql.Stmt, results interface{}, values ...interface{}) error {
+	rows, er1 := stm.Query(values...)
 	if er1 != nil {
 		return er1
 	}
@@ -55,7 +62,6 @@ func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) e
 	}
 	return nil
 }
-
 func QueryAndCount(db *sql.DB, results interface{}, count *int64, sql string, values ...interface{}) error {
 	rows, er1 := db.Query(sql, values...)
 	if er1 != nil {
@@ -118,7 +124,16 @@ func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sq
 	if driver == DriverOracle {
 		strSQL = "AND ROWNUM = 1"
 	}
-	rows, er1 := db.Query(sql+" "+strSQL, values...)
+	s := sql+" "+strSQL
+	stm, err := db.Prepare(s)
+	if err != nil {
+		return nil, err
+	}
+	return QueryRowByStatement(stm, modelType, fieldsIndex, values...)
+}
+func QueryRowByStatement(stm *sql.Stmt, modelType reflect.Type, fieldsIndex map[string]int, values ...interface{}) (interface{}, error) {
+	rows, er1 := stm.Query(values...)
+	// rows, er1 := db.Query(s, values...)
 	if er1 != nil {
 		return nil, er1
 	}
@@ -136,7 +151,6 @@ func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sq
 	}
 	return tb, nil
 }
-
 func appendToArray(arr interface{}, item interface{}) interface{} {
 	arrValue := reflect.ValueOf(arr)
 	elemValue := reflect.Indirect(arrValue)

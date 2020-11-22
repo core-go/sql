@@ -50,8 +50,8 @@ func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 
 func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
-	result, err1 := QueryRow(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
-	return result, err1
+	result, err := QueryRow(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
+	return result, err
 }
 
 func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
@@ -75,7 +75,7 @@ func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 		}
 		where = "where " + strings.Join(queres, " and ")
 	}
-	row := s.Database.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s %s", s.table, where), values...)
+	row := s.Database.QueryRow(fmt.Sprintf("select count(*) from %s %s", s.table, where), values...)
 	if err := row.Scan(&count); err != nil {
 		return false, err
 	} else {
