@@ -10,9 +10,21 @@ import (
 
 // raw query
 func Save(db *sql.DB, table string, model interface{}) (int64, error) {
+	queryString, value, err := BuildUpsert(db, table, model)
+	if err != nil {
+		return 0, err
+	}
+	res, err := db.Exec(queryString, value...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+
+}
+
+func BuildUpsert(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
 	placeholders := make([]string, 0)
 	exclude := make([]string, 0)
-	unique := make([]string, 0)
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
 	numField := modelType.NumField()
 	for i := 0; i < numField; i++ {
@@ -22,15 +34,13 @@ func Save(db *sql.DB, table string, model interface{}) (int64, error) {
 		for _, tag := range tags {
 			if strings.TrimSpace(tag) == "-" {
 				exclude = append(exclude, field.Name)
-			} else if strings.TrimSpace(tag) == "primary_key" {
-				unique = append(exclude, field.Name)
 			}
 		}
 	}
 
-	attrs, _, err := ExtractMapValue(model, exclude)
+	attrs, unique, err := ExtractMapValue(model, exclude)
 	if err != nil {
-		return 0, fmt.Errorf("cannot extract object's values: %w", err)
+		return "0", nil, fmt.Errorf("cannot extract object's values: %w", err)
 	}
 	//mainScope := db.NewScope(model)
 	//pkey := FindIdFields(modelType)
@@ -45,15 +55,20 @@ func Save(db *sql.DB, table string, model interface{}) (int64, error) {
 	dialect := GetDriver(db)
 	switch dialect {
 	case "mysql":
+		value := make([]interface{}, 0, len(attrs)*2)
 		for _, key := range sorted {
+			//mainScope.AddToVars(attrs[key])
 			setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = ?")
+			dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
+			variables = append(variables, "?")
+			value = append(value, attrs[key])
 		}
-		for _, key := range sorted {
+		for key, val := range unique {
 			//mainScope.AddToVars(attrs[key])
 			dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
 			variables = append(variables, "?")
+			value = append(value, val)
 		}
-
 		valueQuery := "(" + strings.Join(variables, ", ") + ")"
 		placeholders = append(placeholders, valueQuery)
 		queryString := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
@@ -62,63 +77,55 @@ func Save(db *sql.DB, table string, model interface{}) (int64, error) {
 			strings.Join(placeholders, ", "),
 			strings.Join(setColumns, ", "),
 		)
-		value := make([]interface{}, 0, len(attrs)*2)
 		for _, s := range sorted {
 			value = append(value, attrs[s])
 		}
-		for _, s := range sorted {
-			value = append(value, attrs[s])
-		}
-		res, err := db.Exec(queryString, value...)
-		if err != nil {
-			return 0, err
-		}
-		return res.RowsAffected()
+		return queryString, value, nil
 
 	case "postgres":
 		uniqueCols := make([]string, 0)
-		for i := 0; i < len(sorted); i++ {
+		value := make([]interface{}, 0, len(attrs)*2)
+		i := 0
+		for ; i < len(sorted); i++ {
 			setColumns = append(setColumns, `"`+strings.Replace(sorted[i], `"`, `""`, -1)+`"`+" = excluded."+strings.Replace(sorted[i], `"`, `""`, -1))
 			dbColumns = append(dbColumns, "`"+strings.Replace(sorted[i], "`", "``", -1)+"`")
 			variables = append(variables, "$"+strconv.Itoa(i+1))
+			value = append(value, attrs[sorted[i]])
 		}
-		for _, i2 := range unique {
-			uniqueCols = append(uniqueCols, `"`+strings.Replace(i2, `"`, `""`, -1)+`"`)
+		for key, val := range unique {
+			i++
+			uniqueCols = append(uniqueCols, `"`+strings.Replace(key, `"`, `""`, -1)+`"`)
+			dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
+			variables = append(variables, "$"+strconv.Itoa(i+1))
+			value = append(value, val)
 		}
 		queryString := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT (%s) DO UPDATE SET %s",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
 			strings.Join(dbColumns, ", "),
-			strings.Join(placeholders, ", "),
+			strings.Join(variables, ", "),
 			strings.Join(uniqueCols, ", "),
 			strings.Join(setColumns, ", "),
 		)
-		value := make([]interface{}, 0, len(attrs)*2)
-		for _, s := range sorted {
-			value = append(value, attrs[s])
-		}
-		res, err := db.Exec(queryString, value...)
-		if err != nil {
-			return 0, err
-		}
-		return res.RowsAffected()
+		return queryString, value, nil
+
 	case "mssql":
 		uniqueCols := make([]string, 0)
 		value := make([]interface{}, 0, len(attrs)*2)
-
-		for _, key := range sorted {
-			for _, i2 := range unique {
-				if strings.ToLower(i2) == strings.ToLower(key) {
-					onDupe := table + "." + key + " = " + "temp." + key
-					uniqueCols = append(uniqueCols, onDupe)
-				}
-			}
-			value = append(value, attrs[key])
-			setColumns = append(setColumns, `"`+strings.Replace(key, `"`, `""`, -1)+`"`+" = temp."+key)
-		}
 		for _, key := range sorted {
 			//mainScope.AddToVars(attrs[key])
-			dbColumns = append(dbColumns, `"`+strings.Replace(key, `"`, `""`, -1)+`"`)
+			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+			dbColumns = append(dbColumns, tkey)
 			variables = append(variables, "?")
+			value = append(value, attrs[key])
+			setColumns = append(setColumns, tkey+" = temp."+tkey)
+		}
+		for i, val := range unique {
+			tkey := `"` + strings.Replace(i, `"`, `""`, -1) + `"`
+			dbColumns = append(dbColumns, `"`+strings.Replace(tkey, `"`, `""`, -1)+`"`)
+			variables = append(variables, "?")
+			value = append(value, val)
+			onDupe := table + "." + tkey + " = " + "temp." + tkey
+			uniqueCols = append(uniqueCols, onDupe)
 		}
 		queryString := fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
@@ -129,49 +136,43 @@ func Save(db *sql.DB, table string, model interface{}) (int64, error) {
 			strings.Join(dbColumns, ", "),
 			strings.Join(variables, ", "),
 		)
-		res, err := db.Exec(queryString, value...)
-		if err != nil {
-			return 0, err
-		}
-		return res.RowsAffected()
+		return queryString, value, nil
+
 	case "oracle":
 		uniqueCols := make([]string, 0)
 		value := make([]interface{}, 0, len(attrs)*2)
-
-		for _, key := range sorted {
-			for _, i2 := range unique {
-				if strings.ToLower(i2) == strings.ToLower(key) {
-					onDupe := table + "." + key + " = " + "temp." + key
-					uniqueCols = append(uniqueCols, onDupe)
-				}
-			}
+		insertCols := make([]string, 0)
+		for v, key := range sorted {
 			value = append(value, attrs[key])
-			setColumns = append(setColumns, `"`+strings.Replace(key, `"`, `""`, -1)+`"`+" = temp."+key)
+			tkey := `'` + strings.Replace(key, `'`, `''`, -1) + `'`
+			setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
+			//dbColumns = append(dbColumns, "temp."+tkey)
+			variables = append(variables, fmt.Sprintf(":%d "+key, v))
+			insertCols = append(insertCols, tkey)
 		}
-		count := 1
+		for key, val := range unique {
+			tkey := `'` + strings.Replace(key, `'`, `''`, -1) + `'`
+			onDupe := "a." + tkey + " = " + "temp." + tkey
+			uniqueCols = append(uniqueCols, onDupe)
+			variables = append(variables, fmt.Sprintf(":"+key))
+			value = append(value, val)
+			insertCols = append(insertCols, tkey)
+		}
 		for _, key := range sorted {
-
-			//mainScope.AddToVars(attrs[key])
-			dbColumns = append(dbColumns, `"`+strings.Replace(key, `"`, `""`, -1)+`"`)
-			variables = append(variables, fmt.Sprintf(":%d", count))
-			count++
+			value = append(value, attrs[key])
 		}
-		queryString := fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
+
+		queryString := fmt.Sprintf("MERGE INTO %s a USING (SELECT %s FROM dual) temp ON  (%s) WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
 			strings.Join(variables, ", "),
-			strings.Join(dbColumns, ", "),
 			strings.Join(uniqueCols, " AND "),
 			strings.Join(setColumns, ", "),
-			strings.Join(dbColumns, ", "),
+			strings.Join(insertCols, ", "),
 			strings.Join(variables, ", "),
 		)
-		res, err := db.Exec(queryString, value...)
-		if err != nil {
-			return 0, err
-		}
-		return res.RowsAffected()
-	default:
-		return 0, fmt.Errorf("unsupported db vendor")
-	}
+		return queryString, value, nil
 
+	default:
+		return "", nil, fmt.Errorf("unsupported db vendor")
+	}
 }
