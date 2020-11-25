@@ -516,6 +516,8 @@ func GetValueColumn(value interface{}, driverName string) (string, error) {
 	switch v := value.(type) {
 	case int:
 		str = strconv.Itoa(v)
+	case int64:
+		str = strconv.Itoa(int(v))
 	case float64:
 		str = strconv.FormatFloat(v, 'f', -1, 64)
 	case bool:

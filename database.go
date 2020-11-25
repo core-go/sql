@@ -208,9 +208,52 @@ func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 	return result.RowsAffected()
 }
 
+func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex int) (int64, error) {
+	if versionIndex < 0 {
+		return 0, errors.New("version index not found")
+	}
+
+	var driverName = GetDriver(db)
+	queryInsert, values := BuildInsertSqlWithVersion(table, model, 0, driverName, versionIndex)
+
+	result, err := db.Exec(queryInsert, values...)
+	if err != nil {
+		errstr := err.Error()
+		driverName := GetDriver(db)
+		if driverName == DriverPostgres && strings.Contains(errstr, "pq: duplicate key value violates unique constraint") {
+			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
+		} else if driverName == DriverMysql && strings.Contains(errstr, "Error 1062: Duplicate entry") {
+			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+		} else if driverName == DriverOracle && strings.Contains(errstr, "ORA-00001: unique constraint") {
+			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+		} else if driverName == DriverMssql && strings.Contains(errstr, "Violation of PRIMARY KEY constraint") {
+			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+		} else {
+			return 0, err
+		}
+	}
+	return result.RowsAffected()
+}
+
 func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 	driverName := GetDriver(db)
 	query, values := BuildUpdateSql(table, model, 0, driverName)
+
+	result, err := db.Exec(query, values...)
+
+	if err != nil {
+		return -1, err
+	}
+	return result.RowsAffected()
+}
+
+func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex int) (int64, error) {
+	if versionIndex < 0 {
+		return 0, errors.New("version's index not found")
+	}
+
+	driverName := GetDriver(db)
+	query, values := BuildUpdateSqlWithVersion(table, model, 0, driverName, versionIndex)
 
 	result, err := db.Exec(query, values...)
 
@@ -225,6 +268,34 @@ func Patch(db *sql.DB, table string, model map[string]interface{}, modelType ref
 	columNames := FindJsonName(modelType)
 	driverName := GetDriver(db)
 	query := BuildPatch(table, model, columNames, idJsonName, idcolumNames, driverName)
+	if query == "" {
+		return 0, errors.New("fail to build query")
+	}
+	result, err := db.Exec(query)
+	if err != nil {
+		return -1, err
+	}
+	return result.RowsAffected()
+}
+
+func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, versionIndex int) (int64, error) {
+	if versionIndex < 0 {
+		return 0, errors.New("version's index not found")
+	}
+
+	idcolumNames, idJsonName := FindNames(modelType)
+	columNames := FindJsonName(modelType)
+	driverName := GetDriver(db)
+	versionJsonName, ok := GetJsonNameByIndex(modelType, versionIndex)
+	if !ok {
+		return 0, errors.New("version's json not found")
+	}
+	versionColName, ok := GetColumnNameByIndex(modelType, versionIndex)
+	if !ok {
+		return 0, errors.New("version's column not found")
+	}
+
+	query := BuildPatchWithVersion(table, model, columNames, idJsonName, idcolumNames, driverName, versionIndex, versionJsonName, versionColName)
 	if query == "" {
 		return 0, errors.New("fail to build query")
 	}
@@ -296,6 +367,48 @@ func BuildUpdateSql(table string, model interface{}, i int, driverName string) (
 	return query, values
 }
 
+func BuildUpdateSqlWithVersion(table string, model interface{}, i int, driverName string, versionIndex int) (string, []interface{}) {
+	if versionIndex < 0 {
+		panic("version's index not found")
+
+	}
+
+	valueOfModel := reflect.Indirect(reflect.ValueOf(model))
+	currentVersion := reflect.Indirect(valueOfModel.Field(versionIndex)).Int()
+	nextVersion := currentVersion + 1
+	_, err := setValue(model, versionIndex, &nextVersion)
+	if err != nil {
+		panic(err)
+	}
+
+	mapData, mapKey, _ := BuildMapDataAndKeys(model, true)
+	versionColName, exist := GetColumnNameByIndex(valueOfModel.Type(), versionIndex)
+	if !exist {
+		panic("version's column not found")
+	}
+	mapKey[versionColName] = currentVersion
+
+	var values []interface{}
+	colSet := make([]string, 0)
+	colQuery := make([]string, 0)
+	colNumber := 1
+	for colName, v1 := range mapData {
+		values = append(values, v1)
+		colSet = append(colSet, fmt.Sprintf("%v="+BuildParam(colNumber+i, driverName), QuoteColumnName(colName)))
+		colNumber++
+	}
+
+	for colName, v2 := range mapKey {
+		values = append(values, v2)
+		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildParam(colNumber+i, driverName), QuoteColumnName(colName)))
+		colNumber++
+	}
+	queryWhere := strings.Join(colQuery, " AND ")
+	querySet := strings.Join(colSet, ",")
+	query := fmt.Sprintf("UPDATE %v SET %v WHERE %v", table, querySet, queryWhere)
+	return query, values
+}
+
 func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, driverName string) string {
 	scope := statement()
 	// Append variables set column
@@ -324,6 +437,54 @@ func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[str
 		return ""
 	}
 	query := fmt.Sprintf("update %s set %s where %s",
+		table,
+		sets,
+		where,
+	)
+	return query
+}
+
+func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, driverName string, versionIndex int, versionJsonName, versionColName string) string {
+	if versionIndex < 0 {
+		panic("version's index not found")
+	}
+
+	currentVersion, ok := model[versionJsonName]
+	if !ok {
+		panic("version field not found")
+	}
+	nextVersion := currentVersion.(int64) + 1
+	model[versionJsonName] = nextVersion
+
+	scope := statement()
+	// Append variables set column
+	for key, _ := range model {
+		if _, ok := Find(idTagJsonNames, key); !ok {
+			if columName, ok2 := mapJsonColum[key]; ok2 {
+				scope.Columns = append(scope.Columns, columName)
+				scope.Values = append(scope.Values, model[key])
+			}
+		}
+	}
+	// Append variables where
+	for i, key := range idTagJsonNames {
+		scope.Values = append(scope.Values, model[key])
+		scope.Keys = append(scope.Keys, idColumNames[i])
+	}
+	scope.Values = append(scope.Values, currentVersion)
+	scope.Keys = append(scope.Keys, versionColName)
+
+	n := len(scope.Columns)
+	sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+	if err1 != nil {
+		return ""
+	}
+	columnsKeys := scope.Keys
+	where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+	if err2 != nil {
+		return ""
+	}
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
 		table,
 		sets,
 		where,
@@ -425,6 +586,18 @@ func GetColumnNameByIndex(ModelType reflect.Type, index int) (col string, colExi
 			}
 		}
 	}
+	return "", false
+}
+
+func GetJsonNameByIndex(ModelType reflect.Type, index int) (string, bool) {
+	field := ModelType.Field(index)
+	if tagJson, ok := field.Tag.Lookup("json"); ok {
+		arrValue := strings.Split(tagJson, ",")
+		if len(arrValue) > 0 {
+			return arrValue[0], true
+		}
+	}
+
 	return "", false
 }
 

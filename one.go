@@ -73,6 +73,35 @@ func BuildInsertSql(table string, model interface{}, i int, driverName string) (
 	return fmt.Sprintf("insert into %v %v values %v", table, column, value), values
 }
 
+func BuildInsertSqlWithVersion(table string, model interface{}, i int, driverName string, versionIndex int) (string, []interface{}) {
+	if versionIndex < 0 {
+		panic("version index not found")
+	}
+
+	var versionValue int64 = 1
+	_, err := setValue(model, versionIndex, &versionValue)
+	if err != nil {
+		panic(err)
+	}
+	mapData, mapPrimaryKeyValue, keys := BuildMapDataAndKeys(model, false)
+	var cols []string
+	var values []interface{}
+	for _, columnName := range keys {
+		if value, ok := mapData[columnName]; ok {
+			cols = append(cols, QuoteColumnName(columnName))
+			values = append(values, value)
+		}
+	}
+	for columnName, value := range mapPrimaryKeyValue {
+		cols = append(cols, QuoteColumnName(columnName))
+		values = append(values, value)
+	}
+	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
+	numCol := len(cols)
+	value := fmt.Sprintf("(%v)", BuildParametersFrom(i, numCol, driverName))
+	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", table, column, value), values
+}
+
 func QuoteColumnName(str string) string {
 	if strings.Contains(str, ".") {
 		var newStrs []string
