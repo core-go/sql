@@ -9,7 +9,7 @@ import (
 )
 
 // raw query
-func Save(db *sql.DB, table string, model interface{}) (int64, error) {
+func Upsert(db *sql.DB, table string, model interface{}) (int64, error) {
 	queryString, value, err := BuildUpsert(db, table, model)
 	if err != nil {
 		return 0, err

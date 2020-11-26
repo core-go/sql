@@ -15,6 +15,6 @@ func NewSqlInserter(database *sql.DB, tableName string) *SqlInserter {
 }
 
 func (w *SqlInserter) Write(ctx context.Context, models interface{}) error {
-	_, err := InsertOne(w.db, w.tableName, models)
+	_, err := Insert(w.db, w.tableName, models)
 	return err
 }

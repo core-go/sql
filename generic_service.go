@@ -43,6 +43,10 @@ func (s *GenericService) Update(ctx context.Context, model interface{}) (int64, 
 	return Update(s.Database, s.table, model)
 }
 
+func (s *GenericService) Upsert(ctx context.Context, model map[string]interface{}) (int64, error) {
+	return Upsert(s.Database, s.table, model)
+}
+
 func (s *GenericService) Delete(ctx context.Context, id interface{}) (int64, error) {
 	l := len(s.keys)
 	if l == 1 {

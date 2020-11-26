@@ -1,35 +1,10 @@
 package sql
 
 import (
-	"database/sql"
 	"fmt"
 	"reflect"
 	"strings"
 )
-
-func InsertOne(db *sql.DB, table string, model interface{}) (int64, error) {
-	var driverName = GetDriver(db)
-	query, values := BuildInsertSql(table, model,0,  driverName)
-
-	result, err := db.Exec(query, values...)
-
-	if err != nil {
-		return -1, err
-	}
-	return result.RowsAffected()
-}
-
-func UpdateOne(db *sql.DB, table string, model interface{}) (int64, error) {
-	driverName := GetDriver(db)
-	query, values := BuildUpdateSql(table, model,0, driverName)
-
-	result, err := db.Exec(query, values...)
-
-	if err != nil {
-		return -1, err
-	}
-	return result.RowsAffected()
-}
 
 func RemoveIndex(s []string, index int) []string {
 	return append(s[:index], s[index+1:]...)
