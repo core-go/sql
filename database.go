@@ -267,11 +267,11 @@ func Patch(db *sql.DB, table string, model map[string]interface{}, modelType ref
 	idcolumNames, idJsonName := FindNames(modelType)
 	columNames := FindJsonName(modelType)
 	driverName := GetDriver(db)
-	query := BuildPatch(table, model, columNames, idJsonName, idcolumNames, driverName)
+	query, value := BuildPatch(table, model, columNames, idJsonName, idcolumNames, driverName)
 	if query == "" {
 		return 0, errors.New("fail to build query")
 	}
-	result, err := db.Exec(query)
+	result, err := db.Exec(query, value...)
 	if err != nil {
 		return -1, err
 	}
@@ -295,11 +295,11 @@ func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, mo
 		return 0, errors.New("version's column not found")
 	}
 
-	query := BuildPatchWithVersion(table, model, columNames, idJsonName, idcolumNames, driverName, versionIndex, versionJsonName, versionColName)
+	query, value := BuildPatchWithVersion(table, model, columNames, idJsonName, idcolumNames, driverName, versionIndex, versionJsonName, versionColName)
 	if query == "" {
 		return 0, errors.New("fail to build query")
 	}
-	result, err := db.Exec(query)
+	result, err := db.Exec(query, value...)
 	if err != nil {
 		return -1, err
 	}
@@ -409,7 +409,7 @@ func BuildUpdateSqlWithVersion(table string, model interface{}, i int, driverNam
 	return query, values
 }
 
-func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, driverName string) string {
+func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, driverName string) (string, []interface{}) {
 	scope := statement()
 	// Append variables set column
 	for key, _ := range model {
@@ -425,26 +425,29 @@ func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[str
 		scope.Values = append(scope.Values, model[key])
 		scope.Keys = append(scope.Keys, idColumNames[i])
 	}
+	var value []interface{}
 
 	n := len(scope.Columns)
-	sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+	sets, val1, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
 	if err1 != nil {
-		return ""
+		return "", nil
 	}
-	columnsKeys := scope.Keys
-	where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+	value = append(value, val1...)
+	columnsKeys := len(scope.Keys)
+	where, val2, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &columnsKeys, n, driverName, " and ")
 	if err2 != nil {
-		return ""
+		return "", nil
 	}
+	value = append(value, val2...)
 	query := fmt.Sprintf("update %s set %s where %s",
 		table,
 		sets,
 		where,
 	)
-	return query
+	return query, value
 }
 
-func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, driverName string, versionIndex int, versionJsonName, versionColName string) string {
+func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, driverName string, versionIndex int, versionJsonName, versionColName string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version's index not found")
 	}
@@ -457,6 +460,7 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 	model[versionJsonName] = nextVersion
 
 	scope := statement()
+	var value []interface{}
 	// Append variables set column
 	for key, _ := range model {
 		if _, ok := Find(idTagJsonNames, key); !ok {
@@ -475,21 +479,23 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 	scope.Keys = append(scope.Keys, versionColName)
 
 	n := len(scope.Columns)
-	sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+	sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
 	if err1 != nil {
-		return ""
+		return "", nil
 	}
-	columnsKeys := scope.Keys
-	where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+	value = append(value, setVal...)
+	numKeys := len(scope.Keys)
+	where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, driverName, " and ")
 	if err2 != nil {
-		return ""
+		return "", nil
 	}
+	value = append(value, whereVal...)
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
 		table,
 		sets,
 		where,
 	)
-	return query
+	return query, value
 }
 
 func BuildDelete(table string, ids map[string]interface{}) (string, []interface{}) {

@@ -355,6 +355,7 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, err
 	var placeholder []string
 	driverName := GetDriver(db)
 	var query []string
+	var value [][]interface{}
 	if len(objects) == 0 {
 		return 0, nil
 	}
@@ -378,34 +379,40 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, err
 		//statement.Values = append(statement.Values, scope.Values...)
 
 		n := len(scope.Columns)
-		sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
 		if err1 != nil {
 			return 0, err1
 		}
-		columnsKeys := scope.Keys
-		where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+		value = append(value, setVal)
+		numKeys := len(scope.Keys)
+		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, driverName, " and ")
 		if err2 != nil {
 			return 0, err2
 		}
+		value = append(value, whereVal)
 		query = append(query, fmt.Sprintf(fmt.Sprintf("update %s set %s where %s",
 			tableName,
 			sets,
 			where,
 		)))
 	}
-
-	statement.Query = strings.Join(query, "; ")
-	x, err := db.Exec(statement.Query) // return just one success query
-	if err != nil {
-		return 0, err
+	var count int64
+	for i := 0; i < len(query); i++ {
+		x, execErr := db.Exec(query[i], value[i]...)
+		if execErr != nil {
+			return 0, execErr
+		}
+		rowsAffected, _ := x.RowsAffected()
+		count += rowsAffected
 	}
-	return x.RowsAffected()
+	return count, nil
 }
 
 func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	var placeholder []string
 	driverName := GetDriver(db)
 	var query []string
+	var value [][]interface{}
 	if len(objects) == 0 {
 		return 0, nil
 	}
@@ -429,15 +436,17 @@ func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}) (i
 		//statement.Values = append(statement.Values, scope.Values...)
 
 		n := len(scope.Columns)
-		sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
 		if err1 != nil {
 			return 0, err1
 		}
-		columnsKeys := scope.Keys
-		where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+		value = append(value, setVal)
+		numKeys := len(scope.Keys)
+		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, driverName, " and ")
 		if err2 != nil {
 			return 0, err2
 		}
+		value = append(value, whereVal)
 		query = append(query, fmt.Sprintf(fmt.Sprintf("update %s set %s where %s",
 			tableName,
 			sets,
@@ -450,7 +459,7 @@ func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}) (i
 	}
 
 	for i := 0; i < len(query); i++ {
-		_, execErr := tx.Exec(query[i])
+		_, execErr := tx.Exec(query[i], value[i]...)
 		if execErr != nil {
 			_ = tx.Rollback()
 			return 0, execErr
@@ -468,6 +477,7 @@ func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}) (i
 func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string) (int64, error) {
 	driverName := GetDriver(db)
 	var query []string
+	var value [][]interface{}
 	if len(objects) == 0 {
 		return 0, nil
 	}
@@ -487,15 +497,17 @@ func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, i
 		}
 
 		n := len(scope.Columns)
-		sets, err1 := BuildSqlParametersByColumns(scope.Columns, scope.Values, n, 0, driverName, ", ")
+		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
 		if err1 != nil {
 			return 0, err1
 		}
-		columnsKeys := scope.Keys
-		where, err2 := BuildSqlParametersByColumns(columnsKeys, scope.Values, len(columnsKeys), n, driverName, " and ")
+		value = append(value, setVal)
+		numKeys := len(scope.Keys)
+		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, driverName, " and ")
 		if err2 != nil {
 			return 0, err2
 		}
+		value = append(value, whereVal)
 		query = append(query, fmt.Sprintf("update %s set %s where %s",
 			tableName,
 			sets,
@@ -503,12 +515,16 @@ func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, i
 		))
 	}
 
-	sql := strings.Join(query, "; ")
-	x, err := db.Exec(sql)
-	if err != nil {
-		return 0, err
+	var count int64
+	for i := 0; i < len(query); i++ {
+		x, execErr := db.Exec(query[i], value[i]...)
+		if execErr != nil {
+			return 0, execErr
+		}
+		rowsAffected, _ := x.RowsAffected()
+		count += rowsAffected
 	}
-	return x.RowsAffected()
+	return count, nil
 }
 
 func GetValueColumn(value interface{}, driverName string) (string, error) {
@@ -559,4 +575,25 @@ func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, 
 		j++
 	}
 	return strings.Join(arr, joinStr), nil
+}
+
+func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int, start int, driverName string, joinStr string) (string, []interface{}, error) {
+	arr := make([]string, *n)
+	j := start
+	var valueParams []interface{}
+	for i, _ := range arr {
+		columnName := columns[i]
+		if values[j] == nil {
+			arr[i] = fmt.Sprintf("%s = null", columnName)
+			copy(values[i:], values[i+1:])
+			values[len(values)-1] = ""
+			values = values[:len(values)-1]
+			*n--
+		} else {
+			arr[i] = fmt.Sprintf("%s = %s", columnName, BuildParametersFrom(start, 1, driverName))
+			valueParams = append(valueParams, values[j])
+		}
+		j++
+	}
+	return strings.Join(arr, joinStr), valueParams, nil
 }
