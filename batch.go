@@ -339,7 +339,7 @@ func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, sk
 }
 
 func InterfaceSlice(slice interface{}) ([]interface{}, error) {
-	s := reflect.ValueOf(slice)
+	s := reflect.Indirect(reflect.ValueOf(slice))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("InterfaceSlice() given a non-slice type")
 	}
