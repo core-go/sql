@@ -36,14 +36,35 @@ func NewGenericService(db *sql.DB, modelType reflect.Type, tableName string) *Ge
 }
 
 func (s *GenericService) Insert(ctx context.Context, model interface{}) (int64, error) {
+	if s.Mapper != nil {
+		m2, err := s.Mapper.ModelToDb(ctx, model)
+		if err != nil {
+			return 0, err
+		}
+		return Insert(s.Database, s.table, m2)
+	}
 	return Insert(s.Database, s.table, model)
 }
 
 func (s *GenericService) Update(ctx context.Context, model interface{}) (int64, error) {
+	if s.Mapper != nil {
+		m2, err := s.Mapper.ModelToDb(ctx, model)
+		if err != nil {
+			return 0, err
+		}
+		return Update(s.Database, s.table, m2)
+	}
 	return Update(s.Database, s.table, model)
 }
 
 func (s *GenericService) Upsert(ctx context.Context, model map[string]interface{}) (int64, error) {
+	if s.Mapper != nil {
+		m2, err := s.Mapper.ModelToDb(ctx, model)
+		if err != nil {
+			return 0, err
+		}
+		return Upsert(s.Database, s.table, m2)
+	}
 	return Upsert(s.Database, s.table, model)
 }
 
@@ -58,5 +79,12 @@ func (s *GenericService) Delete(ctx context.Context, id interface{}) (int64, err
 }
 
 func (s *GenericService) Patch(ctx context.Context, model map[string]interface{}) (int64, error) {
+	if s.Mapper != nil {
+		_, err := s.Mapper.ModelToDb(ctx, model)
+		if err != nil {
+			return 0, err
+		}
+		return Patch(s.Database, s.table, model, s.modelType)
+	}
 	return Patch(s.Database, s.table, model, s.modelType)
 }

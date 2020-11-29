@@ -43,15 +43,32 @@ func (s *ViewService) Keys() []string {
 
 func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 	queryGetAll := BuildSelectAllQuery(s.table)
-	models := reflect.New(s.modelsType).Interface()
-	err := QueryWithType(s.Database, models, s.modelType, s.fieldsIndex, queryGetAll)
-	return models, err
+	result := reflect.New(s.modelsType).Interface()
+	err := QueryWithType(s.Database, result, s.modelType, s.fieldsIndex, queryGetAll)
+	if err == nil {
+		if s.Mapper != nil {
+			r2, er2 := s.Mapper.DbToModels(ctx, result)
+			if er2 != nil {
+				return result, err
+			}
+			return r2, err
+		}
+		return result, err
+	}
+	return result, err
 }
 
 func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
-	result, err := QueryRow(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
-	return result, err
+	r, err := QueryRow(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
+	if s.Mapper != nil {
+		r2, er2 := s.Mapper.DbToModel(ctx, r)
+		if er2 != nil {
+			return r, er2
+		}
+		return r2, er2
+	}
+	return r, err
 }
 
 func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
