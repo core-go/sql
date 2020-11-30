@@ -33,7 +33,7 @@ func BuildInsertSql(table string, model interface{}, i int, driverName string) (
 	var cols []string
 	var values []interface{}
 	for _, columnName := range keys {
-		if value, ok := mapData[columnName]; ok {
+		if value, ok := mapData[columnName]; ok && value != nil {
 			cols = append(cols, QuoteColumnName(columnName))
 			values = append(values, value)
 		}
@@ -62,7 +62,7 @@ func BuildInsertSqlWithVersion(table string, model interface{}, i int, driverNam
 	var cols []string
 	var values []interface{}
 	for _, columnName := range keys {
-		if value, ok := mapData[columnName]; ok {
+		if value, ok := mapData[columnName]; ok && value != nil {
 			cols = append(cols, QuoteColumnName(columnName))
 			values = append(values, value)
 		}
@@ -78,13 +78,13 @@ func BuildInsertSqlWithVersion(table string, model interface{}, i int, driverNam
 }
 
 func QuoteColumnName(str string) string {
-	if strings.Contains(str, ".") {
-		var newStrs []string
-		for _, str := range strings.Split(str, ".") {
-			newStrs = append(newStrs, str)
-		}
-		return strings.Join(newStrs, ".")
-	}
+	//if strings.Contains(str, ".") {
+	//	var newStrs []string
+	//	for _, str := range strings.Split(str, ".") {
+	//		newStrs = append(newStrs, str)
+	//	}
+	//	return strings.Join(newStrs, ".")
+	//}
 
 	return str
 }

@@ -307,7 +307,8 @@ func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, mo
 }
 
 func Delete(db *sql.DB, table string, query map[string]interface{}) (int64, error) {
-	queryDelete, values := BuildDelete(table, query)
+	driverName := GetDriver(db)
+	queryDelete, values := BuildDelete(table, query, driverName)
 
 	result, err := db.Exec(queryDelete, values...)
 
@@ -351,9 +352,13 @@ func BuildUpdateSql(table string, model interface{}, i int, driverName string) (
 	colQuery := make([]string, 0)
 	colNumber := 1
 	for colName, v1 := range mapData {
-		values = append(values, v1)
-		colSet = append(colSet, fmt.Sprintf("%v="+BuildParam(colNumber+i, driverName), QuoteColumnName(colName)))
-		colNumber++
+		if v1 != nil {
+			values = append(values, v1)
+			colSet = append(colSet, fmt.Sprintf("%v = "+BuildParam(colNumber+i, driverName), colName))
+			colNumber++
+		} else {
+			colSet = append(colSet, BuildParamWithNull(colName))
+		}
 	}
 
 	for colName, v2 := range mapKey {
@@ -393,9 +398,13 @@ func BuildUpdateSqlWithVersion(table string, model interface{}, i int, driverNam
 	colQuery := make([]string, 0)
 	colNumber := 1
 	for colName, v1 := range mapData {
-		values = append(values, v1)
-		colSet = append(colSet, fmt.Sprintf("%v="+BuildParam(colNumber+i, driverName), QuoteColumnName(colName)))
-		colNumber++
+		if v1 != nil {
+			values = append(values, v1)
+			colSet = append(colSet, fmt.Sprintf("%v = "+BuildParam(colNumber+i, driverName), colName))
+			colNumber++
+		} else {
+			colSet = append(colSet, BuildParamWithNull(colName))
+		}
 	}
 
 	for colName, v2 := range mapKey {
@@ -498,12 +507,12 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 	return query, value
 }
 
-func BuildDelete(table string, ids map[string]interface{}) (string, []interface{}) {
+func BuildDelete(table string, ids map[string]interface{}, driverName string) (string, []interface{}) {
 
 	var values []interface{}
 	var queryArr []string
 	for key, value := range ids {
-		queryArr = append(queryArr, fmt.Sprintf("%v=?", QuoteColumnName(key)))
+		queryArr = append(queryArr, fmt.Sprintf("%v = %v", QuoteColumnName(key), BuildParam(1, driverName)))
 		values = append(values, value)
 	}
 	q := strings.Join(queryArr, " and ")
@@ -511,7 +520,7 @@ func BuildDelete(table string, ids map[string]interface{}) (string, []interface{
 }
 
 // Obtain columns and values required for insert from interface
-func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]interface{}, map[string]interface{}, error) {
+func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull bool) (map[string]interface{}, map[string]interface{}, error) {
 	rv := reflect.ValueOf(value)
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
@@ -525,7 +534,10 @@ func ExtractMapValue(value interface{}, excludeColumns []string) (map[string]int
 	var attrsKey = map[string]interface{}{}
 
 	for _, field := range GetMapField(value) {
-		if !ContainString(excludeColumns, GetTag(field, "fieldName")) && !IsPrimary(field) {
+		if value := field.Value.Interface(); value == nil && ignoreNull {
+			*excludeColumns = append(*excludeColumns, field.Tags["fieldName"])
+		}
+		if !ContainString(*excludeColumns, GetTag(field, "fieldName")) && !IsPrimary(field) {
 			if dBName, ok := field.Tags[DBName]; ok {
 				attrs[dBName] = field.Value.Interface()
 			}

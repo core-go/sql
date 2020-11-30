@@ -38,7 +38,7 @@ func BuildUpsert(db *sql.DB, table string, model interface{}) (string, []interfa
 		}
 	}
 
-	attrs, unique, err := ExtractMapValue(model, exclude)
+	attrs, unique, err := ExtractMapValue(model, &exclude, false)
 	if err != nil {
 		return "0", nil, fmt.Errorf("cannot extract object's values: %w", err)
 	}

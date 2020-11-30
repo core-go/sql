@@ -150,7 +150,7 @@ func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDupl
 		return 0, nil
 	}
 	driverName := GetDriver(db)
-	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
+	firstAttrs, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
 	}
@@ -170,7 +170,7 @@ func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDupl
 	}
 
 	for _, obj := range objects {
-		objAttrs, _, err := ExtractMapValue(obj, excludeColumns)
+		objAttrs, _, err := ExtractMapValue(obj, &excludeColumns, true)
 		if err != nil {
 			return 0, err
 		}
@@ -241,7 +241,7 @@ func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, sk
 		return 0, nil
 	}
 	driver := GetDriver(db)
-	firstAttrs, _, err := ExtractMapValue(objects[0], excludeColumns)
+	firstAttrs, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
 	}
@@ -265,7 +265,7 @@ func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, sk
 		mainScope := BatchStatement{}
 		// Store placeholders for embedding variables
 		placeholders := make([]string, 0, attrSize)
-		objAttrs, _, err := ExtractMapValue(obj, excludeColumns)
+		objAttrs, _, err := ExtractMapValue(obj, &excludeColumns, true)
 		if err != nil {
 			return 0, err
 		}
@@ -577,6 +577,10 @@ func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, 
 	return strings.Join(arr, joinStr), nil
 }
 
+func BuildParamWithNull(colName string) string {
+	return fmt.Sprintf("%v = null", colName)
+}
+
 func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int, start int, driverName string, joinStr string) (string, []interface{}, error) {
 	arr := make([]string, *n)
 	j := start
@@ -584,7 +588,7 @@ func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int,
 	for i, _ := range arr {
 		columnName := columns[i]
 		if values[j] == nil {
-			arr[i] = fmt.Sprintf("%s = null", columnName)
+			arr[i] = BuildParamWithNull(columnName)
 			copy(values[i:], values[i+1:])
 			values[len(values)-1] = ""
 			values = values[:len(values)-1]

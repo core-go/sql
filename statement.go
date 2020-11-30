@@ -17,7 +17,7 @@ type BatchStatement struct {
 }
 
 func newStatement(value interface{}, excludeColumns ...string) BatchStatement {
-	attribute, attributeKey, _ := ExtractMapValue(value, excludeColumns)
+	attribute, attributeKey, _ := ExtractMapValue(value, &excludeColumns, false)
 	attrSize := len(attribute)
 	modelType := reflect.TypeOf(value)
 	keys := FindDBColumNames(modelType)
@@ -117,6 +117,7 @@ type Statements interface {
 	Add(sql string, args []interface{}) Statements
 	Clear() Statements
 }
+
 func NewDefaultStatements(successFirst bool) *DefaultStatements {
 	stms := make([]Statement, 0)
 	s := &DefaultStatements{Statements: stms, SuccessFirst: successFirst}
@@ -125,6 +126,7 @@ func NewDefaultStatements(successFirst bool) *DefaultStatements {
 func NewStatements(successFirst bool) Statements {
 	return NewDefaultStatements(successFirst)
 }
+
 type DefaultStatements struct {
 	Statements   []Statement
 	SuccessFirst bool
