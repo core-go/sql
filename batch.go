@@ -168,7 +168,7 @@ func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDupl
 	for _, key := range SortedKeys(firstAttrs) {
 		dbColumns = append(dbColumns, QuoteColumnName(key))
 	}
-
+	var start int
 	for _, obj := range objects {
 		objAttrs, _, err := ExtractMapValue(obj, &excludeColumns, true)
 		if err != nil {
@@ -186,7 +186,8 @@ func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDupl
 		variables := make([]string, 0, attrSize)
 		for _, key := range SortedKeys(objAttrs) {
 			scope.Values = append(scope.Values, objAttrs[key])
-			variables = append(variables, "?")
+			variables = append(variables, BuildParametersFrom(start, 1, driverName))
+			start++
 		}
 
 		valueQuery := "(" + strings.Join(variables, ", ") + ")"
@@ -259,7 +260,7 @@ func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, sk
 	if err != nil {
 		return 0, err
 	}
-
+	var start int
 	for _, obj := range objects {
 		// Scope to eventually run SQL
 		mainScope := BatchStatement{}
@@ -281,7 +282,8 @@ func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, sk
 		variables := make([]string, 0, attrSize)
 		for _, key := range SortedKeys(objAttrs) {
 			scope.Values = append(scope.Values, objAttrs[key])
-			variables = append(variables, "?")
+			variables = append(variables, BuildParametersFrom(start, 1, driver))
+			start++
 		}
 
 		valueQuery := "(" + strings.Join(variables, ", ") + ")"
