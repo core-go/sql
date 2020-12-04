@@ -22,6 +22,19 @@ func Upsert(db *sql.DB, table string, model interface{}) (int64, error) {
 
 }
 
+func UpsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
+	query, values, err0 := BuildUpsert(db, table, model)
+	if err0 != nil {
+		return -1, err0
+	}
+	stmt, err1 := tx.Prepare(query)
+	if err1 != nil {
+		return -1, err1
+	}
+	defer stmt.Close()
+	return Exec(stmt, values...)
+}
+
 func BuildUpsert(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
 	placeholders := make([]string, 0)
 	exclude := make([]string, 0)
@@ -140,35 +153,37 @@ func BuildUpsert(db *sql.DB, table string, model interface{}) (string, []interfa
 
 	case "oracle":
 		uniqueCols := make([]string, 0)
+		inColumns := make([]string, 0)
 		value := make([]interface{}, 0, len(attrs)*2)
 		insertCols := make([]string, 0)
 		for v, key := range sorted {
 			value = append(value, attrs[key])
-			tkey := `'` + strings.Replace(key, `'`, `''`, -1) + `'`
+			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
 			setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
-			//dbColumns = append(dbColumns, "temp."+tkey)
-			variables = append(variables, fmt.Sprintf(":%d "+key, v))
+			inColumns = append(inColumns, "temp."+key)
+			variables = append(variables, fmt.Sprintf(":%d "+tkey, v))
 			insertCols = append(insertCols, tkey)
 		}
 		for key, val := range unique {
-			tkey := `'` + strings.Replace(key, `'`, `''`, -1) + `'`
+			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
 			onDupe := "a." + tkey + " = " + "temp." + tkey
 			uniqueCols = append(uniqueCols, onDupe)
-			variables = append(variables, fmt.Sprintf(":"+key))
+			variables = append(variables, fmt.Sprintf(":%s "+tkey, key))
+			inColumns = append(inColumns, "temp."+key)
 			value = append(value, val)
 			insertCols = append(insertCols, tkey)
 		}
-		for _, key := range sorted {
-			value = append(value, attrs[key])
-		}
+		//for _, key := range sorted {
+		//	value = append(value, attrs[key])
+		//}
 
-		queryString := fmt.Sprintf("MERGE INTO %s a USING (SELECT %s FROM dual) temp ON  (%s) WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
+		queryString := fmt.Sprintf("MERGE INTO %s a USING (SELECT %s FROM dual) temp ON  (%s) WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s)",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
 			strings.Join(variables, ", "),
 			strings.Join(uniqueCols, " AND "),
 			strings.Join(setColumns, ", "),
 			strings.Join(insertCols, ", "),
-			strings.Join(variables, ", "),
+			strings.Join(inColumns, ", "),
 		)
 		return queryString, value, nil
 

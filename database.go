@@ -235,16 +235,35 @@ func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 	return result.RowsAffected()
 }
 
-func Update(db *sql.DB, table string, model interface{}) (int64, error) {
-	driverName := GetDriver(db)
-	query, values := BuildUpdateSql(table, model, 0, driverName)
-
-	result, err := db.Exec(query, values...)
+func Exec(stmt *sql.Stmt, values ...interface{}) (int64, error) {
+	result, err := stmt.Exec(values...)
 
 	if err != nil {
 		return -1, err
 	}
 	return result.RowsAffected()
+}
+
+func Update(db *sql.DB, table string, model interface{}) (int64, error) {
+	driverName := GetDriver(db)
+	query, values := BuildUpdateSql(table, model, 0, driverName)
+	stmt, err0 := db.Prepare(query)
+	if err0!=nil{
+		return -1, err0
+	}
+	defer stmt.Close()
+	return Exec(stmt, values...)
+}
+
+func UpdateTx(db *sql.DB,tx *sql.Tx, table string, model interface{}) (int64, error) {
+	driverName := GetDriver(db)
+	query, values := BuildUpdateSql(table, model, 0, driverName)
+	stmt, err0 := tx.Prepare(query)
+	if err0!=nil{
+		return -1, err0
+	}
+	defer stmt.Close()
+	return Exec(stmt, values...)
 }
 
 func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex int) (int64, error) {
