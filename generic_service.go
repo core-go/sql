@@ -48,7 +48,7 @@ func (s *GenericService) Insert(ctx context.Context, model interface{}) (int64, 
 
 func (s *GenericService) Update(ctx context.Context, model interface{}) (int64, error) {
 	if s.Mapper != nil {
-		m2, err := s.Mapper.ModelToDb(ctx, model)
+		m2, err := s.Mapper.ModelToDb(ctx, &model)
 		if err != nil {
 			return 0, err
 		}
@@ -59,7 +59,7 @@ func (s *GenericService) Update(ctx context.Context, model interface{}) (int64, 
 
 func (s *GenericService) Upsert(ctx context.Context, model map[string]interface{}) (int64, error) {
 	if s.Mapper != nil {
-		m2, err := s.Mapper.ModelToDb(ctx, model)
+		m2, err := s.Mapper.ModelToDb(ctx, &model)
 		if err != nil {
 			return 0, err
 		}
@@ -80,7 +80,7 @@ func (s *GenericService) Delete(ctx context.Context, id interface{}) (int64, err
 
 func (s *GenericService) Patch(ctx context.Context, model map[string]interface{}) (int64, error) {
 	if s.Mapper != nil {
-		_, err := s.Mapper.ModelToDb(ctx, model)
+		_, err := s.Mapper.ModelToDb(ctx, &model)
 		if err != nil {
 			return 0, err
 		}

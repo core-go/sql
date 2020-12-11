@@ -47,11 +47,11 @@ func (s *ViewService) All(ctx context.Context) (interface{}, error) {
 	err := QueryWithType(s.Database, result, s.modelType, s.fieldsIndex, queryGetAll)
 	if err == nil {
 		if s.Mapper != nil {
-			r2, er2 := s.Mapper.DbToModels(ctx, result)
+			_, er2 := s.Mapper.DbToModels(ctx, result)
 			if er2 != nil {
 				return result, err
 			}
-			return r2, err
+			return result, err
 		}
 		return result, err
 	}
@@ -62,11 +62,11 @@ func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, e
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
 	r, err := QueryRow(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
 	if s.Mapper != nil {
-		r2, er2 := s.Mapper.DbToModel(ctx, r)
+		_, er2 := s.Mapper.DbToModel(ctx, &r)
 		if er2 != nil {
 			return r, er2
 		}
-		return r2, er2
+		return r, er2
 	}
 	return r, err
 }
@@ -112,7 +112,7 @@ func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result 
 	}
 	byteData, _ := json.Marshal(rowData)
 	err := json.Unmarshal(byteData, &result)
-	if err1 != nil{
+	if err1 != nil {
 		return false, err
 	}
 	//reflect.ValueOf(result).Elem().Set(reflect.ValueOf(rowData).Elem())
