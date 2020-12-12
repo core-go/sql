@@ -8,6 +8,10 @@ import (
 
 type DefaultMapper struct{}
 
+func NewMapper() *DefaultMapper {
+	return &DefaultMapper{}
+}
+
 func (d *DefaultMapper) DbToModel(ctx context.Context, model interface{}) (interface{}, error) {
 	var value reflect.Value
 	if val, ok := model.(reflect.Value); ok {
@@ -17,7 +21,7 @@ func (d *DefaultMapper) DbToModel(ctx context.Context, model interface{}) (inter
 		value = reflect.Indirect(reflect.ValueOf(m))
 	}
 	if value.Kind() == reflect.Struct {
-		d.doDbToModel(value)
+		DbToModel(value)
 	}
 	return model, nil
 }
@@ -48,7 +52,7 @@ func (d *DefaultMapper) ModelToDb(ctx context.Context, model interface{}) (inter
 		}
 	}
 	if value.Kind() == reflect.Struct {
-		d.doModelToDb(value)
+		ModelToDb(value)
 	}
 	return model, nil
 }
@@ -67,7 +71,7 @@ func (d *DefaultMapper) ModelsToDb(ctx context.Context, models interface{}) (int
 	return models, nil
 }
 
-func (d *DefaultMapper) doDbToModel(value reflect.Value) {
+func DbToModel(value reflect.Value) {
 	mapTag := GetIndexTagFields("field", value.Type())
 	for i, fieldName := range mapTag {
 		j := GetIndexField(fieldName, "col", value.Type())
@@ -81,7 +85,7 @@ func (d *DefaultMapper) doDbToModel(value reflect.Value) {
 	}
 }
 
-func (d *DefaultMapper) doModelToDb(value reflect.Value) {
+func ModelToDb(value reflect.Value) {
 	mapTag := GetIndexTagFields("col", value.Type())
 	for i, fieldName := range mapTag {
 		j := GetIndexField(fieldName, "field", value.Type())
