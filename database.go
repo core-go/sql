@@ -191,19 +191,34 @@ func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
 
 	result, err := db.Exec(queryInsert, values...)
 	if err != nil {
-		x := err.Error()
-		driverName := GetDriver(db)
-		if driverName == DriverPostgres && strings.Contains(x, "pq: duplicate key value violates unique constraint") {
-			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
-		} else if driverName == DriverMysql && strings.Contains(x, "Error 1062: Duplicate entry") {
-			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driverName == DriverOracle && strings.Contains(x, "ORA-00001: unique constraint") {
-			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driverName == DriverMssql && strings.Contains(x, "Violation of PRIMARY KEY constraint") {
-			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-		} else {
-			return 0, err
+		if err != nil {
+			return handleDuplicate(db, err)
 		}
+	}
+	return result.RowsAffected()
+}
+
+func handleDuplicate(db *sql.DB, err error) (int64, error) {
+	x := err.Error()
+	driverName := GetDriver(db)
+	if driverName == DriverPostgres && strings.Contains(x, "pq: duplicate key value violates unique constraint") {
+		return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
+	} else if driverName == DriverMysql && strings.Contains(x, "Error 1062: Duplicate entry") {
+		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+	} else if driverName == DriverOracle && strings.Contains(x, "ORA-00001: unique constraint") {
+		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+	} else if driverName == DriverMssql && strings.Contains(x, "Violation of PRIMARY KEY constraint") {
+		return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+	}
+	return 0, err
+}
+
+func InsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
+	var driverName = GetDriver(db)
+	queryInsert, values := BuildInsertSql(table, model, 0, driverName)
+	result, err := tx.Exec(queryInsert, values...)
+	if err != nil {
+       return handleDuplicate(db, err)
 	}
 	return result.RowsAffected()
 }
@@ -235,6 +250,7 @@ func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 	return result.RowsAffected()
 }
 
+
 func Exec(stmt *sql.Stmt, values ...interface{}) (int64, error) {
 	result, err := stmt.Exec(values...)
 
@@ -247,23 +263,21 @@ func Exec(stmt *sql.Stmt, values ...interface{}) (int64, error) {
 func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 	driverName := GetDriver(db)
 	query, values := BuildUpdateSql(table, model, 0, driverName)
-	stmt, err0 := db.Prepare(query)
+	r, err0 := db.Exec(query, values...)
 	if err0!=nil{
 		return -1, err0
 	}
-	defer stmt.Close()
-	return Exec(stmt, values...)
+	return r.RowsAffected()
 }
 
 func UpdateTx(db *sql.DB,tx *sql.Tx, table string, model interface{}) (int64, error) {
 	driverName := GetDriver(db)
 	query, values := BuildUpdateSql(table, model, 0, driverName)
-	stmt, err0 := tx.Prepare(query)
+	r, err0 := tx.Exec(query, values...)
 	if err0!=nil{
 		return -1, err0
 	}
-	defer stmt.Close()
-	return Exec(stmt, values...)
+	return r.RowsAffected()
 }
 
 func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex int) (int64, error) {
