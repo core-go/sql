@@ -27,12 +27,11 @@ func UpsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, e
 	if err0 != nil {
 		return -1, err0
 	}
-	stmt, err1 := tx.Prepare(query)
+	r, err1 := tx.Exec(query, values...)
 	if err1 != nil {
 		return -1, err1
 	}
-	defer stmt.Close()
-	return Exec(stmt, values...)
+	return r.RowsAffected()
 }
 
 func BuildUpsert(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
@@ -159,6 +158,7 @@ func BuildUpsert(db *sql.DB, table string, model interface{}) (string, []interfa
 		for v, key := range sorted {
 			value = append(value, attrs[key])
 			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+			tkey = strings.ToUpper(tkey)
 			setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
 			inColumns = append(inColumns, "temp."+key)
 			variables = append(variables, fmt.Sprintf(":%d "+tkey, v))
@@ -166,6 +166,7 @@ func BuildUpsert(db *sql.DB, table string, model interface{}) (string, []interfa
 		}
 		for key, val := range unique {
 			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+			tkey = strings.ToUpper(tkey)
 			onDupe := "a." + tkey + " = " + "temp." + tkey
 			uniqueCols = append(uniqueCols, onDupe)
 			variables = append(variables, fmt.Sprintf(":%s "+tkey, key))
