@@ -113,6 +113,101 @@ func TransactionInsertMany(db *sql.DB, tableName string, objects []interface{}, 
 	return c, nil
 }
 
+func InsertInTransactionTx(db *sql.DB, tx *sql.Tx, tableName string, objects interface{}, skipDuplicate bool, excludeColumns ...string) (int64, error) {
+	objectValues := reflect.Indirect(reflect.ValueOf(objects))
+	if objectValues.Kind() == reflect.Slice {
+		if objectValues.Len() == 0 {
+			return 0, nil
+		}
+		driver := GetDriver(db)
+		firstObj := objectValues.Index(0).Interface()
+		columns, primaryKeys, err := ExtractMapValue(firstObj, &excludeColumns, true)
+		if err != nil {
+			return 0, err
+		}
+		// append primaryKey
+		for key, value := range primaryKeys {
+			columns[key] = value
+		}
+		modelType := reflect.TypeOf(objectValues.Index(0).Interface())
+		pkey := FindIdFields(modelType)
+		attrSize := len(columns)
+		// Replace with database column name
+		dbColumns := make([]string, 0, attrSize)
+		for _, key := range SortedKeys(columns) {
+			dbColumns = append(dbColumns, QuoteColumnName(key))
+		}
+		var start int
+		for i := 0; i < objectValues.Len(); i++ {
+			obj := objectValues.Index(i).Interface()
+			// Store placeholders for embedding variables
+			placeholders := make([]string, 0, attrSize)
+			objAttrs, primaryKeys, err := ExtractMapValue(obj, &excludeColumns, true)
+			if err != nil {
+				return 0, err
+			}
+			// append primaryKey
+			for key, value := range primaryKeys {
+				objAttrs[key] = value
+			}
+			// If object sizes are different, SQL statement loses consistency
+			if len(objAttrs) != attrSize {
+				return 0, errors.New("attribute sizes are inconsistent")
+			}
+			scope := BatchStatement{}
+			// Append variables
+			variables := make([]string, 0, attrSize)
+			for _, key := range SortedKeys(objAttrs) {
+				scope.Values = append(scope.Values, objAttrs[key])
+				variables = append(variables, BuildParametersFrom(start, 1, driver))
+				start++
+			}
+
+			valueQuery := "(" + strings.Join(variables, ", ") + ")"
+			placeholders = append(placeholders, valueQuery)
+			var query string
+			if skipDuplicate {
+				if driver == DriverPostgres {
+					query = fmt.Sprintf("insert into %s (%s) values %s on conflict do nothing",
+						tableName,
+						strings.Join(dbColumns, ", "),
+						strings.Join(placeholders, ", "),
+					)
+
+				} else if driver == DriverMysql {
+					var qKey []string
+					for _, i2 := range pkey {
+						key := i2 + " = " + i2
+						qKey = append(qKey, key)
+					}
+					query = fmt.Sprintf("insert into %s (%s) values %s on duplicate key update %s",
+						tableName,
+						strings.Join(dbColumns, ", "),
+						strings.Join(placeholders, ", "),
+						strings.Join(qKey, ", "),
+					)
+				} else {
+					return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driver)
+				}
+			} else {
+				query = fmt.Sprintf("insert into %s (%s) values %s",
+					tableName,
+					strings.Join(dbColumns, ", "),
+					strings.Join(placeholders, ", "),
+				)
+			}
+			_, execErr := tx.Exec(query, scope.Values...)
+			if execErr != nil {
+				_ = tx.Rollback()
+				return 0, execErr
+			}
+		}
+		count := objectValues.Len()
+		return int64(count), err
+	}
+	return 0, fmt.Errorf("Objects must be slice.")
+}
+
 // Separate objects into several size
 func splitObjects(objArr []interface{}, size int) [][]interface{} {
 	var chunkSet [][]interface{}
