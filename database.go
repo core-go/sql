@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	DBName     = "column"
-	PrimaryKey = "primary_key"
+	DBName          = "column"
+	PrimaryKey      = "primary_key"
+	IgnoreReadWrite = "-"
 
 	DriverPostgres   = "postgres"
 	DriverMysql      = "mysql"
@@ -218,7 +219,7 @@ func InsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, e
 	queryInsert, values := BuildInsertSql(table, model, 0, driverName)
 	result, err := tx.Exec(queryInsert, values...)
 	if err != nil {
-       return handleDuplicate(db, err)
+		return handleDuplicate(db, err)
 	}
 	return result.RowsAffected()
 }
@@ -250,7 +251,6 @@ func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 	return result.RowsAffected()
 }
 
-
 func Exec(stmt *sql.Stmt, values ...interface{}) (int64, error) {
 	result, err := stmt.Exec(values...)
 
@@ -264,17 +264,17 @@ func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 	driverName := GetDriver(db)
 	query, values := BuildUpdateSql(table, model, 0, driverName)
 	r, err0 := db.Exec(query, values...)
-	if err0!=nil{
+	if err0 != nil {
 		return -1, err0
 	}
 	return r.RowsAffected()
 }
 
-func UpdateTx(db *sql.DB,tx *sql.Tx, table string, model interface{}) (int64, error) {
+func UpdateTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
 	driverName := GetDriver(db)
 	query, values := BuildUpdateSql(table, model, 0, driverName)
 	r, err0 := tx.Exec(query, values...)
-	if err0!=nil{
+	if err0 != nil {
 		return -1, err0
 	}
 	return r.RowsAffected()
@@ -567,6 +567,9 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 	var attrsKey = map[string]interface{}{}
 
 	for _, field := range GetMapField(value) {
+		if GetTag(field, IgnoreReadWrite) == IgnoreReadWrite {
+			continue
+		}
 		if value := field.Value.Interface(); value == nil && ignoreNull {
 			*excludeColumns = append(*excludeColumns, field.Tags["fieldName"])
 		}

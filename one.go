@@ -113,7 +113,9 @@ func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}
 func CheckByIndex(modelType reflect.Type, index int, update bool) (col string, isKey bool, colExist bool) {
 	fields := modelType.Field(index)
 	tag, _ := fields.Tag.Lookup("gorm")
-
+	if strings.Contains(tag, IgnoreReadWrite) {
+		return "", false, false
+	}
 	if update {
 		if strings.Contains(tag, "updateable:false") {
 			return "", false, false
