@@ -13,14 +13,17 @@ type SqlHealthChecker struct {
 	timeout time.Duration
 }
 
-func NewHealthCheckerWithTimeout(db *sql.DB, name string, timeout time.Duration) *SqlHealthChecker {
+func NewHealthChecker(db *sql.DB, name string, timeout time.Duration) *SqlHealthChecker {
 	return &SqlHealthChecker{db, name, timeout}
 }
-func NewSqlHealthChecker(db *sql.DB, name string) *SqlHealthChecker {
-	return NewHealthCheckerWithTimeout(db, name, 4 * time.Second)
-}
-func NewHealthChecker(db *sql.DB) *SqlHealthChecker {
-	return NewHealthCheckerWithTimeout(db, "sql", 4 * time.Second)
+func NewSqlHealthChecker(db *sql.DB, options ...string) *SqlHealthChecker {
+	var name string
+	if len(options) >= 1 && len(options[0]) > 0 {
+		name = options[0]
+	} else {
+		name = "sql"
+	}
+	return NewHealthChecker(db, name, 4 * time.Second)
 }
 
 func (s *SqlHealthChecker) Name() string {
