@@ -22,7 +22,11 @@ type ViewService struct {
 	table             string
 }
 
-func NewViewServiceWithMapper(db *sql.DB, modelType reflect.Type, tableName string, mapper Mapper) *ViewService {
+func NewViewService(db *sql.DB, modelType reflect.Type, tableName string, options ...Mapper) *ViewService {
+	var mapper Mapper
+	if len(options) >= 1 {
+		mapper = options[0]
+	}
 	_, idNames := FindNames(modelType)
 	mapJsonColumnKeys := MapJsonColumn(modelType)
 	modelsType := reflect.Zero(reflect.SliceOf(modelType)).Type()
@@ -31,10 +35,6 @@ func NewViewServiceWithMapper(db *sql.DB, modelType reflect.Type, tableName stri
 		panic(er0)
 	}
 	return &ViewService{db, mapper, modelType, modelsType, idNames, mapJsonColumnKeys, fieldsIndex, tableName}
-}
-
-func NewViewService(db *sql.DB, modelType reflect.Type, tableName string) *ViewService {
-	return NewViewServiceWithMapper(db, modelType, tableName, nil)
 }
 
 func (s *ViewService) Keys() []string {

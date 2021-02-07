@@ -14,8 +14,12 @@ type GenericService struct {
 	versionDBField string
 }
 
-func NewGenericServiceWithVersionAndMapper(db *sql.DB, modelType reflect.Type, tableName string, versionField string, mapper Mapper) *GenericService {
-	defaultViewService := NewViewServiceWithMapper(db, modelType, tableName, mapper)
+func NewGenericServiceWithVersion(db *sql.DB, modelType reflect.Type, tableName string, versionField string, options ...Mapper) *GenericService {
+	var mapper Mapper
+	if len(options) >= 1 {
+		mapper = options[0]
+	}
+	defaultViewService := NewViewService(db, modelType, tableName, mapper)
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
 		if index >= 0 {
@@ -28,11 +32,12 @@ func NewGenericServiceWithVersionAndMapper(db *sql.DB, modelType reflect.Type, t
 	}
 	return &GenericService{defaultViewService, versionField, -1, ""}
 }
-func NewGenericServiceWithVersion(db *sql.DB, modelType reflect.Type, tableName string, versionField string) *GenericService {
-	return NewGenericServiceWithVersionAndMapper(db, modelType, tableName, versionField, nil)
-}
-func NewGenericService(db *sql.DB, modelType reflect.Type, tableName string) *GenericService {
-	return NewGenericServiceWithVersionAndMapper(db, modelType, tableName, "", nil)
+func NewGenericService(db *sql.DB, modelType reflect.Type, tableName string, options ...Mapper) *GenericService {
+	var mapper Mapper
+	if len(options) >= 1 {
+		mapper = options[0]
+	}
+	return NewGenericServiceWithVersion(db, modelType, tableName, "", mapper)
 }
 
 func (s *GenericService) Insert(ctx context.Context, model interface{}) (int64, error) {
