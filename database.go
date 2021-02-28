@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -103,7 +104,7 @@ func BuildDataSourceName(c DatabaseConfig) string {
 	}
 }
 
-// for ViewService
+// for Loader
 
 func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
 	var where = ""
@@ -931,4 +932,27 @@ func ReplaceQueryArgs(driver string, query string) string {
 		}
 	}
 	return query
+}
+
+func MapModels(ctx context.Context, models interface{}, mp func(context.Context, interface{}) (interface{}, error)) (interface{}, error) {
+	valueModelObject := reflect.Indirect(reflect.ValueOf(models))
+	if valueModelObject.Kind() == reflect.Ptr {
+		valueModelObject = reflect.Indirect(valueModelObject)
+	}
+	if valueModelObject.Kind() == reflect.Slice {
+		le := valueModelObject.Len()
+		for i := 0; i < le; i++ {
+			x := valueModelObject.Index(i)
+			k := x.Kind()
+			if k == reflect.Struct {
+				y := x.Addr().Interface()
+				mp(ctx, y)
+			} else  {
+				y := x.Interface()
+				mp(ctx, y)
+			}
+
+		}
+	}
+	return models, nil
 }

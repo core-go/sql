@@ -11,9 +11,9 @@ import (
 	"strings"
 )
 
-type ViewService struct {
+type Loader struct {
 	Database          *sql.DB
-	Mapper            Mapper
+	Map               func(ctx context.Context, model interface{}) (interface{}, error)
 	modelType         reflect.Type
 	modelsType        reflect.Type
 	keys              []string
@@ -22,10 +22,10 @@ type ViewService struct {
 	table             string
 }
 
-func NewViewService(db *sql.DB, modelType reflect.Type, tableName string, options ...Mapper) *ViewService {
-	var mapper Mapper
+func NewLoader(db *sql.DB, modelType reflect.Type, tableName string, options ...func(context.Context, interface{}) (interface{}, error)) *Loader {
+	var mp func(ctx context.Context, model interface{}) (interface{}, error)
 	if len(options) >= 1 {
-		mapper = options[0]
+		mp = options[0]
 	}
 	_, idNames := FindNames(modelType)
 	mapJsonColumnKeys := MapJsonColumn(modelType)
@@ -34,35 +34,31 @@ func NewViewService(db *sql.DB, modelType reflect.Type, tableName string, option
 	if er0 != nil {
 		panic(er0)
 	}
-	return &ViewService{db, mapper, modelType, modelsType, idNames, mapJsonColumnKeys, fieldsIndex, tableName}
+	return &Loader{db, mp, modelType, modelsType, idNames, mapJsonColumnKeys, fieldsIndex, tableName}
 }
 
-func (s *ViewService) Keys() []string {
+func (s *Loader) Keys() []string {
 	return s.keys
 }
 
-func (s *ViewService) All(ctx context.Context) (interface{}, error) {
+func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	queryGetAll := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
 	err := QueryWithType(s.Database, result, s.modelType, s.fieldsIndex, queryGetAll)
 	if err == nil {
-		if s.Mapper != nil {
-			r , er2 := s.Mapper.DbToModels(ctx, result)
-			if er2 != nil {
-				return nil, err
-			}
-			return r, err
+		if s.Map != nil {
+			return MapModels(ctx, result, s.Map)
 		}
 		return result, err
 	}
 	return result, err
 }
 
-func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, error) {
+func (s *Loader) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
 	r, err := QueryRow(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
-	if s.Mapper != nil {
-		_, er2 := s.Mapper.DbToModel(ctx, &r)
+	if s.Map != nil {
+		_, er2 := s.Map(ctx, &r)
 		if er2 != nil {
 			return r, er2
 		}
@@ -71,7 +67,7 @@ func (s *ViewService) Load(ctx context.Context, ids interface{}) (interface{}, e
 	return r, err
 }
 
-func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
+func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 	var count int32
 	var where string
 	var driver = GetDriver(s.Database)
@@ -103,7 +99,7 @@ func (s *ViewService) Exist(ctx context.Context, id interface{}) (bool, error) {
 	}
 }
 
-func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
+func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
 	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys)
 	rowData, err1 := QueryRow(s.Database, s.modelType, s.fieldsIndex, sql, values...)
@@ -112,12 +108,12 @@ func (s *ViewService) LoadAndDecode(ctx context.Context, id interface{}, result 
 	}
 	byteData, _ := json.Marshal(rowData)
 	err := json.Unmarshal(byteData, &result)
-	if err1 != nil{
+	if err1 != nil {
 		return false, err
 	}
 	//reflect.ValueOf(result).Elem().Set(reflect.ValueOf(rowData).Elem())
-	if s.Mapper != nil {
-		_, er3 := s.Mapper.DbToModel(ctx, result)
+	if s.Map != nil {
+		_, er3 := s.Map(ctx, result)
 		if er3 != nil {
 			return true, er3
 		}

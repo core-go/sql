@@ -7,19 +7,20 @@ import (
 	"strings"
 )
 
-type GenericService struct {
-	*ViewService
+type Writer struct {
+	*Loader
+	Mapper         Mapper
 	versionField   string
 	versionIndex   int
 	versionDBField string
 }
 
-func NewGenericServiceWithVersion(db *sql.DB, modelType reflect.Type, tableName string, versionField string, options ...Mapper) *GenericService {
+func NewWriterWithVersion(db *sql.DB, modelType reflect.Type, tableName string, versionField string, options ...Mapper) *Writer {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
-	defaultViewService := NewViewService(db, modelType, tableName, mapper)
+	defaultViewService := NewLoader(db, modelType, tableName, mapper.DbToModel)
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
 		if index >= 0 {
@@ -27,21 +28,21 @@ func NewGenericServiceWithVersion(db *sql.DB, modelType reflect.Type, tableName 
 			if !exist {
 				dbFieldName = strings.ToLower(versionField)
 			}
-			return &GenericService{ViewService: defaultViewService, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
+			return &Writer{Loader: defaultViewService, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
 		}
 	}
-	return &GenericService{defaultViewService, versionField, -1, ""}
+	return &Writer{defaultViewService, mapper, versionField, -1, ""}
 }
-func NewGenericService(db *sql.DB, modelType reflect.Type, tableName string, options ...Mapper) *GenericService {
+func NewWriter(db *sql.DB, modelType reflect.Type, tableName string, options ...Mapper) *Writer {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
-	return NewGenericServiceWithVersion(db, modelType, tableName, "", mapper)
+	return NewWriterWithVersion(db, modelType, tableName, "", mapper)
 }
 
-func (s *GenericService) Insert(ctx context.Context, model interface{}) (int64, error) {
-	if s.Mapper != nil {
+func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
+	if s.Map != nil {
 		m2, err := s.Mapper.ModelToDb(ctx, model)
 		if err != nil {
 			return 0, err
@@ -51,8 +52,8 @@ func (s *GenericService) Insert(ctx context.Context, model interface{}) (int64, 
 	return Insert(s.Database, s.table, model)
 }
 
-func (s *GenericService) Update(ctx context.Context, model interface{}) (int64, error) {
-	if s.Mapper != nil {
+func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
+	if s.Map != nil {
 		m2, err := s.Mapper.ModelToDb(ctx, &model)
 		if err != nil {
 			return 0, err
@@ -62,8 +63,8 @@ func (s *GenericService) Update(ctx context.Context, model interface{}) (int64, 
 	return Update(s.Database, s.table, model)
 }
 
-func (s *GenericService) Upsert(ctx context.Context, model map[string]interface{}) (int64, error) {
-	if s.Mapper != nil {
+func (s *Writer) Upsert(ctx context.Context, model map[string]interface{}) (int64, error) {
+	if s.Map != nil {
 		m2, err := s.Mapper.ModelToDb(ctx, &model)
 		if err != nil {
 			return 0, err
@@ -73,7 +74,7 @@ func (s *GenericService) Upsert(ctx context.Context, model map[string]interface{
 	return Upsert(s.Database, s.table, model)
 }
 
-func (s *GenericService) Delete(ctx context.Context, id interface{}) (int64, error) {
+func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
 	l := len(s.keys)
 	if l == 1 {
 		return Delete(s.Database, s.table, BuildQueryById(id, s.modelType, s.keys[0]))
@@ -83,8 +84,8 @@ func (s *GenericService) Delete(ctx context.Context, id interface{}) (int64, err
 	}
 }
 
-func (s *GenericService) Patch(ctx context.Context, model map[string]interface{}) (int64, error) {
-	if s.Mapper != nil {
+func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64, error) {
+	if s.Map != nil {
 		_, err := s.Mapper.ModelToDb(ctx, &model)
 		if err != nil {
 			return 0, err

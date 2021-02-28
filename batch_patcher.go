@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type SqlBatchPatch struct {
+type BatchPatcher struct {
 	db          *sql.DB
 	tableName   string
 	IdNames     []string
@@ -16,19 +16,21 @@ type SqlBatchPatch struct {
 	modelsTypes reflect.Type
 }
 
-func NewSqlBatchPatchWithIdName(database *sql.DB, tableName string, modelType reflect.Type, fieldName []string) *SqlBatchPatch {
+func NewBatchPatcher(db *sql.DB, tableName string, modelType reflect.Type) *BatchPatcher {
+	return NewBatchPatcherWithIds(db, tableName, modelType, nil)
+}
+func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type, fieldName []string) *BatchPatcher {
 	modelsTypes := reflect.Zero(reflect.SliceOf(modelType)).Type()
 	idJsonName := make([]string, 0)
-	if len(fieldName) == 0 {
+	if fieldName == nil || len(fieldName) == 0 {
 		fieldName, idJsonName = FindNames(modelType)
 	}
-	return &SqlBatchPatch{database, tableName, fieldName, idJsonName, modelType, modelsTypes}
+	return &BatchPatcher{db: db, tableName: tableName, IdNames: fieldName, IdJsonName: idJsonName, modelsType: modelType, modelsTypes: modelsTypes}
 }
 
-func (w *SqlBatchPatch) WriteBatch(ctx context.Context, models []map[string]interface{}) ([]int, []int, error) {
+func (w *BatchPatcher) Write(ctx context.Context, models []map[string]interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
 	failIndices := make([]int, 0)
-
 	_, err := PatchMaps(w.db, w.tableName, models, w.IdNames, w.IdJsonName)
 
 	if err == nil {
@@ -76,7 +78,7 @@ func FindNames(modelType reflect.Type) ([]string, []string) {
 
 func FindJsonName(modelType reflect.Type) map[string]string {
 	numField := modelType.NumField()
-	 mapJsonColumn  := make(map[string]string)
+	mapJsonColumn := make(map[string]string)
 	for i := 0; i < numField; i++ {
 		field := modelType.Field(i)
 		ormTag := field.Tag.Get("gorm")
@@ -91,4 +93,3 @@ func FindJsonName(modelType reflect.Type) map[string]string {
 	}
 	return mapJsonColumn
 }
-
