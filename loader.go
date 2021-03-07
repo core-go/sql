@@ -22,7 +22,7 @@ type Loader struct {
 	table             string
 }
 
-func NewLoader(db *sql.DB, modelType reflect.Type, tableName string, options ...func(context.Context, interface{}) (interface{}, error)) *Loader {
+func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) *Loader {
 	var mp func(ctx context.Context, model interface{}) (interface{}, error)
 	if len(options) >= 1 {
 		mp = options[0]

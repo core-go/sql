@@ -15,12 +15,17 @@ type Writer struct {
 	versionDBField string
 }
 
-func NewWriterWithVersion(db *sql.DB, modelType reflect.Type, tableName string, versionField string, options ...Mapper) *Writer {
+func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, options ...Mapper) *Writer {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
-	defaultViewService := NewLoader(db, modelType, tableName, mapper.DbToModel)
+	var loader *Loader
+	if mapper != nil {
+		loader = NewLoader(db, tableName, modelType, mapper.DbToModel)
+	} else {
+		loader = NewLoader(db, tableName, modelType)
+	}
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
 		if index >= 0 {
@@ -28,21 +33,21 @@ func NewWriterWithVersion(db *sql.DB, modelType reflect.Type, tableName string, 
 			if !exist {
 				dbFieldName = strings.ToLower(versionField)
 			}
-			return &Writer{Loader: defaultViewService, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
+			return &Writer{Loader: loader, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
 		}
 	}
-	return &Writer{defaultViewService, mapper, versionField, -1, ""}
+	return &Writer{loader, mapper, versionField, -1, ""}
 }
-func NewWriter(db *sql.DB, modelType reflect.Type, tableName string, options ...Mapper) *Writer {
+func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) *Writer {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
-	return NewWriterWithVersion(db, modelType, tableName, "", mapper)
+	return NewWriterWithVersion(db, tableName, modelType, "", mapper)
 }
 
 func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
-	if s.Map != nil {
+	if s.Mapper != nil {
 		m2, err := s.Mapper.ModelToDb(ctx, model)
 		if err != nil {
 			return 0, err
@@ -53,7 +58,7 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 }
 
 func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
-	if s.Map != nil {
+	if s.Mapper != nil {
 		m2, err := s.Mapper.ModelToDb(ctx, &model)
 		if err != nil {
 			return 0, err
@@ -63,8 +68,8 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 	return Update(s.Database, s.table, model)
 }
 
-func (s *Writer) Upsert(ctx context.Context, model map[string]interface{}) (int64, error) {
-	if s.Map != nil {
+func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64, error) {
+	if s.Mapper != nil {
 		m2, err := s.Mapper.ModelToDb(ctx, &model)
 		if err != nil {
 			return 0, err
@@ -85,7 +90,7 @@ func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
 }
 
 func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64, error) {
-	if s.Map != nil {
+	if s.Mapper != nil {
 		_, err := s.Mapper.ModelToDb(ctx, &model)
 		if err != nil {
 			return 0, err

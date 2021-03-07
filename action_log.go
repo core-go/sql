@@ -28,19 +28,15 @@ type ActionLogConfig struct {
 }
 
 type ActionLogWriter struct {
-	Database  *sql.DB
-	Table     string
-	Config    ActionLogConfig
-	Schema    ActionLogSchema
-	Generator IdGenerator
-	Driver    string
+	Database *sql.DB
+	Table    string
+	Config   ActionLogConfig
+	Schema   ActionLogSchema
+	Generate func(ctx context.Context) (string, error)
+	Driver   string
 }
 
-type IdGenerator interface {
-	Generate(ctx context.Context) (string, error)
-}
-
-func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConfig, s ActionLogSchema, generator IdGenerator) *ActionLogWriter {
+func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConfig, s ActionLogSchema, generate func(ctx context.Context) (string, error)) *ActionLogWriter {
 	s.Id = strings.ToLower(s.Id)
 	s.User = strings.ToLower(s.User)
 	s.Resource = strings.ToLower(s.Resource)
@@ -70,7 +66,7 @@ func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConf
 	if len(s.Desc) == 0 {
 		s.Desc = "desc"
 	}
-	writer := ActionLogWriter{Database: database, Table: tableName, Config: config, Schema: s, Generator: generator, Driver: driver}
+	writer := ActionLogWriter{Database: database, Table: tableName, Config: config, Schema: s, Generate: generate, Driver: driver}
 	return &writer
 }
 
@@ -92,8 +88,8 @@ func (s *ActionLogWriter) Write(ctx context.Context, resource string, action str
 	if len(ch.Ip) > 0 {
 		log[ch.Ip] = GetString(ctx, s.Config.Ip)
 	}
-	if s.Generator != nil {
-		id, er0 := s.Generator.Generate(ctx)
+	if s.Generate != nil {
+		id, er0 := s.Generate(ctx)
 		if er0 == nil && len(id) > 0 {
 			log[ch.Id] = id
 		}
