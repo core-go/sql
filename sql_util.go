@@ -15,6 +15,8 @@ func GetDriver(db *sql.DB) string {
 	switch driver {
 	case "*pq.Driver":
 		return DriverPostgres
+	case "*sqlite3.SQLiteDriver":
+		return DriverSqlite3
 	case "*mysql.MySQLDriver":
 		return DriverMysql
 	case "*mssql.Driver":
@@ -124,7 +126,7 @@ func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sq
 	if driver == DriverOracle {
 		strSQL = "AND ROWNUM = 1"
 	}
-	s := sql+" "+strSQL
+	s := sql + " " + strSQL
 	stm, err := db.Prepare(s)
 	if err != nil {
 		return nil, err

@@ -28,7 +28,7 @@ func Find(slice []string, val string) (int, bool) {
 	return -1, false
 }
 
-func BuildInsertSql(table string, model interface{}, i int, driverName string) (string, []interface{}) {
+func BuildInsertSql(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
 	mapData, mapPrimaryKeyValue, keys := BuildMapDataAndKeys(model, false)
 	var cols []string
 	var values []interface{}
@@ -44,11 +44,11 @@ func BuildInsertSql(table string, model interface{}, i int, driverName string) (
 	}
 	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
 	numCol := len(cols)
-	value := fmt.Sprintf("(%v)", BuildParametersFrom(i, numCol, driverName))
+	value := fmt.Sprintf("(%v)", BuildParametersFrom(i, numCol, buildParam))
 	return fmt.Sprintf("insert into %v %v values %v", table, column, value), values
 }
 
-func BuildInsertSqlWithVersion(table string, model interface{}, i int, driverName string, versionIndex int) (string, []interface{}) {
+func BuildInsertSqlWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version index not found")
 	}
@@ -73,7 +73,7 @@ func BuildInsertSqlWithVersion(table string, model interface{}, i int, driverNam
 	}
 	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
 	numCol := len(cols)
-	value := fmt.Sprintf("(%v)", BuildParametersFrom(i, numCol, driverName))
+	value := fmt.Sprintf("(%v)", BuildParametersFrom(i, numCol, buildParam))
 	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", table, column, value), values
 }
 
@@ -85,7 +85,6 @@ func QuoteColumnName(str string) string {
 	//	}
 	//	return strings.Join(newStrs, ".")
 	//}
-
 	return str
 }
 

@@ -9,15 +9,33 @@ import (
 )
 
 type StringService struct {
-	DB            *sql.DB
-	Table         string
-	Field         string
-	Driver        string
+	DB         *sql.DB
+	Table      string
+	Field      string
+	Sql        string
+	Driver     string
+	BuildParam func(i int) string
 }
 
-func NewStringService(db *sql.DB, table string, field string, questionParam bool) *StringService {
+func NewStringService(db *sql.DB, table string, field string, options ...func(i int) string) *StringService {
 	driver := GetDriver(db)
-	return &StringService{DB: db, Table: table, Field: field, Driver: driver}
+	var b func(i int) string
+	if len(options) > 0 {
+		b = options[0]
+	} else {
+		b = GetBuild(db)
+	}
+	var sql string
+	if driver == DriverPostgres {
+		sql = fmt.Sprintf("select %s from %s where %s ilike $1", field, table, field) + " fetch next %d rows only"
+	} else if driver == DriverOracle {
+		sql = fmt.Sprintf("select %s from %s where %s ilike :val1", field, table, field) + " fetch next %d rows only"
+	} else if driver == DriverSqlite3 {
+		sql = fmt.Sprintf("select %s from %s where %s like $1", field, table, field) + " limit %d"
+	} else {
+		sql = fmt.Sprintf("select %s from %s where %s like ?", field, table, field) + " limit %d"
+	}
+	return &StringService{DB: db, Table: table, Field: field, Sql: sql, Driver: driver, BuildParam: b}
 }
 
 func (s *StringService) Load(ctx context.Context, key string, max int64) ([]string, error) {
@@ -25,14 +43,7 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 	key = re.ReplaceAllString(key, "")
 	key = key + "%"
 	vs := make([]string, 0)
-	var sql string
-	if s.Driver == DriverPostgres {
-		sql = fmt.Sprintf("select %s from %s where %s ilike $1 fetch next %d rows only", s.Field, s.Table, s.Field, max)
-	} else if s.Driver == DriverOracle {
-		sql = fmt.Sprintf("select %s from %s where %s ilike :val1 fetch next %d rows only", s.Field, s.Table, s.Field, max)
-	} else {
-		sql = fmt.Sprintf("select %s from %s where %s like ? limit %d", s.Field, s.Table, s.Field, max)
-	}
+	sql := fmt.Sprintf(s.Sql, max)
 	rows, er1 := s.DB.Query(sql, key)
 	if er1 != nil {
 		return vs, er1
@@ -52,39 +63,38 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 
 func (s *StringService) Save(ctx context.Context, values []string) (int64, error) {
 	mainScope := BatchStatement{}
-	var placeholder []string
 	driver := s.Driver
 	for _, e := range values {
-		placeholder = append(placeholder, "(?)")
 		mainScope.Values = append(mainScope.Values, e)
 	}
 	query := ""
+	holders := BuildPlaceHolders(len(mainScope.Values), s.BuildParam)
 	if driver == DriverPostgres {
 		query = fmt.Sprintf("insert into %s (%s) values %s on conflict do nothing",
 			s.Table,
 			s.Field,
-			strings.Join(placeholder, ", "),
+			holders,
 		)
-	} else if driver == "sqlite3" {
+	} else if driver == DriverSqlite3 {
 		query = fmt.Sprintf("insert or ignore into %s (%s) values %s",
 			s.Table,
 			s.Field,
-			strings.Join(placeholder, ", "),
+			holders,
 		)
 	} else if driver == DriverMysql {
 		qKey := s.Field + " = " + s.Field
 		query = fmt.Sprintf("insert into %s (%s) values %s on duplicate key update %s",
 			s.Table,
 			s.Field,
-			strings.Join(placeholder, ", "),
+			holders,
 			qKey,
 		)
-	} else if driver == "mssql" {
+	} else if driver == DriverOracle || driver == DriverMssql {
 		onDupe := s.Table + "." + s.Field + " = " + "temp." + s.Field
 		value := "temp." + s.Field
 		query = fmt.Sprintf("merge into %s using (values %s) as temp (%s) on %s when not matched then insert (%s) values (%s);",
 			s.Table,
-			strings.Join(placeholder, ", "),
+			holders,
 			s.Field,
 			onDupe,
 			s.Field,
@@ -93,8 +103,6 @@ func (s *StringService) Save(ctx context.Context, values []string) (int64, error
 	} else {
 		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", driver)
 	}
-
-	query = ReplaceParameters(driver, query, len(mainScope.Values))
 	mainScope.Query = query
 	x, err := s.DB.Exec(mainScope.Query, mainScope.Values...)
 	if err != nil {
@@ -107,7 +115,7 @@ func (s *StringService) Delete(ctx context.Context, values []string) (int64, err
 	var arrValue []string
 	le := len(values)
 	for i := 1; i <= le; i++ {
-		param := BuildParam(i, s.Driver)
+		param := BuildParam(i)
 		arrValue = append(arrValue, param)
 	}
 	query := `delete from ` + s.Table + ` where ` + s.Field + ` in (` + strings.Join(arrValue, ",") + `)`

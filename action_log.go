@@ -100,7 +100,7 @@ func (s *ActionLogWriter) Write(ctx context.Context, resource string, action str
 			log[k] = v
 		}
 	}
-	query, vars := BuildInsertSQL(s.Database, s.Table, log, s.Driver)
+	query, vars := BuildInsertSQL(s.Database, s.Table, log)
 	_, err := s.Database.Exec(query, vars...)
 	return err
 }
@@ -132,7 +132,9 @@ func GetString(ctx context.Context, key string) string {
 	}
 	return ""
 }
-func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}, driver string) (string, []interface{}) {
+func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}) (string, []interface{}) {
+	driver := GetDriver(db)
+	buildParam := GetBuild(db)
 	var cols []string
 	var values []interface{}
 	for col, v := range model {
@@ -143,7 +145,7 @@ func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}, 
 	numCol := len(cols)
 	var arrValue []string
 	for i := 1; i <= numCol; i++ {
-		param := BuildParam(i, driver)
+		param := buildParam(i)
 		arrValue = append(arrValue, param)
 	}
 	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
@@ -151,24 +153,9 @@ func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}, 
 	return strSQL, values
 }
 
-func QuoteString( name string, driver string) string {
+func QuoteString(name string, driver string) string {
 	if driver == DriverPostgres {
-		name =	"`"+strings.Replace(name, "`", "``", -1)+"`"
+		name = "`" + strings.Replace(name, "`", "``", -1) + "`"
 	}
 	return name
-}
-func ReplaceParameters(driver string, query string, n int) string {
-	if driver == DriverOracle || driver == DriverPostgres {
-		var x string
-		if driver == DriverOracle {
-			x = ":val"
-		} else {
-			x = "$"
-		}
-		for i := 0; i < n; i++ {
-			count := i + 1
-			query = strings.Replace(query, "?", x+fmt.Sprintf("%v", count), 1)
-		}
-	}
-	return query
 }

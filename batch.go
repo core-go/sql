@@ -33,13 +33,15 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 		_ = tx.Rollback()
 		str := er1.Error()
 		if driver == DriverPostgres && strings.Contains(str, "pq: duplicate key value violates unique constraint") {
-			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
+			return 0, nil
 		} else if driver == DriverMysql && strings.Contains(str, "Error 1062: Duplicate entry") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 		} else if driver == DriverOracle && strings.Contains(str, "ORA-00001: unique constraint") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 		} else if driver == DriverMssql && strings.Contains(str, "Violation of PRIMARY KEY constraint") {
 			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+		} else if driver == DriverSqlite3 && strings.Contains(str, "UNIQUE constraint failed") {
+			return 0, nil
 		} else {
 			return 0, er1
 		}
@@ -120,6 +122,7 @@ func InsertInTransactionTx(db *sql.DB, tx *sql.Tx, tableName string, objects int
 			return 0, nil
 		}
 		driver := GetDriver(db)
+		buildParam := GetBuild(db)
 		firstObj := objectValues.Index(0).Interface()
 		columns, primaryKeys, err := ExtractMapValue(firstObj, &excludeColumns, true)
 		if err != nil {
@@ -159,7 +162,7 @@ func InsertInTransactionTx(db *sql.DB, tx *sql.Tx, tableName string, objects int
 			variables := make([]string, 0, attrSize)
 			for _, key := range SortedKeys(objAttrs) {
 				scope.Values = append(scope.Values, objAttrs[key])
-				variables = append(variables, BuildParametersFrom(start, 1, driver))
+				variables = append(variables, BuildParametersFrom(start, 1, buildParam))
 				start++
 			}
 
@@ -173,8 +176,13 @@ func InsertInTransactionTx(db *sql.DB, tx *sql.Tx, tableName string, objects int
 						strings.Join(dbColumns, ", "),
 						strings.Join(placeholders, ", "),
 					)
-
-				} else if driver == DriverMysql {
+				} else if driver == DriverSqlite3 {
+					query = fmt.Sprintf("insert or ignore into %s (%s) values %s",
+						tableName,
+						strings.Join(dbColumns, ", "),
+						strings.Join(placeholders, ", "),
+					)
+				} else if driver == DriverOracle || driver == DriverMysql {
 					var qKey []string
 					for _, i2 := range pkey {
 						key := i2 + " = " + i2
@@ -205,7 +213,7 @@ func InsertInTransactionTx(db *sql.DB, tx *sql.Tx, tableName string, objects int
 		count := objectValues.Len()
 		return int64(count), err
 	}
-	return 0, fmt.Errorf("Objects must be slice.")
+	return 0, fmt.Errorf("objects must be slice.")
 }
 
 // Separate objects into several size
@@ -245,6 +253,7 @@ func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDupl
 		return 0, nil
 	}
 	driverName := GetDriver(db)
+	buildParam := GetBuild(db)
 	firstAttrs, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
@@ -281,7 +290,7 @@ func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDupl
 		variables := make([]string, 0, attrSize)
 		for _, key := range SortedKeys(objAttrs) {
 			scope.Values = append(scope.Values, objAttrs[key])
-			variables = append(variables, BuildParametersFrom(start, 1, driverName))
+			variables = append(variables, BuildParametersFrom(start, 1, buildParam))
 			start++
 		}
 
@@ -299,8 +308,13 @@ func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDupl
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 			)
-
-		} else if driverName == DriverMysql {
+		} else if driverName == DriverSqlite3 {
+			query = fmt.Sprintf("insert or ignore into %s (%s) values %s",
+				tableName,
+				strings.Join(dbColumns, ", "),
+				strings.Join(placeholders, ", "),
+			)
+		} else if driverName == DriverOracle || driverName == DriverMysql {
 			var qKey []string
 			for _, i2 := range pkey {
 				key := i2 + " = " + i2
@@ -337,6 +351,7 @@ func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, sk
 		return 0, nil
 	}
 	driver := GetDriver(db)
+	buildParam := GetBuild(db)
 	firstAttrs, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
@@ -377,7 +392,7 @@ func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, sk
 		variables := make([]string, 0, attrSize)
 		for _, key := range SortedKeys(objAttrs) {
 			scope.Values = append(scope.Values, objAttrs[key])
-			variables = append(variables, BuildParametersFrom(start, 1, driver))
+			variables = append(variables, BuildParametersFrom(start, 1, buildParam))
 			start++
 		}
 
@@ -395,8 +410,13 @@ func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, sk
 					strings.Join(dbColumns, ", "),
 					strings.Join(placeholders, ", "),
 				)
-
-			} else if driver == DriverMysql {
+			} else if driver == DriverSqlite3 {
+				query = fmt.Sprintf("insert or ignore into %s (%s) values %s",
+					tableName,
+					strings.Join(dbColumns, ", "),
+					strings.Join(placeholders, ", "),
+				)
+			} else if driver == DriverOracle || driver == DriverMysql {
 				var qKey []string
 				for _, i2 := range pkey {
 					key := i2 + " = " + i2
@@ -451,6 +471,7 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	var placeholder []string
 	driverName := GetDriver(db)
+	buildParam := GetBuild(db)
 	var query []string
 	var value [][]interface{}
 	if len(objects) == 0 {
@@ -476,13 +497,13 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, err
 		//statement.Values = append(statement.Values, scope.Values...)
 
 		n := len(scope.Columns)
-		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
+		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
 		if err1 != nil {
 			return 0, err1
 		}
 		value = append(value, setVal)
 		numKeys := len(scope.Keys)
-		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, driverName, " and ")
+		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
 		if err2 != nil {
 			return 0, err2
 		}
@@ -508,6 +529,7 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}) (int64, err
 func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}) (int64, error) {
 	var placeholder []string
 	driverName := GetDriver(db)
+	buildParam := GetBuild(db)
 	var query []string
 	var value [][]interface{}
 	if len(objects) == 0 {
@@ -533,13 +555,13 @@ func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}) (i
 		//statement.Values = append(statement.Values, scope.Values...)
 
 		n := len(scope.Columns)
-		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
+		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
 		if err1 != nil {
 			return 0, err1
 		}
 		value = append(value, setVal)
 		numKeys := len(scope.Keys)
-		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, driverName, " and ")
+		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
 		if err2 != nil {
 			return 0, err2
 		}
@@ -572,7 +594,8 @@ func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}) (i
 }
 
 func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string) (int64, error) {
-	driverName := GetDriver(db)
+	// driverName := GetDriver(db)
+	buildParam := GetBuild(db)
 	var query []string
 	var value [][]interface{}
 	if len(objects) == 0 {
@@ -594,13 +617,13 @@ func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, i
 		}
 
 		n := len(scope.Columns)
-		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
+		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
 		if err1 != nil {
 			return 0, err1
 		}
 		value = append(value, setVal)
 		numKeys := len(scope.Keys)
-		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, driverName, " and ")
+		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
 		if err2 != nil {
 			return 0, err2
 		}
@@ -677,8 +700,7 @@ func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, 
 func BuildParamWithNull(colName string) string {
 	return fmt.Sprintf("%v = null", colName)
 }
-
-func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int, start int, driverName string, joinStr string) (string, []interface{}, error) {
+func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int, start int, joinStr string, buildParam func(int) string) (string, []interface{}, error) {
 	arr := make([]string, *n)
 	j := start
 	var valueParams []interface{}
@@ -691,10 +713,25 @@ func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int,
 			values = values[:len(values)-1]
 			*n--
 		} else {
-			arr[i] = fmt.Sprintf("%s = %s", columnName, BuildParametersFrom(start, 1, driverName))
+			arr[i] = fmt.Sprintf("%s = %s", columnName, BuildParametersFrom(start, 1, buildParam))
 			valueParams = append(valueParams, values[j])
 		}
 		j++
 	}
 	return strings.Join(arr, joinStr), valueParams, nil
+}
+func ReplaceParameters(driver string, query string, n int) string {
+	if driver == DriverOracle || driver == DriverPostgres || driver == DriverSqlite3 {
+		var x string
+		if driver == DriverOracle {
+			x = ":val"
+		} else {
+			x = "$"
+		}
+		for i := 0; i < n; i++ {
+			count := i + 1
+			query = strings.Replace(query, "?", x+fmt.Sprintf("%v", count), 1)
+		}
+	}
+	return query
 }

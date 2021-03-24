@@ -22,6 +22,7 @@ const (
 	DriverMysql      = "mysql"
 	DriverMssql      = "mssql"
 	DriverOracle     = "oracle"
+	DriverSqlite3    = "sqlite3"
 	DriverNotSupport = "no support"
 )
 
@@ -108,10 +109,10 @@ func BuildDataSourceName(c DatabaseConfig) string {
 
 func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
 	var where = ""
-	var driver = GetDriver(db)
+	buildParam := GetBuild(db)
 	var values []interface{}
 	if len(keys) == 1 {
-		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], BuildParam(1, driver))
+		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], buildParam(1))
 		values = append(values, id)
 	} else {
 		queres := make([]string, 0)
@@ -120,7 +121,7 @@ func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys m
 			for _, keyJson := range keys {
 				columnName := mapJsonColumnKeys[keyJson]
 				if idk, ok1 := ids[keyJson]; ok1 {
-					queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildParam(j, driver)))
+					queres = append(queres, fmt.Sprintf("%s = %s", columnName, buildParam(j)))
 					values = append(values, idk)
 					j++
 				}
@@ -188,8 +189,8 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 }
 
 func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
-	var driverName = GetDriver(db)
-	queryInsert, values := BuildInsertSql(table, model, 0, driverName)
+	buildParam := GetBuild(db)
+	queryInsert, values := BuildInsertSql(table, model, 0, buildParam)
 
 	result, err := db.Exec(queryInsert, values...)
 	if err != nil {
@@ -204,20 +205,22 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	x := err.Error()
 	driverName := GetDriver(db)
 	if driverName == DriverPostgres && strings.Contains(x, "pq: duplicate key value violates unique constraint") {
-		return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
+		return 0, nil
 	} else if driverName == DriverMysql && strings.Contains(x, "Error 1062: Duplicate entry") {
 		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 	} else if driverName == DriverOracle && strings.Contains(x, "ORA-00001: unique constraint") {
 		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 	} else if driverName == DriverMssql && strings.Contains(x, "Violation of PRIMARY KEY constraint") {
 		return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+	} else if driverName == DriverSqlite3 && strings.Contains(x, "UNIQUE constraint failed") {
+		return 0, nil
 	}
 	return 0, err
 }
 
 func InsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
-	var driverName = GetDriver(db)
-	queryInsert, values := BuildInsertSql(table, model, 0, driverName)
+	buildParam := GetBuild(db)
+	queryInsert, values := BuildInsertSql(table, model, 0, buildParam)
 	result, err := tx.Exec(queryInsert, values...)
 	if err != nil {
 		return handleDuplicate(db, err)
@@ -230,21 +233,23 @@ func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 		return 0, errors.New("version index not found")
 	}
 
-	var driverName = GetDriver(db)
-	queryInsert, values := BuildInsertSqlWithVersion(table, model, 0, driverName, versionIndex)
+	buildParam := GetBuild(db)
+	queryInsert, values := BuildInsertSqlWithVersion(table, model, 0, versionIndex, buildParam)
 
 	result, err := db.Exec(queryInsert, values...)
 	if err != nil {
 		errstr := err.Error()
 		driverName := GetDriver(db)
 		if driverName == DriverPostgres && strings.Contains(errstr, "pq: duplicate key value violates unique constraint") {
-			return 0, nil //pq: duplicate key value violates unique constraint "aa_pkey"
+			return 0, nil
 		} else if driverName == DriverMysql && strings.Contains(errstr, "Error 1062: Duplicate entry") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 		} else if driverName == DriverOracle && strings.Contains(errstr, "ORA-00001: unique constraint") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 		} else if driverName == DriverMssql && strings.Contains(errstr, "Violation of PRIMARY KEY constraint") {
 			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+		} else if driverName == DriverSqlite3 && strings.Contains(errstr, "UNIQUE constraint failed") {
+			return 0, nil
 		} else {
 			return 0, err
 		}
@@ -262,8 +267,8 @@ func Exec(stmt *sql.Stmt, values ...interface{}) (int64, error) {
 }
 
 func Update(db *sql.DB, table string, model interface{}) (int64, error) {
-	driverName := GetDriver(db)
-	query, values := BuildUpdateSql(table, model, 0, driverName)
+	buildParam := GetBuild(db)
+	query, values := BuildUpdateSql(table, model, 0, buildParam)
 	r, err0 := db.Exec(query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -272,8 +277,8 @@ func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 }
 
 func UpdateTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
-	driverName := GetDriver(db)
-	query, values := BuildUpdateSql(table, model, 0, driverName)
+	buildParam := GetBuild(db)
+	query, values := BuildUpdateSql(table, model, 0, buildParam)
 	r, err0 := tx.Exec(query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -286,8 +291,8 @@ func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 		return 0, errors.New("version's index not found")
 	}
 
-	driverName := GetDriver(db)
-	query, values := BuildUpdateSqlWithVersion(table, model, 0, driverName, versionIndex)
+	buildParam := GetBuild(db)
+	query, values := BuildUpdateSqlWithVersion(table, model, 0, versionIndex, buildParam)
 
 	result, err := db.Exec(query, values...)
 
@@ -300,8 +305,8 @@ func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 func Patch(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type) (int64, error) {
 	idcolumNames, idJsonName := FindNames(modelType)
 	columNames := FindJsonName(modelType)
-	driverName := GetDriver(db)
-	query, value := BuildPatch(table, model, columNames, idJsonName, idcolumNames, driverName)
+	buildParam := GetBuild(db)
+	query, value := BuildPatch(table, model, columNames, idJsonName, idcolumNames, buildParam)
 	if query == "" {
 		return 0, errors.New("fail to build query")
 	}
@@ -319,7 +324,7 @@ func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, mo
 
 	idcolumNames, idJsonName := FindNames(modelType)
 	columNames := FindJsonName(modelType)
-	driverName := GetDriver(db)
+	buildParam := GetBuild(db)
 	versionJsonName, ok := GetJsonNameByIndex(modelType, versionIndex)
 	if !ok {
 		return 0, errors.New("version's json not found")
@@ -329,7 +334,7 @@ func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, mo
 		return 0, errors.New("version's column not found")
 	}
 
-	query, value := BuildPatchWithVersion(table, model, columNames, idJsonName, idcolumNames, driverName, versionIndex, versionJsonName, versionColName)
+	query, value := BuildPatchWithVersion(table, model, columNames, idJsonName, idcolumNames, buildParam, versionIndex, versionJsonName, versionColName)
 	if query == "" {
 		return 0, errors.New("fail to build query")
 	}
@@ -341,8 +346,8 @@ func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, mo
 }
 
 func Delete(db *sql.DB, table string, query map[string]interface{}) (int64, error) {
-	driverName := GetDriver(db)
-	queryDelete, values := BuildDelete(table, query, driverName)
+	buildParam := GetBuild(db)
+	queryDelete, values := BuildDelete(table, query, buildParam)
 
 	result, err := db.Exec(queryDelete, values...)
 
@@ -378,7 +383,7 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	return -1, jsonName, jsonName
 }
 
-func BuildUpdateSql(table string, model interface{}, i int, driverName string) (string, []interface{}) {
+func BuildUpdateSql(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
 	mapData, mapKey, _ := BuildMapDataAndKeys(model, true)
 	var values []interface{}
 
@@ -388,7 +393,7 @@ func BuildUpdateSql(table string, model interface{}, i int, driverName string) (
 	for colName, v1 := range mapData {
 		if v1 != nil {
 			values = append(values, v1)
-			colSet = append(colSet, fmt.Sprintf("%v = "+BuildParam(colNumber+i, driverName), colName))
+			colSet = append(colSet, fmt.Sprintf("%v = "+buildParam(colNumber+i), colName))
 			colNumber++
 		} else {
 			colSet = append(colSet, BuildParamWithNull(colName))
@@ -397,7 +402,7 @@ func BuildUpdateSql(table string, model interface{}, i int, driverName string) (
 
 	for colName, v2 := range mapKey {
 		values = append(values, v2)
-		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildParam(colNumber+i, driverName), QuoteColumnName(colName)))
+		colQuery = append(colQuery, fmt.Sprintf("%v="+buildParam(colNumber+i), QuoteColumnName(colName)))
 		colNumber++
 	}
 	queryWhere := strings.Join(colQuery, " and ")
@@ -406,7 +411,7 @@ func BuildUpdateSql(table string, model interface{}, i int, driverName string) (
 	return query, values
 }
 
-func BuildUpdateSqlWithVersion(table string, model interface{}, i int, driverName string, versionIndex int) (string, []interface{}) {
+func BuildUpdateSqlWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version's index not found")
 
@@ -434,7 +439,7 @@ func BuildUpdateSqlWithVersion(table string, model interface{}, i int, driverNam
 	for colName, v1 := range mapData {
 		if v1 != nil {
 			values = append(values, v1)
-			colSet = append(colSet, fmt.Sprintf("%v = "+BuildParam(colNumber+i, driverName), colName))
+			colSet = append(colSet, fmt.Sprintf("%v = "+buildParam(colNumber+i), colName))
 			colNumber++
 		} else {
 			colSet = append(colSet, BuildParamWithNull(colName))
@@ -443,7 +448,7 @@ func BuildUpdateSqlWithVersion(table string, model interface{}, i int, driverNam
 
 	for colName, v2 := range mapKey {
 		values = append(values, v2)
-		colQuery = append(colQuery, fmt.Sprintf("%v="+BuildParam(colNumber+i, driverName), QuoteColumnName(colName)))
+		colQuery = append(colQuery, fmt.Sprintf("%v="+buildParam(colNumber+i), QuoteColumnName(colName)))
 		colNumber++
 	}
 	queryWhere := strings.Join(colQuery, " AND ")
@@ -452,7 +457,7 @@ func BuildUpdateSqlWithVersion(table string, model interface{}, i int, driverNam
 	return query, values
 }
 
-func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, driverName string) (string, []interface{}) {
+func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, buildParam func(int) string) (string, []interface{}) {
 	scope := statement()
 	// Append variables set column
 	for key, _ := range model {
@@ -471,13 +476,13 @@ func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[str
 	var value []interface{}
 
 	n := len(scope.Columns)
-	sets, val1, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
+	sets, val1, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
 	if err1 != nil {
 		return "", nil
 	}
 	value = append(value, val1...)
 	columnsKeys := len(scope.Keys)
-	where, val2, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &columnsKeys, n, driverName, " and ")
+	where, val2, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &columnsKeys, n, " and ", buildParam)
 	if err2 != nil {
 		return "", nil
 	}
@@ -490,7 +495,7 @@ func BuildPatch(table string, model map[string]interface{}, mapJsonColum map[str
 	return query, value
 }
 
-func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, driverName string, versionIndex int, versionJsonName, versionColName string) (string, []interface{}) {
+func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, buildParam func(int) string, versionIndex int, versionJsonName, versionColName string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version's index not found")
 	}
@@ -522,13 +527,13 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 	scope.Keys = append(scope.Keys, versionColName)
 
 	n := len(scope.Columns)
-	sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, driverName, ", ")
+	sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
 	if err1 != nil {
 		return "", nil
 	}
 	value = append(value, setVal...)
 	numKeys := len(scope.Keys)
-	where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, driverName, " and ")
+	where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
 	if err2 != nil {
 		return "", nil
 	}
@@ -541,13 +546,15 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 	return query, value
 }
 
-func BuildDelete(table string, ids map[string]interface{}, driverName string) (string, []interface{}) {
+func BuildDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
 
 	var values []interface{}
 	var queryArr []string
+	i := 1
 	for key, value := range ids {
-		queryArr = append(queryArr, fmt.Sprintf("%v = %v", QuoteColumnName(key), BuildParam(1, driverName)))
+		queryArr = append(queryArr, fmt.Sprintf("%v = %v", QuoteColumnName(key), buildParam(i)))
 		values = append(values, value)
+		i++
 	}
 	q := strings.Join(queryArr, " and ")
 	return fmt.Sprintf("delete from %v where %v", table, q), values
@@ -822,36 +829,12 @@ func GetTableName(object interface{}) string {
 	tableName := objectValue.MethodByName("TableName").Call([]reflect.Value{})
 	return tableName[0].String()
 }
-
-func BuildParameters(numCol int, driver string) string {
-	var arrValue []string
-	for i := 0; i < numCol; i++ {
-		arrValue = append(arrValue, BuildParam(i+1, driver))
-	}
-	return strings.Join(arrValue, ",")
-}
-
-func BuildParametersFrom(i int, numCol int, driver string) string {
+func BuildParametersFrom(i int, numCol int, buildParam func(int) string) string {
 	var arrValue []string
 	for j := 0; j < numCol; j++ {
-		arrValue = append(arrValue, BuildParam(i+j+1, driver))
+		arrValue = append(arrValue, buildParam(i+j+1))
 	}
 	return strings.Join(arrValue, ",")
-}
-
-func BuildParam(index int, driver string) string {
-	switch driver {
-	case DriverPostgres:
-		return "$" + strconv.Itoa(index)
-	case DriverOracle:
-		return ":val" + strconv.Itoa(index)
-	default:
-		return "?"
-	}
-}
-func BuildParamByDB(n int, db *sql.DB) string {
-	driverName := GetDriver(db)
-	return BuildParam(n, driverName)
 }
 func EscapeString(value string) string {
 	//replace := map[string]string{"'": `\'`, "\\0": "\\\\0", "\n": "\\n", "\r": "\\r", `"`: `\"`, "\x1a": "\\Z"}
@@ -911,7 +894,7 @@ func IsPrimary(field Field) bool {
 	return GetTag(field, PrimaryKey) != ""
 }
 func ReplaceQueryArgs(driver string, query string) string {
-	if driver == DriverOracle || driver == DriverPostgres {
+	if driver == DriverOracle || driver == DriverPostgres || driver == DriverSqlite3 {
 		var x string
 		if driver == DriverOracle {
 			x = ":val"
@@ -947,7 +930,7 @@ func MapModels(ctx context.Context, models interface{}, mp func(context.Context,
 			if k == reflect.Struct {
 				y := x.Addr().Interface()
 				mp(ctx, y)
-			} else  {
+			} else {
 				y := x.Interface()
 				mp(ctx, y)
 			}
@@ -955,4 +938,34 @@ func MapModels(ctx context.Context, models interface{}, mp func(context.Context,
 		}
 	}
 	return models, nil
+}
+func BuildPlaceHolders(n int, buildParam func(int) string) string {
+	ss := make([]string, 0)
+	for i := 1; i <= n; i++ {
+		s := buildParam(i)
+		ss = append(ss, s)
+	}
+	return strings.Join(ss, ",")
+}
+func BuildParam(i int) string {
+	return "?"
+}
+func BuildOracleParam(i int) string {
+	return ":val" + strconv.Itoa(i)
+}
+func BuildDollarParam(i int) string {
+	return "$" + strconv.Itoa(i)
+}
+func GetBuild(db *sql.DB) func(i int) string {
+	driver := reflect.TypeOf(db.Driver()).String()
+	switch driver {
+	case "*pq.Driver":
+		return BuildDollarParam
+	case "*sqlite3.SQLiteDriver":
+		return BuildDollarParam
+	case "*godror.drv":
+		return BuildOracleParam
+	default:
+		return BuildParam
+	}
 }

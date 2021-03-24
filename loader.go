@@ -70,11 +70,11 @@ func (s *Loader) Load(ctx context.Context, ids interface{}) (interface{}, error)
 func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 	var count int32
 	var where string
-	var driver = GetDriver(s.Database)
+	buildParam := GetBuild(s.Database)
 	var values []interface{}
 	colNumber := 1
 	if len(s.keys) == 1 {
-		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], BuildParam(colNumber, driver))
+		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], buildParam(colNumber))
 		values = append(values, id)
 		colNumber++
 	} else {
@@ -82,7 +82,7 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 		var ids = id.(map[string]interface{})
 		for k, idk := range ids {
 			columnName := s.mapJsonColumnKeys[k]
-			queres = append(queres, fmt.Sprintf("%s = %s", columnName, BuildParam(colNumber, driver)))
+			queres = append(queres, fmt.Sprintf("%s = %s", columnName, buildParam(colNumber)))
 			values = append(values, idk)
 			colNumber++
 		}
