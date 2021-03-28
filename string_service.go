@@ -27,13 +27,11 @@ func NewStringService(db *sql.DB, table string, field string, options ...func(i 
 	}
 	var sql string
 	if driver == DriverPostgres {
-		sql = fmt.Sprintf("select %s from %s where %s ilike $1", field, table, field) + " fetch next %d rows only"
+		sql = fmt.Sprintf("select %s from %s where %s ilike %s", field, table, field, b(1)) + " fetch next %d rows only"
 	} else if driver == DriverOracle {
-		sql = fmt.Sprintf("select %s from %s where %s ilike :val1", field, table, field) + " fetch next %d rows only"
-	} else if driver == DriverSqlite3 {
-		sql = fmt.Sprintf("select %s from %s where %s like $1", field, table, field) + " limit %d"
+		sql = fmt.Sprintf("select %s from %s where %s like %s", field, table, field, b(1)) + " fetch next %d rows only"
 	} else {
-		sql = fmt.Sprintf("select %s from %s where %s like ?", field, table, field) + " limit %d"
+		sql = fmt.Sprintf("select %s from %s where %s like %s", field, table, field, b(1)) + " limit %d"
 	}
 	return &StringService{DB: db, Table: table, Field: field, Sql: sql, Driver: driver, BuildParam: b}
 }
