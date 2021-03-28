@@ -251,7 +251,7 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 	if len(objects) == 0 {
 		return 0, nil
 	}
-	driverName := GetDriver(db)
+	driver := GetDriver(db)
 	firstAttrs, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
@@ -300,19 +300,19 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 	}
 	var query string
 	if skipDuplicate {
-		if driverName == DriverPostgres {
+		if driver == DriverPostgres {
 			query = fmt.Sprintf("insert into %s (%s) values %s on conflict do nothing",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 			)
-		} else if driverName == DriverSqlite3 {
+		} else if driver == DriverSqlite3 {
 			query = fmt.Sprintf("insert or ignore into %s (%s) values %s",
 				tableName,
 				strings.Join(dbColumns, ", "),
 				strings.Join(placeholders, ", "),
 			)
-		} else if driverName == DriverOracle || driverName == DriverMysql {
+		} else if driver == DriverOracle || driver == DriverMysql {
 			var qKey []string
 			for _, i2 := range pkey {
 				key := i2 + " = " + i2
@@ -325,7 +325,7 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 				strings.Join(qKey, ", "),
 			)
 		} else {
-			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driverName)
+			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driver)
 		}
 	}
 	{
@@ -467,7 +467,7 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 
 func UpdateMany(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
 	var placeholder []string
-	driverName := GetDriver(db)
+	driver := GetDriver(db)
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -483,7 +483,7 @@ func UpdateMany(ctx context.Context, db *sql.DB, tableName string, objects []int
 	statement := newStatement(valueDefault, placeholder...)
 	columns := make([]string, 0) // columns set value for update
 	for _, key := range SortedKeys(statement.Attributes) {
-		columns = append(columns, QuoteByDriver(key, driverName))
+		columns = append(columns, QuoteByDriver(key, driver))
 	}
 	for _, obj := range objects {
 		scope := newStatement(obj, placeholder...)
@@ -530,7 +530,7 @@ func UpdateMany(ctx context.Context, db *sql.DB, tableName string, objects []int
 
 func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
 	var placeholder []string
-	driverName := GetDriver(db)
+	driver := GetDriver(db)
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -546,7 +546,7 @@ func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 	statement := newStatement(valueDefault, placeholder...)
 	columns := make([]string, 0) // columns set value for update
 	for _, key := range SortedKeys(statement.Attributes) {
-		columns = append(columns, QuoteByDriver(key, driverName))
+		columns = append(columns, QuoteByDriver(key, driver))
 	}
 	for _, obj := range objects {
 		scope := newStatement(obj, placeholder...)
@@ -601,7 +601,6 @@ func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 }
 
 func PatchMaps(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options...func(i int) string) (int64, error) {
-	// driverName := GetDriver(db)
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -659,7 +658,7 @@ func PatchMaps(ctx context.Context, db *sql.DB, tableName string, objects []map[
 	return count, nil
 }
 
-func GetValueColumn(value interface{}, driverName string) (string, error) {
+func GetValueColumn(value interface{}, driver string) (string, error) {
 	str := ""
 	switch v := value.(type) {
 	case int:
@@ -671,21 +670,21 @@ func GetValueColumn(value interface{}, driverName string) (string, error) {
 	case bool:
 		str = strconv.FormatBool(v)
 	case time.Time:
-		str = formatStringByDriver(v.Format(formatDateUpdate), driverName)
+		str = formatStringByDriver(v.Format(formatDateUpdate), driver)
 	case *time.Time:
-		str = formatStringByDriver(v.Format(formatDateUpdate), driverName)
+		str = formatStringByDriver(v.Format(formatDateUpdate), driver)
 	case string:
-		str = formatStringByDriver(v, driverName)
+		str = formatStringByDriver(v, driver)
 	default:
 		return "", errors.New("unsupported type")
 	}
 	return str, nil
 }
 
-func formatStringByDriver(v, driverName string) string {
-	if driverName == DriverPostgres {
+func formatStringByDriver(v, driver string) string {
+	if driver == DriverPostgres {
 		return `E'` + EscapeString(v) + `'`
-	} else if driverName == DriverMssql {
+	} else if driver == DriverMssql {
 		return `'` + EscapeStringForSelect(v) + `'`
 	} else {
 		return `'` + EscapeString(v) + `'`
@@ -693,12 +692,12 @@ func formatStringByDriver(v, driverName string) string {
 	return v
 }
 
-func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, start int, driverName string, joinStr string) (string, error) {
+func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, start int, driver string, joinStr string) (string, error) {
 	arr := make([]string, n)
 	j := start
 	for i, _ := range arr {
 		columnName := columns[i]
-		value, err := GetValueColumn(values[j], driverName)
+		value, err := GetValueColumn(values[j], driver)
 		if err == nil {
 			arr[i] = fmt.Sprintf("%s = %s", columnName, value)
 		} else {

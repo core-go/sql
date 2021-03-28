@@ -213,16 +213,16 @@ func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, op
 
 func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	x := err.Error()
-	driverName := GetDriver(db)
-	if driverName == DriverPostgres && strings.Contains(x, "pq: duplicate key value violates unique constraint") {
+	driver := GetDriver(db)
+	if driver == DriverPostgres && strings.Contains(x, "pq: duplicate key value violates unique constraint") {
 		return 0, nil
-	} else if driverName == DriverMysql && strings.Contains(x, "Error 1062: Duplicate entry") {
+	} else if driver == DriverMysql && strings.Contains(x, "Error 1062: Duplicate entry") {
 		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-	} else if driverName == DriverOracle && strings.Contains(x, "ORA-00001: unique constraint") {
+	} else if driver == DriverOracle && strings.Contains(x, "ORA-00001: unique constraint") {
 		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-	} else if driverName == DriverMssql && strings.Contains(x, "Violation of PRIMARY KEY constraint") {
+	} else if driver == DriverMssql && strings.Contains(x, "Violation of PRIMARY KEY constraint") {
 		return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-	} else if driverName == DriverSqlite3 && strings.Contains(x, "UNIQUE constraint failed") {
+	} else if driver == DriverSqlite3 && strings.Contains(x, "UNIQUE constraint failed") {
 		return 0, nil
 	}
 	return 0, err
@@ -259,16 +259,16 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
 		errstr := err.Error()
-		driverName := GetDriver(db)
-		if driverName == DriverPostgres && strings.Contains(errstr, "pq: duplicate key value violates unique constraint") {
+		driver := GetDriver(db)
+		if driver == DriverPostgres && strings.Contains(errstr, "pq: duplicate key value violates unique constraint") {
 			return 0, nil
-		} else if driverName == DriverMysql && strings.Contains(errstr, "Error 1062: Duplicate entry") {
+		} else if driver == DriverMysql && strings.Contains(errstr, "Error 1062: Duplicate entry") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driverName == DriverOracle && strings.Contains(errstr, "ORA-00001: unique constraint") {
+		} else if driver == DriverOracle && strings.Contains(errstr, "ORA-00001: unique constraint") {
 			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driverName == DriverMssql && strings.Contains(errstr, "Violation of PRIMARY KEY constraint") {
+		} else if driver == DriverMssql && strings.Contains(errstr, "Violation of PRIMARY KEY constraint") {
 			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-		} else if driverName == DriverSqlite3 && strings.Contains(errstr, "UNIQUE constraint failed") {
+		} else if driver == DriverSqlite3 && strings.Contains(errstr, "UNIQUE constraint failed") {
 			return 0, nil
 		} else {
 			return 0, err
