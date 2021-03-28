@@ -7,19 +7,27 @@ import (
 )
 
 type BatchUpdater struct {
-	db        *sql.DB
-	tableName string
-	Map       func(ctx context.Context, model interface{}) (interface{}, error)
+	db         *sql.DB
+	tableName  string
+	BuildParam func(i int) string
+	Map        func(ctx context.Context, model interface{}) (interface{}, error)
 }
-
-func NewBatchUpdater(db *sql.DB, tableName string, options ...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
+func NewBatchUpdater(db *sql.DB, tableName string, options...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
 	var mp func(context.Context, interface{}) (interface{}, error)
-	if len(options) >= 1 {
+	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
 	}
-	return &BatchUpdater{db: db, tableName: tableName, Map: mp}
+	return NewSqlBatchUpdater(db, tableName, mp)
 }
-
+func NewSqlBatchUpdater(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), options...func(i int) string) *BatchUpdater {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
+	return &BatchUpdater{db: db, tableName: tableName, Map: mp, BuildParam: buildParam}
+}
 func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
 	failIndices := make([]int, 0)

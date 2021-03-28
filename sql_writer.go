@@ -6,9 +6,20 @@ import (
 )
 
 type SqlWriter struct {
-	db        *sql.DB
-	tableName string
-	Map       func(ctx context.Context, model interface{}) (interface{}, error)
+	db         *sql.DB
+	tableName  string
+	BuildParam func(i int) string
+	Map        func(ctx context.Context, model interface{}) (interface{}, error)
+}
+
+func NewSqlWriterWithMap(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), options ...func(i int) string) *SqlWriter {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
+	return &SqlWriter{db: db, tableName: tableName, BuildParam: buildParam, Map: mp}
 }
 
 func NewSqlWriter(db *sql.DB, tableName string, options ...func(ctx context.Context, model interface{}) (interface{}, error)) *SqlWriter {
@@ -16,7 +27,7 @@ func NewSqlWriter(db *sql.DB, tableName string, options ...func(ctx context.Cont
 	if len(options) >= 1 {
 		mp = options[0]
 	}
-	return &SqlWriter{db, tableName, mp}
+	return NewSqlWriterWithMap(db, tableName, mp)
 }
 
 func (w *SqlWriter) Write(ctx context.Context, model interface{}) error {

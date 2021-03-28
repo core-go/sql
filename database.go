@@ -107,10 +107,15 @@ func BuildDataSourceName(c DatabaseConfig) string {
 
 // for Loader
 
-func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
+func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string, options...func(i int) string) (string, []interface{}) {
 	var where = ""
-	buildParam := GetBuild(db)
 	var values []interface{}
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	if len(keys) == 1 {
 		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], buildParam(1))
 		values = append(values, id)
@@ -188,8 +193,13 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 	return -1
 }
 
-func Insert(db *sql.DB, table string, model interface{}) (int64, error) {
-	buildParam := GetBuild(db)
+func Insert(db *sql.DB, table string, model interface{}, options...func(i int) string) (int64, error) {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	queryInsert, values := BuildInsertSql(table, model, 0, buildParam)
 
 	result, err := db.Exec(queryInsert, values...)
@@ -218,8 +228,13 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	return 0, err
 }
 
-func InsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
-	buildParam := GetBuild(db)
+func InsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(i int) string) (int64, error) {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	queryInsert, values := BuildInsertSql(table, model, 0, buildParam)
 	result, err := tx.Exec(queryInsert, values...)
 	if err != nil {
@@ -228,12 +243,17 @@ func InsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, e
 	return result.RowsAffected()
 }
 
-func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex int) (int64, error) {
+func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex int, options...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version index not found")
 	}
 
-	buildParam := GetBuild(db)
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	queryInsert, values := BuildInsertSqlWithVersion(table, model, 0, versionIndex, buildParam)
 
 	result, err := db.Exec(queryInsert, values...)
@@ -266,8 +286,13 @@ func Exec(stmt *sql.Stmt, values ...interface{}) (int64, error) {
 	return result.RowsAffected()
 }
 
-func Update(db *sql.DB, table string, model interface{}) (int64, error) {
-	buildParam := GetBuild(db)
+func Update(db *sql.DB, table string, model interface{}, options...func(i int) string) (int64, error) {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	query, values := BuildUpdateSql(table, model, 0, buildParam)
 	r, err0 := db.Exec(query, values...)
 	if err0 != nil {
@@ -276,8 +301,13 @@ func Update(db *sql.DB, table string, model interface{}) (int64, error) {
 	return r.RowsAffected()
 }
 
-func UpdateTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
-	buildParam := GetBuild(db)
+func UpdateTx(db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(i int) string) (int64, error) {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	query, values := BuildUpdateSql(table, model, 0, buildParam)
 	r, err0 := tx.Exec(query, values...)
 	if err0 != nil {
@@ -286,12 +316,17 @@ func UpdateTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, e
 	return r.RowsAffected()
 }
 
-func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex int) (int64, error) {
+func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex int, options...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version's index not found")
 	}
 
-	buildParam := GetBuild(db)
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	query, values := BuildUpdateSqlWithVersion(table, model, 0, versionIndex, buildParam)
 
 	result, err := db.Exec(query, values...)
@@ -302,10 +337,15 @@ func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 	return result.RowsAffected()
 }
 
-func Patch(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type) (int64, error) {
+func Patch(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, options...func(i int) string) (int64, error) {
 	idcolumNames, idJsonName := FindNames(modelType)
 	columNames := FindJsonName(modelType)
-	buildParam := GetBuild(db)
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	query, value := BuildPatch(table, model, columNames, idJsonName, idcolumNames, buildParam)
 	if query == "" {
 		return 0, errors.New("fail to build query")
@@ -317,14 +357,19 @@ func Patch(db *sql.DB, table string, model map[string]interface{}, modelType ref
 	return result.RowsAffected()
 }
 
-func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, versionIndex int) (int64, error) {
+func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, versionIndex int, options...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version's index not found")
 	}
 
 	idcolumNames, idJsonName := FindNames(modelType)
 	columNames := FindJsonName(modelType)
-	buildParam := GetBuild(db)
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	versionJsonName, ok := GetJsonNameByIndex(modelType, versionIndex)
 	if !ok {
 		return 0, errors.New("version's json not found")
@@ -345,8 +390,13 @@ func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, mo
 	return result.RowsAffected()
 }
 
-func Delete(db *sql.DB, table string, query map[string]interface{}) (int64, error) {
-	buildParam := GetBuild(db)
+func Delete(db *sql.DB, table string, query map[string]interface{}, options...func(i int) string) (int64, error) {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	queryDelete, values := BuildDelete(table, query, buildParam)
 
 	result, err := db.Exec(queryDelete, values...)
@@ -916,7 +966,17 @@ func ReplaceQueryArgs(driver string, query string) string {
 	}
 	return query
 }
-
+func Exist(db *sql.DB, sql string, args ...interface{}) (bool, error) {
+	rows, err := db.Query(sql, args...)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		return true, nil
+	}
+	return false, nil
+}
 func MapModels(ctx context.Context, models interface{}, mp func(context.Context, interface{}) (interface{}, error)) (interface{}, error) {
 	valueModelObject := reflect.Indirect(reflect.ValueOf(models))
 	if valueModelObject.Kind() == reflect.Ptr {
@@ -953,6 +1013,9 @@ func BuildParam(i int) string {
 func BuildOracleParam(i int) string {
 	return ":val" + strconv.Itoa(i)
 }
+func BuildMsSqlParam(i int) string {
+	return "@p" + strconv.Itoa(i)
+}
 func BuildDollarParam(i int) string {
 	return "$" + strconv.Itoa(i)
 }
@@ -961,10 +1024,10 @@ func GetBuild(db *sql.DB) func(i int) string {
 	switch driver {
 	case "*pq.Driver":
 		return BuildDollarParam
-	case "*sqlite3.SQLiteDriver":
-		return BuildDollarParam
 	case "*godror.drv":
 		return BuildOracleParam
+	case "*mysql.MySQLDriver":
+		return BuildMsSqlParam
 	default:
 		return BuildParam
 	}

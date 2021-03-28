@@ -4,15 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-
 	"fmt"
-	_ "github.com/sirupsen/logrus"
 	"reflect"
 	"strings"
 )
 
 type Loader struct {
 	Database          *sql.DB
+	BuildParam        func(i int) string
 	Map               func(ctx context.Context, model interface{}) (interface{}, error)
 	modelType         reflect.Type
 	modelsType        reflect.Type
@@ -21,11 +20,19 @@ type Loader struct {
 	fieldsIndex       map[string]int
 	table             string
 }
-
 func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) *Loader {
 	var mp func(ctx context.Context, model interface{}) (interface{}, error)
 	if len(options) >= 1 {
 		mp = options[0]
+	}
+	return NewSqlLoader(db, tableName, modelType, mp)
+}
+func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(context.Context, interface{}) (interface{}, error), options...func(i int) string) *Loader {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
 	}
 	_, idNames := FindNames(modelType)
 	mapJsonColumnKeys := MapJsonColumn(modelType)
@@ -34,7 +41,7 @@ func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, options ...
 	if er0 != nil {
 		panic(er0)
 	}
-	return &Loader{db, mp, modelType, modelsType, idNames, mapJsonColumnKeys, fieldsIndex, tableName}
+	return &Loader{Database: db, BuildParam: buildParam, Map: mp, modelType: modelType, modelsType: modelsType, keys: idNames, mapJsonColumnKeys: mapJsonColumnKeys, fieldsIndex: fieldsIndex, table: tableName}
 }
 
 func (s *Loader) Keys() []string {
@@ -44,7 +51,7 @@ func (s *Loader) Keys() []string {
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	queryGetAll := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
-	err := QueryWithType(s.Database, result, s.modelType, s.fieldsIndex, queryGetAll)
+	err := QueryWithType(s.Database, result, s.modelType, s.fieldsIndex, queryGetAll, s.BuildParam)
 	if err == nil {
 		if s.Map != nil {
 			return MapModels(ctx, result, s.Map)
@@ -55,7 +62,7 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 }
 
 func (s *Loader) Load(ctx context.Context, ids interface{}) (interface{}, error) {
-	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys)
+	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys, s.BuildParam)
 	r, err := QueryRow(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
 	if s.Map != nil {
 		_, er2 := s.Map(ctx, &r)
@@ -70,11 +77,10 @@ func (s *Loader) Load(ctx context.Context, ids interface{}) (interface{}, error)
 func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 	var count int32
 	var where string
-	buildParam := GetBuild(s.Database)
 	var values []interface{}
 	colNumber := 1
 	if len(s.keys) == 1 {
-		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], buildParam(colNumber))
+		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], s.BuildParam(colNumber))
 		values = append(values, id)
 		colNumber++
 	} else {
@@ -82,7 +88,7 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 		var ids = id.(map[string]interface{})
 		for k, idk := range ids {
 			columnName := s.mapJsonColumnKeys[k]
-			queres = append(queres, fmt.Sprintf("%s = %s", columnName, buildParam(colNumber)))
+			queres = append(queres, fmt.Sprintf("%s = %s", columnName, s.BuildParam(colNumber)))
 			values = append(values, idk)
 			colNumber++
 		}
@@ -101,7 +107,7 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 
 func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
-	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys)
+	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
 	rowData, err1 := QueryRow(s.Database, s.modelType, s.fieldsIndex, sql, values...)
 	if err1 != nil || rowData == nil {
 		return false, err1

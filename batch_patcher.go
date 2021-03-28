@@ -10,28 +10,35 @@ import (
 type BatchPatcher struct {
 	db          *sql.DB
 	tableName   string
-	IdNames     []string
-	IdJsonName  []string
+	idNames     []string
+	idJsonName  []string
+	buildParam  func(i int) string
 	modelsType  reflect.Type
 	modelsTypes reflect.Type
 }
 
-func NewBatchPatcher(db *sql.DB, tableName string, modelType reflect.Type) *BatchPatcher {
-	return NewBatchPatcherWithIds(db, tableName, modelType, nil)
+func NewBatchPatcher(db *sql.DB, tableName string, modelType reflect.Type, options...func(i int) string) *BatchPatcher {
+	return NewBatchPatcherWithIds(db, tableName, modelType, nil, options...)
 }
-func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type, fieldName []string) *BatchPatcher {
+func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type, fieldName []string, options...func(i int) string) *BatchPatcher {
 	modelsTypes := reflect.Zero(reflect.SliceOf(modelType)).Type()
 	idJsonName := make([]string, 0)
 	if fieldName == nil || len(fieldName) == 0 {
 		fieldName, idJsonName = FindNames(modelType)
 	}
-	return &BatchPatcher{db: db, tableName: tableName, IdNames: fieldName, IdJsonName: idJsonName, modelsType: modelType, modelsTypes: modelsTypes}
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
+	return &BatchPatcher{db: db, tableName: tableName, idNames: fieldName, idJsonName: idJsonName, modelsType: modelType, modelsTypes: modelsTypes, buildParam: buildParam}
 }
 
 func (w *BatchPatcher) Write(ctx context.Context, models []map[string]interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
 	failIndices := make([]int, 0)
-	_, err := PatchMaps(w.db, w.tableName, models, w.IdNames, w.IdJsonName)
+	_, err := PatchMaps(w.db, w.tableName, models, w.idNames, w.idJsonName)
 
 	if err == nil {
 		// Return full success

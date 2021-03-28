@@ -28,15 +28,22 @@ type ActionLogConfig struct {
 }
 
 type ActionLogWriter struct {
-	Database *sql.DB
-	Table    string
-	Config   ActionLogConfig
-	Schema   ActionLogSchema
-	Generate func(ctx context.Context) (string, error)
-	Driver   string
+	Database   *sql.DB
+	Table      string
+	Config     ActionLogConfig
+	Schema     ActionLogSchema
+	Generate   func(ctx context.Context) (string, error)
+	BuildParam func(i int) string
+	Driver     string
 }
-
-func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConfig, s ActionLogSchema, generate func(ctx context.Context) (string, error)) *ActionLogWriter {
+func NewSqlActionLogWriter(database *sql.DB, tableName string, config ActionLogConfig, s ActionLogSchema, options...func(context.Context) (string, error)) *ActionLogWriter {
+	var generate func(context.Context) (string, error)
+	if len(options) > 0 && options[0] != nil {
+		generate = options[0]
+	}
+	return NewActionLogWriter(database, tableName, config, s, generate)
+}
+func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConfig, s ActionLogSchema, generate func(context.Context) (string, error), options...func(i int) string) *ActionLogWriter {
 	s.Id = strings.ToLower(s.Id)
 	s.User = strings.ToLower(s.User)
 	s.Resource = strings.ToLower(s.Resource)
@@ -66,7 +73,13 @@ func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConf
 	if len(s.Desc) == 0 {
 		s.Desc = "desc"
 	}
-	writer := ActionLogWriter{Database: database, Table: tableName, Config: config, Schema: s, Generate: generate, Driver: driver}
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(database)
+	}
+	writer := ActionLogWriter{Database: database, Table: tableName, Config: config, Schema: s, Generate: generate, BuildParam: buildParam, Driver: driver}
 	return &writer
 }
 
@@ -100,7 +113,7 @@ func (s *ActionLogWriter) Write(ctx context.Context, resource string, action str
 			log[k] = v
 		}
 	}
-	query, vars := BuildInsertSQL(s.Database, s.Table, log)
+	query, vars := BuildInsertSQL(s.Database, s.Table, log, s.BuildParam)
 	_, err := s.Database.Exec(query, vars...)
 	return err
 }
@@ -132,9 +145,14 @@ func GetString(ctx context.Context, key string) string {
 	}
 	return ""
 }
-func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}) (string, []interface{}) {
+func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}, options ...func(i int) string) (string, []interface{}) {
 	driver := GetDriver(db)
-	buildParam := GetBuild(db)
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
 	var cols []string
 	var values []interface{}
 	for col, v := range model {

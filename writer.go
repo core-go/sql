@@ -14,17 +14,19 @@ type Writer struct {
 	versionIndex   int
 	versionDBField string
 }
-
 func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, options ...Mapper) *Writer {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
+	return NewWriterWithVersion(db, tableName, modelType, versionField, mapper)
+}
+func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, mapper Mapper, options...func(i int) string) *Writer {
 	var loader *Loader
 	if mapper != nil {
-		loader = NewLoader(db, tableName, modelType, mapper.DbToModel)
+		loader = NewSqlLoader(db, tableName, modelType, mapper.DbToModel, options...)
 	} else {
-		loader = NewLoader(db, tableName, modelType)
+		loader = NewSqlLoader(db, tableName, modelType, nil, options...)
 	}
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
@@ -37,6 +39,9 @@ func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, 
 		}
 	}
 	return &Writer{loader, mapper, versionField, -1, ""}
+}
+func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, options...func(i int) string) *Writer {
+	return NewSqlWriterWithVersion(db, tableName, modelType, "", mapper, options...)
 }
 func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) *Writer {
 	var mapper Mapper
@@ -52,9 +57,9 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		return Insert(s.Database, s.table, m2)
+		return Insert(s.Database, s.table, m2, s.BuildParam)
 	}
-	return Insert(s.Database, s.table, model)
+	return Insert(s.Database, s.table, model, s.BuildParam)
 }
 
 func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
@@ -63,9 +68,9 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		return Update(s.Database, s.table, m2)
+		return Update(s.Database, s.table, m2, s.BuildParam)
 	}
-	return Update(s.Database, s.table, model)
+	return Update(s.Database, s.table, model, s.BuildParam)
 }
 
 func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64, error) {
@@ -82,10 +87,10 @@ func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64,
 func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
 	l := len(s.keys)
 	if l == 1 {
-		return Delete(s.Database, s.table, BuildQueryById(id, s.modelType, s.keys[0]))
+		return Delete(s.Database, s.table, BuildQueryById(id, s.modelType, s.keys[0]), s.BuildParam)
 	} else {
 		ids := id.(map[string]interface{})
-		return Delete(s.Database, s.table, MapToGORM(ids, s.modelType))
+		return Delete(s.Database, s.table, MapToGORM(ids, s.modelType), s.BuildParam)
 	}
 }
 
@@ -95,7 +100,7 @@ func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64
 		if err != nil {
 			return 0, err
 		}
-		return Patch(s.Database, s.table, model, s.modelType)
+		return Patch(s.Database, s.table, model, s.modelType, s.BuildParam)
 	}
-	return Patch(s.Database, s.table, model, s.modelType)
+	return Patch(s.Database, s.table, model, s.modelType, s.BuildParam)
 }
