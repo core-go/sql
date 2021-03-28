@@ -57,9 +57,9 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		return Insert(s.Database, s.table, m2, s.BuildParam)
+		return Insert(ctx, s.Database, s.table, m2, s.BuildParam)
 	}
-	return Insert(s.Database, s.table, model, s.BuildParam)
+	return Insert(ctx, s.Database, s.table, model, s.BuildParam)
 }
 
 func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
@@ -68,9 +68,9 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		return Update(s.Database, s.table, m2, s.BuildParam)
+		return Update(ctx, s.Database, s.table, m2, s.BuildParam)
 	}
-	return Update(s.Database, s.table, model, s.BuildParam)
+	return Update(ctx, s.Database, s.table, model, s.BuildParam)
 }
 
 func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64, error) {
@@ -79,18 +79,18 @@ func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64,
 		if err != nil {
 			return 0, err
 		}
-		return Upsert(s.Database, s.table, m2)
+		return Upsert(ctx, s.Database, s.table, m2)
 	}
-	return Upsert(s.Database, s.table, model)
+	return Upsert(ctx, s.Database, s.table, model)
 }
 
 func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
 	l := len(s.keys)
 	if l == 1 {
-		return Delete(s.Database, s.table, BuildQueryById(id, s.modelType, s.keys[0]), s.BuildParam)
+		return Delete(ctx, s.Database, s.table, BuildQueryById(id, s.modelType, s.keys[0]), s.BuildParam)
 	} else {
 		ids := id.(map[string]interface{})
-		return Delete(s.Database, s.table, MapToGORM(ids, s.modelType), s.BuildParam)
+		return Delete(ctx, s.Database, s.table, MapToGORM(ids, s.modelType), s.BuildParam)
 	}
 }
 
@@ -100,7 +100,7 @@ func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64
 		if err != nil {
 			return 0, err
 		}
-		return Patch(s.Database, s.table, model, s.modelType, s.BuildParam)
+		return Patch(ctx, s.Database, s.table, model, s.modelType, s.BuildParam)
 	}
-	return Patch(s.Database, s.table, model, s.modelType, s.BuildParam)
+	return Patch(ctx, s.Database, s.table, model, s.modelType, s.BuildParam)
 }

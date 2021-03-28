@@ -34,9 +34,9 @@ func (w *Updater) Write(ctx context.Context, model interface{}) error {
 		if er0 != nil {
 			return er0
 		}
-		_, err := Update(w.db, w.tableName, m2, w.BuildParam)
+		_, err := Update(ctx, w.db, w.tableName, m2, w.BuildParam)
 		return err
 	}
-	_, err := Update(w.db, w.tableName, model, w.BuildParam)
+	_, err := Update(ctx, w.db, w.tableName, model, w.BuildParam)
 	return err
 }

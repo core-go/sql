@@ -51,7 +51,7 @@ func (s *Loader) Keys() []string {
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	queryGetAll := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
-	err := QueryWithType(s.Database, result, s.modelType, s.fieldsIndex, queryGetAll, s.BuildParam)
+	err := QueryWithType(ctx, s.Database, result, s.modelType, s.fieldsIndex, queryGetAll, s.BuildParam)
 	if err == nil {
 		if s.Map != nil {
 			return MapModels(ctx, result, s.Map)
@@ -63,7 +63,7 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 
 func (s *Loader) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys, s.BuildParam)
-	r, err := QueryRow(s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
+	r, err := QueryRow(ctx, s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
 	if s.Map != nil {
 		_, er2 := s.Map(ctx, &r)
 		if er2 != nil {
@@ -94,7 +94,7 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 		}
 		where = "where " + strings.Join(queres, " and ")
 	}
-	row := s.Database.QueryRow(fmt.Sprintf("select count(*) from %s %s", s.table, where), values...)
+	row := s.Database.QueryRowContext(ctx, fmt.Sprintf("select count(*) from %s %s", s.table, where), values...)
 	if err := row.Scan(&count); err != nil {
 		return false, err
 	} else {
@@ -108,7 +108,7 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
 	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
-	rowData, err1 := QueryRow(s.Database, s.modelType, s.fieldsIndex, sql, values...)
+	rowData, err1 := QueryRow(ctx, s.Database, s.modelType, s.fieldsIndex, sql, values...)
 	if err1 != nil || rowData == nil {
 		return false, err1
 	}

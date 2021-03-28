@@ -28,7 +28,7 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	if er0 != nil {
 		return 0, er0
 	}
-	result, er1 := tx.Exec(sts[0].Sql, sts[0].Args...)
+	result, er1 := tx.ExecContext(ctx, sts[0].Sql, sts[0].Args...)
 	if er1 != nil {
 		_ = tx.Rollback()
 		str := er1.Error()
@@ -58,7 +58,7 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	}
 	count := rowAffected
 	for i := 1; i < len(sts); i++ {
-		r2, er3 := tx.Exec(sts[i].Sql, sts[i].Args...)
+		r2, er3 := tx.ExecContext(ctx, sts[i].Sql, sts[i].Args...)
 		if er3 != nil {
 			er4 := tx.Rollback()
 			if er4 != nil {
@@ -83,14 +83,14 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	return 1, nil
 }
 
-func InsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
+func InsertMany(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
 		chunkSize = len(objects)
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := InsertManyRaw(db, tableName, objSet, false, buildParam, excludeColumns...)
+		count, err := InsertManyRaw(ctx, db, tableName, objSet, false, buildParam, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -99,14 +99,14 @@ func InsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize i
 	return c, nil
 }
 
-func TransactionInsertMany(db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
+func TransactionInsertMany(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
 		chunkSize = len(objects)
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := InsertInTransaction(db, tableName, objSet, false, buildParam, excludeColumns...)
+		count, err := InsertInTransaction(ctx, db, tableName, objSet, false, buildParam, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -115,7 +115,7 @@ func TransactionInsertMany(db *sql.DB, tableName string, objects []interface{}, 
 	return c, nil
 }
 
-func InsertInTransactionTx(db *sql.DB, tx *sql.Tx, tableName string, objects interface{}, skipDuplicate bool, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
+func InsertInTransactionTx(ctx context.Context, db *sql.DB, tx *sql.Tx, tableName string, objects interface{}, skipDuplicate bool, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
 	objectValues := reflect.Indirect(reflect.ValueOf(objects))
 	if objectValues.Kind() == reflect.Slice {
 		if objectValues.Len() == 0 {
@@ -203,7 +203,7 @@ func InsertInTransactionTx(db *sql.DB, tx *sql.Tx, tableName string, objects int
 					strings.Join(placeholders, ", "),
 				)
 			}
-			_, execErr := tx.Exec(query, scope.Values...)
+			_, execErr := tx.ExecContext(ctx, query, scope.Values...)
 			if execErr != nil {
 				_ = tx.Rollback()
 				return 0, execErr
@@ -231,14 +231,14 @@ func splitObjects(objArr []interface{}, size int) [][]interface{} {
 	return chunkSet
 }
 
-func InsertManySkipErrors(db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
+func InsertManySkipErrors(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
 		chunkSize = len(objects)
 	}
 	var c int64 = 0
 	for _, objSet := range splitObjects(objects, chunkSize) {
-		count, err := InsertManyRaw(db, tableName, objSet, true, buildParam, excludeColumns...)
+		count, err := InsertManyRaw(ctx, db, tableName, objSet, true, buildParam, excludeColumns...)
 		c = c + count
 		if err != nil {
 			return c, err
@@ -247,7 +247,7 @@ func InsertManySkipErrors(db *sql.DB, tableName string, objects []interface{}, c
 	return c, nil
 }
 
-func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
+func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
 	if len(objects) == 0 {
 		return 0, nil
 	}
@@ -337,14 +337,14 @@ func InsertManyRaw(db *sql.DB, tableName string, objects []interface{}, skipDupl
 	}
 	mainScope.Query = query
 
-	x, err := db.Exec(mainScope.Query, mainScope.Values...)
+	x, err := db.ExecContext(ctx, mainScope.Query, mainScope.Values...)
 	if err != nil {
 		return -1, err
 	}
 	return x.RowsAffected()
 }
 
-func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
+func InsertInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, skipDuplicate bool, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
 	if len(objects) == 0 {
 		return 0, nil
 	}
@@ -438,7 +438,7 @@ func InsertInTransaction(db *sql.DB, tableName string, objects []interface{}, sk
 		query = ReplaceParameters(driver, query, len(mainScope.Values))
 		mainScope.Query = query
 
-		_, execErr := tx.Exec(mainScope.Query, mainScope.Values...)
+		_, execErr := tx.ExecContext(ctx, mainScope.Query, mainScope.Values...)
 		if execErr != nil {
 			_ = tx.Rollback()
 			return 0, execErr
@@ -465,7 +465,7 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 	return ret, nil
 }
 
-func UpdateMany(db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
+func UpdateMany(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
 	var placeholder []string
 	driverName := GetDriver(db)
 	var buildParam func(i int) string
@@ -518,7 +518,7 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}, options...f
 	}
 	var count int64
 	for i := 0; i < len(query); i++ {
-		x, execErr := db.Exec(query[i], value[i]...)
+		x, execErr := db.ExecContext(ctx, query[i], value[i]...)
 		if execErr != nil {
 			return 0, execErr
 		}
@@ -528,7 +528,7 @@ func UpdateMany(db *sql.DB, tableName string, objects []interface{}, options...f
 	return count, nil
 }
 
-func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
+func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
 	var placeholder []string
 	driverName := GetDriver(db)
 	var buildParam func(i int) string
@@ -585,7 +585,7 @@ func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}, op
 	}
 
 	for i := 0; i < len(query); i++ {
-		_, execErr := tx.Exec(query[i], value[i]...)
+		_, execErr := tx.ExecContext(ctx, query[i], value[i]...)
 		if execErr != nil {
 			_ = tx.Rollback()
 			return 0, execErr
@@ -600,7 +600,7 @@ func UpdateInTransaction(db *sql.DB, tableName string, objects []interface{}, op
 	return total, err
 }
 
-func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options...func(i int) string) (int64, error) {
+func PatchMaps(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options...func(i int) string) (int64, error) {
 	// driverName := GetDriver(db)
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
@@ -649,7 +649,7 @@ func PatchMaps(db *sql.DB, tableName string, objects []map[string]interface{}, i
 
 	var count int64
 	for i := 0; i < len(query); i++ {
-		x, execErr := db.Exec(query[i], value[i]...)
+		x, execErr := db.ExecContext(ctx, query[i], value[i]...)
 		if execErr != nil {
 			return 0, execErr
 		}

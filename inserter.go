@@ -34,9 +34,11 @@ func (w *Inserter) Write(ctx context.Context, model interface{}) error {
 		if er0 != nil {
 			return er0
 		}
-		_, err := Insert(w.db, w.tableName, m2, w.BuildParam)
+		queryInsert, values := BuildInsertSql(w.tableName, m2, 0, w.BuildParam)
+		_, err := w.db.ExecContext(ctx, queryInsert, values...)
 		return err
 	}
-	_, err := Insert(w.db, w.tableName, model, w.BuildParam)
+	queryInsert, values := BuildInsertSql(w.tableName, model, 0, w.BuildParam)
+	_, err := w.db.ExecContext(ctx, queryInsert, values...)
 	return err
 }

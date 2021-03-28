@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"reflect"
@@ -28,15 +29,15 @@ func GetDriver(db *sql.DB) string {
 	}
 }
 
-func Query(db *sql.DB, results interface{}, sql string, values ...interface{}) error {
-	stm, err := db.Prepare(sql)
+func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, values ...interface{}) error {
+	stm, err := db.PrepareContext(ctx, sql)
 	if err != nil {
 		return err
 	}
-	return QueryByStatement(stm, results, values...)
+	return QueryByStatement(ctx, stm, results, values...)
 }
-func QueryByStatement(stm *sql.Stmt, results interface{}, values ...interface{}) error {
-	rows, er1 := stm.Query(values...)
+func QueryByStatement(ctx context.Context, stm *sql.Stmt, results interface{}, values ...interface{}) error {
+	rows, er1 := stm.QueryContext(ctx, values...)
 	if er1 != nil {
 		return er1
 	}
@@ -64,8 +65,8 @@ func QueryByStatement(stm *sql.Stmt, results interface{}, values ...interface{})
 	}
 	return nil
 }
-func QueryAndCount(db *sql.DB, results interface{}, count *int64, sql string, values ...interface{}) error {
-	rows, er1 := db.Query(sql, values...)
+func QueryAndCount(ctx context.Context, db *sql.DB, results interface{}, count *int64, sql string, values ...interface{}) error {
+	rows, er1 := db.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return er1
 	}
@@ -96,8 +97,8 @@ func QueryAndCount(db *sql.DB, results interface{}, count *int64, sql string, va
 	return nil
 }
 
-func QueryWithType(db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) error {
-	rows, er1 := db.Query(sql, values...)
+func QueryWithType(ctx context.Context, db *sql.DB, results interface{}, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) error {
+	rows, er1 := db.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return er1
 	}
@@ -120,21 +121,33 @@ func QueryWithType(db *sql.DB, results interface{}, modelType reflect.Type, fiel
 	return nil
 }
 
-func QueryRow(db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
+func QueryRow(ctx context.Context, db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
 	strSQL := "limit 1"
 	driver := GetDriver(db)
 	if driver == DriverOracle {
 		strSQL = "AND ROWNUM = 1"
 	}
 	s := sql + " " + strSQL
-	stm, err := db.Prepare(s)
-	if err != nil {
-		return nil, err
+	rows, er1 := db.QueryContext(ctx, s, values...)
+	if er1 != nil {
+		return nil, er1
 	}
-	return QueryRowByStatement(stm, modelType, fieldsIndex, values...)
+	tb, er2 := Scan(rows, modelType, fieldsIndex)
+	if er2 != nil {
+		return nil, er2
+	}
+	er3 := rows.Close()
+	if er3 != nil {
+		return nil, er3
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if err := rows.Err(); err != nil {
+		return nil, er3
+	}
+	return tb, nil
 }
-func QueryRowByStatement(stm *sql.Stmt, modelType reflect.Type, fieldsIndex map[string]int, values ...interface{}) (interface{}, error) {
-	rows, er1 := stm.Query(values...)
+func QueryRowByStatement(ctx context.Context, stm *sql.Stmt, modelType reflect.Type, fieldsIndex map[string]int, values ...interface{}) (interface{}, error) {
+	rows, er1 := stm.QueryContext(ctx, values...)
 	// rows, er1 := db.Query(s, values...)
 	if er1 != nil {
 		return nil, er1

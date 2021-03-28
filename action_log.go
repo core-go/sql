@@ -114,7 +114,7 @@ func (s *ActionLogWriter) Write(ctx context.Context, resource string, action str
 		}
 	}
 	query, vars := BuildInsertSQL(s.Database, s.Table, log, s.BuildParam)
-	_, err := s.Database.Exec(query, vars...)
+	_, err := s.Database.ExecContext(ctx, query, vars...)
 	return err
 }
 

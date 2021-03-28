@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -9,12 +10,12 @@ import (
 )
 
 // raw query
-func Upsert(db *sql.DB, table string, model interface{}) (int64, error) {
+func Upsert(ctx context.Context, db *sql.DB, table string, model interface{}) (int64, error) {
 	queryString, value, err := BuildUpsert(db, table, model)
 	if err != nil {
 		return 0, err
 	}
-	res, err := db.Exec(queryString, value...)
+	res, err := db.ExecContext(ctx, queryString, value...)
 	if err != nil {
 		return 0, err
 	}
@@ -22,12 +23,12 @@ func Upsert(db *sql.DB, table string, model interface{}) (int64, error) {
 
 }
 
-func UpsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
+func UpsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
 	query, values, err0 := BuildUpsert(db, table, model)
 	if err0 != nil {
 		return -1, err0
 	}
-	r, err1 := tx.Exec(query, values...)
+	r, err1 := tx.ExecContext(ctx, query, values...)
 	if err1 != nil {
 		return -1, err1
 	}

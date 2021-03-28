@@ -193,7 +193,7 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 	return -1
 }
 
-func Insert(db *sql.DB, table string, model interface{}, options...func(i int) string) (int64, error) {
+func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, options...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -202,7 +202,7 @@ func Insert(db *sql.DB, table string, model interface{}, options...func(i int) s
 	}
 	queryInsert, values := BuildInsertSql(table, model, 0, buildParam)
 
-	result, err := db.Exec(queryInsert, values...)
+	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
 		if err != nil {
 			return handleDuplicate(db, err)
@@ -228,7 +228,7 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	return 0, err
 }
 
-func InsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(i int) string) (int64, error) {
+func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -236,14 +236,14 @@ func InsertTx(db *sql.DB, tx *sql.Tx, table string, model interface{}, options..
 		buildParam = GetBuild(db)
 	}
 	queryInsert, values := BuildInsertSql(table, model, 0, buildParam)
-	result, err := tx.Exec(queryInsert, values...)
+	result, err := tx.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
 		return handleDuplicate(db, err)
 	}
 	return result.RowsAffected()
 }
 
-func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex int, options...func(i int) string) (int64, error) {
+func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, options...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version index not found")
 	}
@@ -256,7 +256,7 @@ func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 	}
 	queryInsert, values := BuildInsertSqlWithVersion(table, model, 0, versionIndex, buildParam)
 
-	result, err := db.Exec(queryInsert, values...)
+	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
 		errstr := err.Error()
 		driverName := GetDriver(db)
@@ -277,8 +277,8 @@ func InsertWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 	return result.RowsAffected()
 }
 
-func Exec(stmt *sql.Stmt, values ...interface{}) (int64, error) {
-	result, err := stmt.Exec(values...)
+func Exec(ctx context.Context, stmt *sql.Stmt, values ...interface{}) (int64, error) {
+	result, err := stmt.ExecContext(ctx, values...)
 
 	if err != nil {
 		return -1, err
@@ -286,7 +286,7 @@ func Exec(stmt *sql.Stmt, values ...interface{}) (int64, error) {
 	return result.RowsAffected()
 }
 
-func Update(db *sql.DB, table string, model interface{}, options...func(i int) string) (int64, error) {
+func Update(ctx context.Context, db *sql.DB, table string, model interface{}, options...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -294,14 +294,14 @@ func Update(db *sql.DB, table string, model interface{}, options...func(i int) s
 		buildParam = GetBuild(db)
 	}
 	query, values := BuildUpdateSql(table, model, 0, buildParam)
-	r, err0 := db.Exec(query, values...)
+	r, err0 := db.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
 	}
 	return r.RowsAffected()
 }
 
-func UpdateTx(db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(i int) string) (int64, error) {
+func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -309,14 +309,14 @@ func UpdateTx(db *sql.DB, tx *sql.Tx, table string, model interface{}, options..
 		buildParam = GetBuild(db)
 	}
 	query, values := BuildUpdateSql(table, model, 0, buildParam)
-	r, err0 := tx.Exec(query, values...)
+	r, err0 := tx.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
 	}
 	return r.RowsAffected()
 }
 
-func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex int, options...func(i int) string) (int64, error) {
+func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, options...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version's index not found")
 	}
@@ -329,7 +329,7 @@ func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 	}
 	query, values := BuildUpdateSqlWithVersion(table, model, 0, versionIndex, buildParam)
 
-	result, err := db.Exec(query, values...)
+	result, err := db.ExecContext(ctx, query, values...)
 
 	if err != nil {
 		return -1, err
@@ -337,7 +337,7 @@ func UpdateWithVersion(db *sql.DB, table string, model interface{}, versionIndex
 	return result.RowsAffected()
 }
 
-func Patch(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, options...func(i int) string) (int64, error) {
+func Patch(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, options...func(i int) string) (int64, error) {
 	idcolumNames, idJsonName := FindNames(modelType)
 	columNames := FindJsonName(modelType)
 	var buildParam func(i int) string
@@ -350,14 +350,14 @@ func Patch(db *sql.DB, table string, model map[string]interface{}, modelType ref
 	if query == "" {
 		return 0, errors.New("fail to build query")
 	}
-	result, err := db.Exec(query, value...)
+	result, err := db.ExecContext(ctx, query, value...)
 	if err != nil {
 		return -1, err
 	}
 	return result.RowsAffected()
 }
 
-func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, versionIndex int, options...func(i int) string) (int64, error) {
+func PatchWithVersion(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, versionIndex int, options...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version's index not found")
 	}
@@ -383,14 +383,14 @@ func PatchWithVersion(db *sql.DB, table string, model map[string]interface{}, mo
 	if query == "" {
 		return 0, errors.New("fail to build query")
 	}
-	result, err := db.Exec(query, value...)
+	result, err := db.ExecContext(ctx, query, value...)
 	if err != nil {
 		return -1, err
 	}
 	return result.RowsAffected()
 }
 
-func Delete(db *sql.DB, table string, query map[string]interface{}, options...func(i int) string) (int64, error) {
+func Delete(ctx context.Context, db *sql.DB, table string, query map[string]interface{}, options...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -399,7 +399,7 @@ func Delete(db *sql.DB, table string, query map[string]interface{}, options...fu
 	}
 	queryDelete, values := BuildDelete(table, query, buildParam)
 
-	result, err := db.Exec(queryDelete, values...)
+	result, err := db.ExecContext(ctx, queryDelete, values...)
 
 	if err != nil {
 		return -1, err
@@ -966,8 +966,8 @@ func ReplaceQueryArgs(driver string, query string) string {
 	}
 	return query
 }
-func Exist(db *sql.DB, sql string, args ...interface{}) (bool, error) {
-	rows, err := db.Query(sql, args...)
+func Exist(ctx context.Context, db *sql.DB, sql string, args ...interface{}) (bool, error) {
+	rows, err := db.QueryContext(ctx, sql, args...)
 	if err != nil {
 		return false, err
 	}

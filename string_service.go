@@ -42,7 +42,7 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 	key = key + "%"
 	vs := make([]string, 0)
 	sql := fmt.Sprintf(s.Sql, max)
-	rows, er1 := s.DB.Query(sql, key)
+	rows, er1 := s.DB.QueryContext(ctx, sql, key)
 	if er1 != nil {
 		return vs, er1
 	}
@@ -102,7 +102,7 @@ func (s *StringService) Save(ctx context.Context, values []string) (int64, error
 		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", driver)
 	}
 	mainScope.Query = query
-	x, err := s.DB.Exec(mainScope.Query, mainScope.Values...)
+	x, err := s.DB.ExecContext(ctx, mainScope.Query, mainScope.Values...)
 	if err != nil {
 		return 0, err
 	}
@@ -117,7 +117,7 @@ func (s *StringService) Delete(ctx context.Context, values []string) (int64, err
 		arrValue = append(arrValue, param)
 	}
 	query := `delete from ` + s.Table + ` where ` + s.Field + ` in (` + strings.Join(arrValue, ",") + `)`
-	x, err := s.DB.Exec(query)
+	x, err := s.DB.ExecContext(ctx, query)
 	if err != nil {
 		return 0, err
 	}
