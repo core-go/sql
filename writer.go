@@ -14,14 +14,15 @@ type Writer struct {
 	versionIndex   int
 	versionDBField string
 }
+
 func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, options ...Mapper) *Writer {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
-	return NewWriterWithVersion(db, tableName, modelType, versionField, mapper)
+	return NewSqlWriterWithVersion(db, tableName, modelType, versionField, mapper)
 }
-func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, mapper Mapper, options...func(i int) string) *Writer {
+func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, mapper Mapper, options ...func(i int) string) *Writer {
 	var loader *Loader
 	if mapper != nil {
 		loader = NewSqlLoader(db, tableName, modelType, mapper.DbToModel, options...)
@@ -40,7 +41,7 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 	}
 	return &Writer{loader, mapper, versionField, -1, ""}
 }
-func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, options...func(i int) string) *Writer {
+func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, options ...func(i int) string) *Writer {
 	return NewSqlWriterWithVersion(db, tableName, modelType, "", mapper, options...)
 }
 func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) *Writer {
