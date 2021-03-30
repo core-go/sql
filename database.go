@@ -107,7 +107,7 @@ func BuildDataSourceName(c DatabaseConfig) string {
 
 // for Loader
 
-func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string, options...func(i int) string) (string, []interface{}) {
+func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string, options ...func(i int) string) (string, []interface{}) {
 	var where = ""
 	var values []interface{}
 	var buildParam func(i int) string
@@ -193,7 +193,7 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 	return -1
 }
 
-func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, options...func(i int) string) (int64, error) {
+func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -228,7 +228,7 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	return 0, err
 }
 
-func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(i int) string) (int64, error) {
+func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -243,7 +243,7 @@ func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	return result.RowsAffected()
 }
 
-func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, options...func(i int) string) (int64, error) {
+func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, options ...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version index not found")
 	}
@@ -286,7 +286,7 @@ func Exec(ctx context.Context, stmt *sql.Stmt, values ...interface{}) (int64, er
 	return result.RowsAffected()
 }
 
-func Update(ctx context.Context, db *sql.DB, table string, model interface{}, options...func(i int) string) (int64, error) {
+func Update(ctx context.Context, db *sql.DB, table string, model interface{}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -301,7 +301,7 @@ func Update(ctx context.Context, db *sql.DB, table string, model interface{}, op
 	return r.RowsAffected()
 }
 
-func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(i int) string) (int64, error) {
+func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -316,7 +316,7 @@ func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	return r.RowsAffected()
 }
 
-func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, options...func(i int) string) (int64, error) {
+func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, options ...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version's index not found")
 	}
@@ -337,7 +337,7 @@ func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	return result.RowsAffected()
 }
 
-func Patch(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, options...func(i int) string) (int64, error) {
+func Patch(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, options ...func(i int) string) (int64, error) {
 	idcolumNames, idJsonName := FindNames(modelType)
 	columNames := FindJsonName(modelType)
 	var buildParam func(i int) string
@@ -357,7 +357,7 @@ func Patch(ctx context.Context, db *sql.DB, table string, model map[string]inter
 	return result.RowsAffected()
 }
 
-func PatchWithVersion(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, versionIndex int, options...func(i int) string) (int64, error) {
+func PatchWithVersion(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, versionIndex int, options ...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version's index not found")
 	}
@@ -390,7 +390,7 @@ func PatchWithVersion(ctx context.Context, db *sql.DB, table string, model map[s
 	return result.RowsAffected()
 }
 
-func Delete(ctx context.Context, db *sql.DB, table string, query map[string]interface{}, options...func(i int) string) (int64, error) {
+func Delete(ctx context.Context, db *sql.DB, table string, query map[string]interface{}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -1026,7 +1026,7 @@ func GetBuild(db *sql.DB) func(i int) string {
 		return BuildDollarParam
 	case "*godror.drv":
 		return BuildOracleParam
-	case "*mysql.MySQLDriver":
+	case "*mssql.Driver":
 		return BuildMsSqlParam
 	default:
 		return BuildParam
