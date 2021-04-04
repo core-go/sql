@@ -11,7 +11,7 @@ import (
 type DatabaseConfig struct {
 	MultiStatements bool        `mapstructure:"multi_statements"`
 	DataSourceName  string      `mapstructure:"data_source_name"`
-	Provider        string      `mapstructure:"provider"`
+	Driver          string      `mapstructure:"driver"`
 	Host            string      `mapstructure:"host"`
 	Port            int         `mapstructure:"port"`
 	Database        string      `mapstructure:"database"`

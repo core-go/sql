@@ -42,7 +42,7 @@ func open(c DatabaseConfig) (*sql.DB, error) {
 	if len(dsn) == 0 {
 		dsn = BuildDataSourceName(c)
 	}
-	db, err := sql.Open(c.Provider, dsn)
+	db, err := sql.Open(c.Driver, dsn)
 	if err != nil {
 		return db, err
 	}
@@ -84,10 +84,10 @@ func Open(c DatabaseConfig, retries ...time.Duration) (*sql.DB, error) {
 	}
 }
 func BuildDataSourceName(c DatabaseConfig) string {
-	if c.Provider == "postgres" {
+	if c.Driver == "postgres" {
 		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", c.User, c.Database, c.Password, c.Host, c.Port)
 		return uri
-	} else if c.Provider == "mysql" {
+	} else if c.Driver == "mysql" {
 		uri := ""
 		if c.MultiStatements {
 			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", c.User, c.Password, c.Host, c.Port, c.Database)
@@ -95,10 +95,10 @@ func BuildDataSourceName(c DatabaseConfig) string {
 		}
 		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", c.User, c.Password, c.Host, c.Port, c.Database)
 		return uri
-	} else if c.Provider == "mssql" { // mssql
+	} else if c.Driver == "mssql" { // mssql
 		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", c.User, c.Password, c.Host, c.Port, c.Database)
 		return uri
-	} else if c.Provider == "godror" || c.Provider == "oracle" {
+	} else if c.Driver == "godror" || c.Driver == "oracle" {
 		return fmt.Sprintf("user=\"%s\" password=\"%s\" connectString=\"%s:%d/%s\"", c.User, c.Password, c.Host, c.Port, c.Database)
 	} else { //sqlite
 		return c.Host // return sql.Open("sqlite3", c.Host)
