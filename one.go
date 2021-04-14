@@ -3,6 +3,7 @@ package sql
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -99,7 +100,15 @@ func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}
 		if colName, isKey, exist := CheckByIndex(modelType, index, update); exist {
 			fieldValue := modelValue.Field(index).Interface()
 			if !isKey {
-				mapValue[colName] = fieldValue
+				if boolValue, ok := fieldValue.(bool); ok {
+					mapValue[colName] = modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+				} else {
+					if boolPointer, okPointer := fieldValue.(*bool); okPointer {
+						mapValue[colName] = modelType.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
+					} else {
+						mapValue[colName] = fieldValue
+					}
+				}
 				keysOfMapValue = append(keysOfMapValue, colName)
 			} else {
 				mapPrimaryKeyValue[colName] = fieldValue
