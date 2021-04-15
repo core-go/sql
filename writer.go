@@ -101,7 +101,7 @@ func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64
 		if err != nil {
 			return 0, err
 		}
-		return Patch(ctx, s.Database, s.table, model, s.modelType, s.BuildParam)
 	}
+	MapFromBoolToDB(&model, s.modelType)
 	return Patch(ctx, s.Database, s.table, model, s.modelType, s.BuildParam)
 }

@@ -101,10 +101,22 @@ func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}
 			fieldValue := modelValue.Field(index).Interface()
 			if !isKey {
 				if boolValue, ok := fieldValue.(bool); ok {
-					mapValue[colName] = modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+					valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+					valueInt, err := strconv.Atoi(valueS)
+					if err != nil{
+						mapValue[colName] = valueS
+					} else {
+						mapValue[colName] = valueInt
+					}
 				} else {
 					if boolPointer, okPointer := fieldValue.(*bool); okPointer {
-						mapValue[colName] = modelType.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
+						valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
+						valueInt, err := strconv.Atoi(valueS)
+						if err != nil{
+							mapValue[colName] = valueS
+						} else {
+							mapValue[colName] = valueInt
+						}
 					} else {
 						mapValue[colName] = fieldValue
 					}

@@ -1032,3 +1032,98 @@ func GetBuild(db *sql.DB) func(i int) string {
 		return BuildParam
 	}
 }
+
+func MapFromBoolToDB(model *map[string]interface{}, modelType reflect.Type) {
+	for colName, value := range *model {
+		if boolValue, boolOk := value.(bool); boolOk {
+			index := GetIndexByTag("json", colName, modelType)
+			if index > -1 {
+				valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+				valueInt, err := strconv.Atoi(valueS)
+				if err != nil{
+					(*model)[colName] = valueS
+				} else {
+					(*model)[colName] = valueInt
+				}
+				continue
+			}
+		}
+		(*model)[colName] = value
+	}
+}
+
+func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, indexIgnore int) (r []interface{}, swapValues map[int]interface{}) {
+	if s != nil {
+		modelType := reflect.TypeOf(s).Elem()
+		swapValues = make(map[int]interface{}, 0)
+		maps := reflect.Indirect(reflect.ValueOf(s))
+
+		if columns == nil {
+			for i := 0; i < maps.NumField(); i++ {
+				tagBool := modelType.Field(i).Tag.Get("true")
+				if tagBool == ""{
+					r = append(r, maps.Field(i).Addr().Interface())
+				} else {
+					var str string
+					swapValues[i] = reflect.New(reflect.TypeOf(str)).Elem().Addr().Interface()
+					r = append(r, swapValues[i])
+				}
+			}
+			return
+		}
+
+		for i, columnsName := range columns {
+			if i == indexIgnore {
+				continue
+			}
+			var index int
+			var ok bool
+			var modelField reflect.StructField
+			var valueField reflect.Value
+			if fieldsIndex == nil {
+				if modelField, ok = modelType.FieldByName(columnsName); !ok {
+					var t interface{}
+					r = append(r, &t)
+					continue
+				}
+				valueField = maps.FieldByName(columnsName)
+			} else {
+				if index, ok = fieldsIndex[columnsName]; !ok {
+					var t interface{}
+					r = append(r, &t)
+					continue
+				}
+				modelField = modelType.Field(index)
+				valueField =maps.Field(index)
+			}
+			tagBool := modelField.Tag.Get("true")
+			if tagBool == ""{
+				r = append(r, valueField.Addr().Interface())
+			} else {
+				var str string
+				swapValues[index] = reflect.New(reflect.TypeOf(str)).Elem().Addr().Interface()
+				r = append(r, swapValues[index])
+			}
+
+		}
+	}
+	return
+}
+
+func SwapValuesToBool(s interface{}, swap *map[int]interface{})  {
+	if s != nil {
+		modelType := reflect.TypeOf(s).Elem()
+		maps := reflect.Indirect(reflect.ValueOf(s))
+		for index, element := range (*swap){
+			var isBool bool
+			boolStr := modelType.Field(index).Tag.Get("true")
+			var dbValue = element.(*string)
+			isBool = *dbValue == boolStr
+			if maps.Field(index).Kind() == reflect.Ptr {
+				maps.Field(index).Set(reflect.ValueOf(&isBool))
+			} else {
+				maps.Field(index).SetBool(isBool)
+			}
+		}
+	}
+}

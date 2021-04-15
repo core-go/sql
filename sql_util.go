@@ -248,59 +248,6 @@ func GetColumnsSelect(modelType reflect.Type) []string {
 	return columnNameKeys
 }
 
-// StructScan : transfer struct to slice for scan
-func StructScan(s interface{}) (r []interface{}) {
-	if s != nil {
-		vals := reflect.ValueOf(s).Elem()
-		for i := 0; i < vals.NumField(); i++ {
-			r = append(r, vals.Field(i).Addr().Interface())
-		}
-	}
-
-	return
-}
-
-// StructScan : transfer struct to slice for scan
-func StructScanByIndex(s interface{}, fieldsIndex map[string]int, columns []string) (r []interface{}) {
-	if s != nil {
-		maps := reflect.Indirect(reflect.ValueOf(s))
-		fieldsIndexSelected := make([]int, 0)
-		for _, columnsName := range columns {
-			columnsName = strings.ToLower(columnsName)
-			if index, ok := fieldsIndex[columnsName]; ok {
-				fieldsIndexSelected = append(fieldsIndexSelected, index)
-				r = append(r, maps.Field(index).Addr().Interface())
-			} else {
-				var ignore interface{}
-				r = append(r, &ignore)
-			}
-		}
-	}
-	return
-}
-
-// StructScan : transfer struct to slice for scan
-func StructScanWithIndexIgnore(s interface{}, fieldsIndex map[string]int, columns []string, indexIgnore int) (r []interface{}) {
-	if s != nil {
-		maps := reflect.Indirect(reflect.ValueOf(s))
-		fieldsIndexSelected := make([]int, 0)
-		for i, columnsName := range columns {
-			columnsName = strings.ToLower(columnsName)
-			if i == indexIgnore {
-				continue
-			}
-			if index, ok := fieldsIndex[columnsName]; ok {
-				fieldsIndexSelected = append(fieldsIndexSelected, index)
-				r = append(r, maps.Field(index).Addr().Interface())
-			} else {
-				var t interface{}
-				r = append(r, &t)
-			}
-		}
-	}
-	return
-}
-
 func Scans(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int) (t []interface{}, err error) {
 	columns, er0 := rows.Columns()
 	if er0 != nil {
@@ -308,7 +255,9 @@ func Scans(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int) (
 	}
 	for rows.Next() {
 		initModel := reflect.New(modelType).Interface()
-		if err = rows.Scan(StructScanByIndex(initModel, fieldsIndex, columns)...); err == nil {
+		r, swapValues := StructScan(initModel, columns, fieldsIndex, -1)
+		if err = rows.Scan(r...); err == nil {
+			SwapValuesToBool(initModel, &swapValues)
 			t = append(t, initModel)
 		}
 	}
@@ -326,8 +275,10 @@ func ScansAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[strin
 		initModel := reflect.New(modelType).Interface()
 		var c []interface{}
 		c = append(c, &count)
-		c = append(c, StructScanWithIndexIgnore(initModel, fieldsIndex, columns, 0)...)
+		r, swapValues := StructScan(initModel, columns, fieldsIndex, 0)
+		c = append(c, r...)
 		if err := rows.Scan(c...); err == nil {
+			SwapValuesToBool(initModel, &swapValues)
 			t = append(t, initModel)
 		}
 	}
@@ -338,7 +289,9 @@ func ScansAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[strin
 func ScanByModelType(rows *sql.Rows, modelType reflect.Type) (t []interface{}, err error) {
 	for rows.Next() {
 		gTb := reflect.New(modelType).Interface()
-		if err = rows.Scan(StructScan(gTb)...); err == nil {
+		r, swapValues := StructScan(gTb, nil, nil, -1)
+		if err = rows.Scan(r...); err == nil {
+			SwapValuesToBool(gTb, &swapValues)
 			t = append(t, gTb)
 		}
 	}
@@ -351,7 +304,9 @@ func Scan(rows *sql.Rows, structType reflect.Type, fieldsIndex map[string]int) (
 	columns, _ := rows.Columns()
 	for rows.Next() {
 		gTb := reflect.New(structType).Interface()
-		if err = rows.Scan(StructScanByIndex(gTb, fieldsIndex, columns)...); err == nil {
+		r, swapValues := StructScan(gTb, columns, fieldsIndex, -1)
+		if err = rows.Scan(r...); err == nil {
+			SwapValuesToBool(gTb, &swapValues)
 			t = gTb
 			break
 		}
@@ -362,6 +317,8 @@ func Scan(rows *sql.Rows, structType reflect.Type, fieldsIndex map[string]int) (
 //Row
 func ScanRow(row *sql.Row, structType reflect.Type) (t interface{}, err error) {
 	t = reflect.New(structType).Interface()
-	err = row.Scan(StructScan(t)...)
+	r, swapValues := StructScan(t, nil, nil, -1)
+	err = row.Scan(r...)
+	SwapValuesToBool(t, &swapValues)
 	return
 }
