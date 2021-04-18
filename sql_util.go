@@ -30,11 +30,62 @@ func GetDriver(db *sql.DB) string {
 }
 
 func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, values ...interface{}) error {
-	stm, err := db.PrepareContext(ctx, sql)
-	if err != nil {
-		return err
+	rows, er1 := db.QueryContext(ctx, sql, values...)
+	if er1 != nil {
+		return er1
 	}
-	return QueryByStatement(ctx, stm, results, values...)
+	defer rows.Close()
+	modelType := reflect.TypeOf(results).Elem().Elem()
+	fieldsIndex, er0 := GetColumnIndexes(modelType)
+	if er0 != nil {
+		return er0
+	}
+
+	tb, er2 := Scans(rows, modelType, fieldsIndex)
+	if er2 != nil {
+		return er2
+	}
+	for _, element := range tb {
+		appendToArray(results, element)
+	}
+	er4 := rows.Close()
+	if er4 != nil {
+		return er4
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if er5 := rows.Err(); er5 != nil {
+		return er5
+	}
+	return nil
+}
+func QueryTx(ctx context.Context, tx *sql.Tx, results interface{}, sql string, values ...interface{}) error {
+	rows, er1 := tx.QueryContext(ctx, sql, values...)
+	if er1 != nil {
+		return er1
+	}
+	defer rows.Close()
+	modelType := reflect.TypeOf(results).Elem().Elem()
+	fieldsIndex, er0 := GetColumnIndexes(modelType)
+	if er0 != nil {
+		return er0
+	}
+
+	tb, er2 := Scans(rows, modelType, fieldsIndex)
+	if er2 != nil {
+		return er2
+	}
+	for _, element := range tb {
+		appendToArray(results, element)
+	}
+	er4 := rows.Close()
+	if er4 != nil {
+		return er4
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if er5 := rows.Err(); er5 != nil {
+		return er5
+	}
+	return nil
 }
 func QueryByStatement(ctx context.Context, stm *sql.Stmt, results interface{}, values ...interface{}) error {
 	rows, er1 := stm.QueryContext(ctx, values...)
@@ -129,6 +180,25 @@ func QueryRow(ctx context.Context, db *sql.DB, modelType reflect.Type, fieldsInd
 	}
 	s := sql + " " + strSQL
 	rows, er1 := db.QueryContext(ctx, s, values...)
+	if er1 != nil {
+		return nil, er1
+	}
+	tb, er2 := Scan(rows, modelType, fieldsIndex)
+	if er2 != nil {
+		return nil, er2
+	}
+	er3 := rows.Close()
+	if er3 != nil {
+		return nil, er3
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if err := rows.Err(); err != nil {
+		return nil, er3
+	}
+	return tb, nil
+}
+func QueryRowTx(ctx context.Context, tx *sql.Tx, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
+	rows, er1 := tx.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return nil, er1
 	}
