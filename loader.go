@@ -37,7 +37,13 @@ func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(
 	_, idNames := FindNames(modelType)
 	mapJsonColumnKeys := MapJsonColumn(modelType)
 	modelsType := reflect.Zero(reflect.SliceOf(modelType)).Type()
-	fieldsIndex, er0 := GetColumnIndexes(modelType)
+
+	driver := GetDriver(db)
+	var mc func(string)string
+	if driver == DriverOracle {
+		mc = strings.ToUpper
+	}
+	fieldsIndex, er0 := GetColumnIndexes(modelType, mc)
 	if er0 != nil {
 		panic(er0)
 	}
