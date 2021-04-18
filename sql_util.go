@@ -46,11 +46,7 @@ func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, val
 	modelType := reflect.TypeOf(results).Elem().Elem()
 
 	driver := GetDriver(db)
-	var mc func(string)string
-	if driver == DriverOracle {
-		mc = strings.ToUpper
-	}
-	fieldsIndex, er0 := GetColumnIndexes(modelType, mc)
+	fieldsIndex, er0 := GetColumnIndexes(modelType, driver)
 	if er0 != nil {
 		return er0
 	}
@@ -72,14 +68,21 @@ func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, val
 	}
 	return nil
 }
-func QueryTx(ctx context.Context, tx *sql.Tx, results interface{}, mc func(string)string, sql string, values ...interface{}) error {
+func QueryTx(ctx context.Context, tx *sql.Tx, results interface{}, driver string, sql string, values ...interface{}) error {
+	var mc func(string)string
+	if driver == DriverOracle {
+		mc = strings.ToUpper
+	}
+	return QueryTxWithMap(ctx, tx, results, mc, sql, values...)
+}
+func QueryTxWithMap(ctx context.Context, tx *sql.Tx, results interface{}, mc func(string)string, sql string, values ...interface{}) error {
 	rows, er1 := tx.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return er1
 	}
 	defer rows.Close()
 	modelType := reflect.TypeOf(results).Elem().Elem()
-	fieldsIndex, er0 := GetColumnIndexes(modelType, mc)
+	fieldsIndex, er0 := GetColumnIndexesWithMap(modelType, mc)
 	if er0 != nil {
 		return er0
 	}
@@ -101,14 +104,21 @@ func QueryTx(ctx context.Context, tx *sql.Tx, results interface{}, mc func(strin
 	}
 	return nil
 }
-func QueryByStatement(ctx context.Context, stm *sql.Stmt, results interface{}, mc func(string)string, values ...interface{}) error {
+func QueryByStatement(ctx context.Context, stm *sql.Stmt, results interface{}, driver string, values ...interface{}) error {
+	var mc func(string)string
+	if driver == DriverOracle {
+		mc = strings.ToUpper
+	}
+	return QueryByStatementWithMap(ctx, stm, results, mc, values...)
+}
+func QueryByStatementWithMap(ctx context.Context, stm *sql.Stmt, results interface{}, mc func(string)string, values ...interface{}) error {
 	rows, er1 := stm.QueryContext(ctx, values...)
 	if er1 != nil {
 		return er1
 	}
 	defer rows.Close()
 	modelType := reflect.TypeOf(results).Elem().Elem()
-	fieldsIndex, er0 := GetColumnIndexes(modelType, mc)
+	fieldsIndex, er0 := GetColumnIndexesWithMap(modelType, mc)
 	if er0 != nil {
 		return er0
 	}
@@ -139,11 +149,7 @@ func QueryAndCount(ctx context.Context, db *sql.DB, results interface{}, count *
 	modelType := reflect.TypeOf(results).Elem().Elem()
 
 	driver := GetDriver(db)
-	var mc func(string)string
-	if driver == DriverOracle {
-		mc = strings.ToUpper
-	}
-	fieldsIndex, er0 := GetColumnIndexes(modelType, mc)
+	fieldsIndex, er0 := GetColumnIndexes(modelType, driver)
 	if er0 != nil {
 		return er0
 	}
@@ -266,8 +272,14 @@ func appendToArray(arr interface{}, item interface{}) interface{} {
 	elemValue.Set(reflect.Append(elemValue, itemValue))
 	return arr
 }
-
-func GetColumnIndexes(modelType reflect.Type, mp func(string) string) (map[string]int, error) {
+func GetColumnIndexes(modelType reflect.Type, driver string) (map[string]int, error) {
+	var mc func(string)string
+	if driver == DriverOracle {
+		mc = strings.ToUpper
+	}
+	return GetColumnIndexesWithMap(modelType, mc)
+}
+func GetColumnIndexesWithMap(modelType reflect.Type, mp func(string) string) (map[string]int, error) {
 	mapp := make(map[string]int, 0)
 	if modelType.Kind() != reflect.Struct {
 		return mapp, errors.New("bad type")
