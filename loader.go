@@ -38,8 +38,7 @@ func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(
 	mapJsonColumnKeys := MapJsonColumn(modelType)
 	modelsType := reflect.Zero(reflect.SliceOf(modelType)).Type()
 
-	driver := GetDriver(db)
-	fieldsIndex, er0 := GetColumnIndexes(modelType, driver)
+	fieldsIndex, er0 := GetColumnIndexes(modelType)
 	if er0 != nil {
 		panic(er0)
 	}

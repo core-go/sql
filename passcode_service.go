@@ -158,7 +158,7 @@ func (s *PasscodeService) Save(ctx context.Context, id string, passcode string, 
 func (s *PasscodeService) Load(ctx context.Context, id string) (string, time.Time, error) {
 	driverName := GetDriver(s.db)
 	arr := make(map[string]interface{})
-	strSql := `SELECT * FROM ` + s.tableName + ` WHERE ` + s.idName + ` = ` + s.BuildParam(1)
+	strSql := fmt.Sprintf(`SELECT %s, %s FROM `, s.passcodeName, s.expiredAtName) + s.tableName + ` WHERE ` + s.idName + ` = ` + s.BuildParam(1)
 	rows, err := s.db.QueryContext(ctx, strSql, id)
 	if err != nil {
 		return "", time.Now().Add(-24 * time.Hour), err
