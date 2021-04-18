@@ -265,6 +265,7 @@ func GetColumnIndexes(modelType reflect.Type) (map[string]int, error) {
 		field := modelType.Field(i)
 		ormTag := field.Tag.Get("gorm")
 		column, ok := FindTag(ormTag, "column")
+		column = strings.ToLower(column)
 		if ok {
 			mapp[column] = i
 		}
