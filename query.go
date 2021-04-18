@@ -22,7 +22,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query s
 		mp = options[0]
 	}
 	var total int64
-	driver := getDriver(db)
+	driver := GetDriver(db)
 	if pageSize <= 0 {
 		er1 := Query(ctx, db, models, query, params...)
 		if er1 != nil {
@@ -143,52 +143,6 @@ func BuildSearchResult(ctx context.Context, models interface{}, mp func(context.
 	return err
 }
 
-func getDriver(db *sql.DB) string {
-	if db == nil {
-		return DriverNotSupport
-	}
-	driver := reflect.TypeOf(db.Driver()).String()
-	switch driver {
-	case "*pq.Driver":
-		return DriverPostgres
-	case "*godror.drv":
-		return DriverOracle
-	case "*mysql.MySQLDriver":
-		return DriverMysql
-	case "*mssql.Driver":
-		return DriverMssql
-	case "*sqlite3.SQLiteDriver":
-		return DriverSqlite3
-	default:
-		return DriverNotSupport
-	}
-}
-func buildParam(i int) string {
-	return "?"
-}
-func buildOracleParam(i int) string {
-	return ":val" + strconv.Itoa(i)
-}
-func buildMsSqlParam(i int) string {
-	return "@p" + strconv.Itoa(i)
-}
-func buildDollarParam(i int) string {
-	return "$" + strconv.Itoa(i)
-}
-func getBuild(db *sql.DB) func(i int) string {
-	driver := reflect.TypeOf(db.Driver()).String()
-	switch driver {
-	case "*pq.Driver":
-		return buildDollarParam
-	case "*godror.drv":
-		return buildOracleParam
-	case "*mssql.Driver":
-		return buildMsSqlParam
-	default:
-		return buildParam
-	}
-}
-
 func BuildSort(sortString string, modelType reflect.Type) string {
 	var sort = make([]string, 0)
 	sorts := strings.Split(sortString, ",")
@@ -204,4 +158,12 @@ func BuildSort(sortString string, modelType reflect.Type) string {
 		sort = append(sort, columnName+" "+sortType)
 	}
 	return ` order by ` + strings.Join(sort, ",")
+}
+
+func ExtractArray(values []interface{}, field interface{}) []interface{} {
+	s := reflect.Indirect(reflect.ValueOf(field))
+	for i := 0; i < s.Len(); i++ {
+		values = append(values, s.Index(i).Interface())
+	}
+	return values
 }
