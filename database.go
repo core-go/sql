@@ -613,6 +613,7 @@ func BuildDelete(table string, ids map[string]interface{}, buildParam func(int) 
 // Obtain columns and values required for insert from interface
 func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull bool) (map[string]interface{}, map[string]interface{}, error) {
 	rv := reflect.ValueOf(value)
+	modelType := reflect.TypeOf(value)
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
 		value = rv.Interface()
@@ -624,7 +625,7 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 	var attrs = map[string]interface{}{}
 	var attrsKey = map[string]interface{}{}
 
-	for _, field := range GetMapField(value) {
+	for index, field := range GetMapField(value) {
 		if GetTag(field, IgnoreReadWrite) == IgnoreReadWrite {
 			continue
 		}
@@ -633,7 +634,16 @@ func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull boo
 		}
 		if !ContainString(*excludeColumns, GetTag(field, "fieldName")) && !IsPrimary(field) {
 			if dBName, ok := field.Tags[DBName]; ok {
-				attrs[dBName] = field.Value.Interface()
+				fieldValue := field.Value.Interface()
+				if boolValue, ok := fieldValue.(bool); ok {
+					attrs[dBName] = modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+				} else {
+					if boolPointer, okPointer := fieldValue.(*bool); okPointer {
+						attrs[dBName] = modelType.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
+					} else {
+						attrs[dBName] = fieldValue
+					}
+				}
 			}
 		}
 		if IsPrimary(field) {

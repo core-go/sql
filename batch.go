@@ -252,9 +252,13 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 		return 0, nil
 	}
 	driver := GetDriver(db)
-	firstAttrs, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
+	firstAttrs, primaryKeys, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
+	}
+	// append primaryKey
+	for key, value := range primaryKeys {
+		firstAttrs[key] = value
 	}
 
 	attrSize := len(firstAttrs)
@@ -272,9 +276,12 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 	}
 	var start int
 	for _, obj := range objects {
-		objAttrs, _, err := ExtractMapValue(obj, &excludeColumns, true)
+		objAttrs, keys, err := ExtractMapValue(obj, &excludeColumns, true)
 		if err != nil {
 			return 0, err
+		}
+		for key, value := range keys {
+			objAttrs[key] = value
 		}
 
 		// If object sizes are different, SQL statement loses consistency
