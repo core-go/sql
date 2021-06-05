@@ -34,7 +34,7 @@ func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(
 	} else {
 		buildParam = GetBuild(db)
 	}
-	_, idNames := FindNames(modelType)
+	_, idNames := FindPrimaryKeys(modelType)
 	mapJsonColumnKeys := MapJsonColumn(modelType)
 	modelsType := reflect.Zero(reflect.SliceOf(modelType)).Type()
 
@@ -50,9 +50,9 @@ func (s *Loader) Keys() []string {
 }
 
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
-	queryGetAll := BuildSelectAllQuery(s.table)
+	query := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
-	err := QueryWithType(ctx, s.Database, result, s.modelType, s.fieldsIndex, queryGetAll, s.BuildParam)
+	err := Query(ctx, s.Database, result, query)
 	if err == nil {
 		if s.Map != nil {
 			return MapModels(ctx, result, s.Map)
@@ -85,15 +85,15 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 		values = append(values, id)
 		colNumber++
 	} else {
-		queres := make([]string, 0)
+		conditions := make([]string, 0)
 		var ids = id.(map[string]interface{})
 		for k, idk := range ids {
 			columnName := s.mapJsonColumnKeys[k]
-			queres = append(queres, fmt.Sprintf("%s = %s", columnName, s.BuildParam(colNumber)))
+			conditions = append(conditions, fmt.Sprintf("%s = %s", columnName, s.BuildParam(colNumber)))
 			values = append(values, idk)
 			colNumber++
 		}
-		where = "where " + strings.Join(queres, " and ")
+		where = "where " + strings.Join(conditions, " and ")
 	}
 	row := s.Database.QueryRowContext(ctx, fmt.Sprintf("select count(*) from %s %s", s.table, where), values...)
 	if err := row.Scan(&count); err != nil {

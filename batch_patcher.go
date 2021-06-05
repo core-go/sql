@@ -24,7 +24,7 @@ func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type
 	modelsTypes := reflect.Zero(reflect.SliceOf(modelType)).Type()
 	idJsonName := make([]string, 0)
 	if fieldName == nil || len(fieldName) == 0 {
-		fieldName, idJsonName = FindNames(modelType)
+		fieldName, idJsonName = FindPrimaryKeys(modelType)
 	}
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
@@ -38,7 +38,7 @@ func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type
 func (w *BatchPatcher) Write(ctx context.Context, models []map[string]interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
 	failIndices := make([]int, 0)
-	_, err := PatchMaps(ctx, w.db, w.tableName, models, w.idNames, w.idJsonName, w.buildParam)
+	_, err := PatchInTransaction(ctx, w.db, w.tableName, models, w.idNames, w.idJsonName, w.buildParam)
 
 	if err == nil {
 		// Return full success
@@ -58,7 +58,7 @@ func toArrayMapIndex(models []map[string]interface{}, indices []int) []int {
 	return indices
 }
 
-func FindNames(modelType reflect.Type) ([]string, []string) {
+func FindPrimaryKeys(modelType reflect.Type) ([]string, []string) {
 	numField := modelType.NumField()
 	var idColumnFields []string
 	var idJsons []string

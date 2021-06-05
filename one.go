@@ -29,27 +29,44 @@ func Find(slice []string, val string) (int, bool) {
 	return -1, false
 }
 
-func BuildInsertSql(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
-	mapData, mapPrimaryKeyValue, keys := BuildMapDataAndKeys(model, false)
+func BuildInsert(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
+	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, false)
 	var cols []string
 	var values []interface{}
+	var params []string
 	for _, columnName := range keys {
-		if value, ok := mapData[columnName]; ok && value != nil {
+		if value, ok := mapKey[columnName]; ok {
 			cols = append(cols, QuoteColumnName(columnName))
-			values = append(values, value)
+			v2b, ok2 := GetDBValue(value)
+			if ok2 {
+				params = append(params, v2b)
+			} else {
+				values = append(values, value)
+				p := buildParam(i)
+				params = append(params, p)
+				i++
+			}
 		}
 	}
-	for columnName, value := range mapPrimaryKeyValue {
-		cols = append(cols, QuoteColumnName(columnName))
-		values = append(values, value)
+	for _, columnName := range columns {
+		if v1, ok := mapData[columnName]; ok {
+			cols = append(cols, QuoteColumnName(columnName))
+			v1b, ok1 := GetDBValue(v1)
+			if ok1 {
+				params = append(params, v1b)
+			} else {
+				values = append(values, v1)
+				p := buildParam(i)
+				params = append(params, p)
+				i++
+			}
+		}
 	}
-	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
-	numCol := len(cols)
-	value := fmt.Sprintf("(%v)", BuildParametersFrom(i, numCol, buildParam))
-	return fmt.Sprintf("insert into %v %v values %v", table, column, value), values
+	column := strings.Join(cols, ",")
+	return fmt.Sprintf("insert into %v(%v)values(%v)", table, column, strings.Join(params, ",")), values
 }
 
-func BuildInsertSqlWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
+func BuildInsertWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version index not found")
 	}
@@ -59,23 +76,40 @@ func BuildInsertSqlWithVersion(table string, model interface{}, i int, versionIn
 	if err != nil {
 		panic(err)
 	}
-	mapData, mapPrimaryKeyValue, keys := BuildMapDataAndKeys(model, false)
+	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, false)
 	var cols []string
 	var values []interface{}
+	var params []string
 	for _, columnName := range keys {
-		if value, ok := mapData[columnName]; ok && value != nil {
+		if value, ok := mapKey[columnName]; ok {
 			cols = append(cols, QuoteColumnName(columnName))
-			values = append(values, value)
+			v2b, ok2 := GetDBValue(value)
+			if ok2 {
+				params = append(params, v2b)
+			} else {
+				values = append(values, value)
+				p := buildParam(i)
+				params = append(params, p)
+				i++
+			}
 		}
 	}
-	for columnName, value := range mapPrimaryKeyValue {
-		cols = append(cols, QuoteColumnName(columnName))
-		values = append(values, value)
+	for _, columnName := range columns {
+		if v1, ok := mapData[columnName]; ok {
+			cols = append(cols, QuoteColumnName(columnName))
+			v1b, ok1 := GetDBValue(v1)
+			if ok1 {
+				params = append(params, v1b)
+			} else {
+				values = append(values, v1)
+				p := buildParam(i)
+				params = append(params, p)
+				i++
+			}
+		}
 	}
-	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
-	numCol := len(cols)
-	value := fmt.Sprintf("(%v)", BuildParametersFrom(i, numCol, buildParam))
-	return fmt.Sprintf("INSERT INTO %v %v VALUES %v", table, column, value), values
+	column := strings.Join(cols, ",")
+	return fmt.Sprintf("insert into %v(%v)values(%v)", table, column, strings.Join(params, ",")), values
 }
 
 func QuoteColumnName(str string) string {
@@ -89,59 +123,57 @@ func QuoteColumnName(str string) string {
 	return str
 }
 
-func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}, map[string]interface{}, []string) {
-	var mapValue = make(map[string]interface{})
-	var mapPrimaryKeyValue = make(map[string]interface{})
-	keysOfMapValue := make([]string, 0)
-	modelValue := reflect.Indirect(reflect.ValueOf(model))
-	modelType := modelValue.Type()
+func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}, map[string]interface{}, []string, []string) {
+	var mapData = make(map[string]interface{})
+	var mapKey = make(map[string]interface{})
+	keys := make([]string, 0)
+	columns := make([]string, 0)
+	mv := reflect.Indirect(reflect.ValueOf(model))
+	modelType := mv.Type()
 	numField := modelType.NumField()
-	for index := 0; index < numField; index++ {
-		if colName, isKey, exist := CheckByIndex(modelType, index, update); exist {
-			fieldValue := modelValue.Field(index).Interface()
-			if !isKey {
-				if boolValue, ok := fieldValue.(bool); ok {
-					valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
-					valueInt, err := strconv.Atoi(valueS)
-					if err != nil{
-						mapValue[colName] = valueS
-					} else {
-						mapValue[colName] = valueInt
-					}
+	for i := 0; i < numField; i++ {
+		if colName, isKey, exist := CheckByIndex(modelType, i, update); exist {
+			f := mv.Field(i)
+			fieldValue := f.Interface()
+			isNil := false
+			if f.Kind() == reflect.Ptr {
+				if reflect.ValueOf(fieldValue).IsNil() {
+					isNil = true
 				} else {
-					if boolPointer, okPointer := fieldValue.(*bool); okPointer {
-						valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(*boolPointer))
-						valueInt, err := strconv.Atoi(valueS)
-						if err != nil{
-							mapValue[colName] = valueS
-						} else {
-							mapValue[colName] = valueInt
-						}
+					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+				}
+			}
+			if isKey {
+				columns = append(columns, colName)
+				if !isNil {
+					mapKey[colName] = fieldValue
+				}
+			} else {
+				keys = append(keys, colName)
+				if !isNil {
+					if boolValue, ok := fieldValue.(bool); ok {
+						valueS := modelType.Field(i).Tag.Get(strconv.FormatBool(boolValue))
+						mapData[colName] = valueS
 					} else {
-						mapValue[colName] = fieldValue
+						mapData[colName] = fieldValue
 					}
 				}
-				keysOfMapValue = append(keysOfMapValue, colName)
-			} else {
-				mapPrimaryKeyValue[colName] = fieldValue
 			}
 		}
 	}
-	return mapValue, mapPrimaryKeyValue, keysOfMapValue
+	return mapData, mapKey, keys, columns
 }
-
 func CheckByIndex(modelType reflect.Type, index int, update bool) (col string, isKey bool, colExist bool) {
-	fields := modelType.Field(index)
-	tag, _ := fields.Tag.Lookup("gorm")
+	field := modelType.Field(index)
+	tag, _ := field.Tag.Lookup("gorm")
 	if strings.Contains(tag, IgnoreReadWrite) {
 		return "", false, false
 	}
 	if update {
-		if strings.Contains(tag, "updateable:false") {
+		if strings.Contains(tag, "update:false") {
 			return "", false, false
 		}
 	}
-
 	if has := strings.Contains(tag, "column"); has {
 		str1 := strings.Split(tag, ";")
 		num := len(str1)

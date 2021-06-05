@@ -13,77 +13,109 @@ import (
 
 var formatDateUpdate = "2006-01-02 15:04:05"
 
-func ExecuteStatements(ctx context.Context, db *sql.DB, sts []Statement) (int64, error) {
-	return ExecuteBatch(ctx, db, sts, true, false)
-}
-func ExecuteAll(ctx context.Context, db *sql.DB, sts []Statement) (int64, error) {
-	return ExecuteBatch(ctx, db, sts, false, true)
-}
-func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSuccess bool, countAll bool) (int64, error) {
-	if sts == nil || len(sts) == 0 {
-		return 0, nil
-	}
-	driver := GetDriver(db)
-	tx, er0 := db.Begin()
-	if er0 != nil {
-		return 0, er0
-	}
-	result, er1 := tx.ExecContext(ctx, sts[0].Sql, sts[0].Args...)
-	if er1 != nil {
-		_ = tx.Rollback()
-		str := er1.Error()
-		if driver == DriverPostgres && strings.Contains(str, "pq: duplicate key value violates unique constraint") {
-			return 0, nil
-		} else if driver == DriverMysql && strings.Contains(str, "Error 1062: Duplicate entry") {
-			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driver == DriverOracle && strings.Contains(str, "ORA-00001: unique constraint") {
-			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driver == DriverMssql && strings.Contains(str, "Violation of PRIMARY KEY constraint") {
-			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-		} else if driver == DriverSqlite3 && strings.Contains(str, "UNIQUE constraint failed") {
-			return 0, nil
-		} else {
-			return 0, er1
-		}
-	}
-	rowAffected, er2 := result.RowsAffected()
-	if er2 != nil {
-		tx.Rollback()
-		return 0, er2
-	}
-	if firstRowSuccess {
-		if rowAffected == 0 {
-			return 0, nil
-		}
-	}
-	count := rowAffected
-	for i := 1; i < len(sts); i++ {
-		r2, er3 := tx.ExecContext(ctx, sts[i].Sql, sts[i].Args...)
-		if er3 != nil {
-			er4 := tx.Rollback()
-			if er4 != nil {
-				return count, er4
-			}
-			return count, er3
-		}
-		a2, er5 := r2.RowsAffected()
-		if er5 != nil {
-			tx.Rollback()
-			return count, er5
-		}
-		count = count + a2
-	}
-	er6 := tx.Commit()
-	if er6 != nil {
-		return count, er6
-	}
-	if countAll {
-		return count, nil
-	}
-	return 1, nil
+type BatchStatement struct {
+	Query         string
+	Values        []interface{}
+	Keys          []string
+	Columns       []string
+	Attributes    map[string]interface{}
+	AttributeKeys map[string]interface{}
 }
 
-func InsertMany(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
+func newStatement(value interface{}, excludeColumns ...string) BatchStatement {
+	attribute, attributeKey, _, _ := ExtractMapValue(value, &excludeColumns, false)
+	attrSize := len(attribute)
+	modelType := reflect.TypeOf(value)
+	keys := FindDBColumNames(modelType)
+	// Replace with database column name
+	dbColumns := make([]string, 0, attrSize)
+	for _, key := range SortedKeys(attribute) {
+		dbColumns = append(dbColumns, QuoteColumnName(key))
+	}
+	// Scope to eventually run SQL
+	statement := BatchStatement{Keys: keys, Columns: dbColumns, Attributes: attribute, AttributeKeys: attributeKey}
+	return statement
+}
+
+func statement() BatchStatement {
+	attributes := make(map[string]interface{})
+	attributeKeys := make(map[string]interface{})
+	return BatchStatement{Keys: []string{}, Columns: []string{}, Attributes: attributes, AttributeKeys: attributeKeys}
+}
+
+func FindDBColumNames(modelType reflect.Type) []string {
+	numField := modelType.NumField()
+	var idFields []string
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		ormTag := field.Tag.Get("gorm")
+		tags := strings.Split(ormTag, ";")
+		for _, tag := range tags {
+			if strings.Compare(strings.TrimSpace(tag), "primary_key") == 0 {
+				k, ok := findTag(ormTag, "column")
+				if ok {
+					idFields = append(idFields, k)
+				}
+			}
+		}
+	}
+	return idFields
+}
+
+func findTag(tag string, key string) (string, bool) {
+	if has := strings.Contains(tag, key); has {
+		str1 := strings.Split(tag, ";")
+		num := len(str1)
+		for i := 0; i < num; i++ {
+			str2 := strings.Split(str1[i], ":")
+			for j := 0; j < len(str2); j++ {
+				if str2[j] == key {
+					return str2[j+1], true
+				}
+			}
+		}
+	}
+	return "", false
+}
+
+// Field model field definition
+type Field struct {
+	Tags  map[string]string
+	Value reflect.Value
+	Type  reflect.Type
+}
+
+func GetMapField(object interface{}) []Field {
+	modelType := reflect.TypeOf(object)
+	value := reflect.Indirect(reflect.ValueOf(object))
+	var result []Field
+	numField := modelType.NumField()
+
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		selectField := Field{Value: value.Field(i), Type: modelType}
+		gormTag, ok := field.Tag.Lookup("gorm")
+		tag := make(map[string]string)
+		tag["fieldName"] = field.Name
+		if ok {
+			str1 := strings.Split(gormTag, ";")
+			for k := 0; k < len(str1); k++ {
+				str2 := strings.Split(str1[k], ":")
+				if len(str2) == 1 {
+					tag[str2[0]] = str2[0]
+					selectField.Tags = tag
+				} else {
+					tag[str2[0]] = str2[1]
+					selectField.Tags = tag
+				}
+			}
+			result = append(result, selectField)
+		}
+	}
+	return result
+}
+
+func InsertManyWithSize(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, chunkSize int, buildParam func(i int) string, excludeColumns ...string) (int64, error) {
 	// Split records with specified size not to exceed Database parameter limit
 	if chunkSize <= 0 {
 		chunkSize = len(objects)
@@ -123,7 +155,7 @@ func InsertInTransactionTx(ctx context.Context, db *sql.DB, tx *sql.Tx, tableNam
 		}
 		driver := GetDriver(db)
 		firstObj := objectValues.Index(0).Interface()
-		columns, primaryKeys, err := ExtractMapValue(firstObj, &excludeColumns, true)
+		columns, primaryKeys, _, err := ExtractMapValue(firstObj, &excludeColumns, true)
 		if err != nil {
 			return 0, err
 		}
@@ -144,7 +176,7 @@ func InsertInTransactionTx(ctx context.Context, db *sql.DB, tx *sql.Tx, tableNam
 			obj := objectValues.Index(i).Interface()
 			// Store placeholders for embedding variables
 			placeholders := make([]string, 0, attrSize)
-			objAttrs, primaryKeys, err := ExtractMapValue(obj, &excludeColumns, true)
+			objAttrs, primaryKeys, _, err := ExtractMapValue(obj, &excludeColumns, true)
 			if err != nil {
 				return 0, err
 			}
@@ -212,7 +244,7 @@ func InsertInTransactionTx(ctx context.Context, db *sql.DB, tx *sql.Tx, tableNam
 		count := objectValues.Len()
 		return int64(count), err
 	}
-	return 0, fmt.Errorf("objects must be slice.")
+	return 0, fmt.Errorf("objects must be slice")
 }
 
 // Separate objects into several size
@@ -252,7 +284,7 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 		return 0, nil
 	}
 	driver := GetDriver(db)
-	firstAttrs, primaryKeys, err := ExtractMapValue(objects[0], &excludeColumns, true)
+	firstAttrs, primaryKeys, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
 	}
@@ -276,7 +308,7 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 	}
 	var start int
 	for _, obj := range objects {
-		objAttrs, keys, err := ExtractMapValue(obj, &excludeColumns, true)
+		objAttrs, keys, _, err := ExtractMapValue(obj, &excludeColumns, true)
 		if err != nil {
 			return 0, err
 		}
@@ -334,13 +366,22 @@ func InsertManyRaw(ctx context.Context, db *sql.DB, tableName string, objects []
 		} else {
 			return 0, fmt.Errorf("only support skip duplicate on mysql and postgresql, current vendor is %s", driver)
 		}
-	}
-	{
-		query = fmt.Sprintf(fmt.Sprintf("insert into %s (%s) values %s",
-			tableName,
-			strings.Join(dbColumns, ", "),
-			strings.Join(placeholders, ", "),
-		))
+	} else {
+		if driver != DriverOracle {
+			query = fmt.Sprintf(fmt.Sprintf("insert into %s (%s) values %s",
+				tableName,
+				strings.Join(dbColumns, ","),
+				strings.Join(placeholders, ","),
+			))
+		} else {
+			all := make([]string, 0)
+			colNames := "(" + strings.Join(dbColumns, ",") + ")"
+			for _, s0 := range placeholders {
+				s1 := fmt.Sprintf(" into %s %s values %s ", tableName, colNames, s0)
+				all = append(all, s1)
+			}
+			query = fmt.Sprintf(" insert all %s select * from dual", strings.Join(all, " "))
+		}
 	}
 	mainScope.Query = query
 
@@ -356,7 +397,7 @@ func InsertInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 		return 0, nil
 	}
 	driver := GetDriver(db)
-	firstAttrs, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
+	firstAttrs, _, _, err := ExtractMapValue(objects[0], &excludeColumns, true)
 	if err != nil {
 		return 0, err
 	}
@@ -380,7 +421,7 @@ func InsertInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 		mainScope := BatchStatement{}
 		// Store placeholders for embedding variables
 		placeholders := make([]string, 0, attrSize)
-		objAttrs, _, err := ExtractMapValue(obj, &excludeColumns, true)
+		objAttrs, _, _, err := ExtractMapValue(obj, &excludeColumns, true)
 		if err != nil {
 			return 0, err
 		}
@@ -472,7 +513,7 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 	return ret, nil
 }
 
-func UpdateMany(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
+func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
 	var placeholder []string
 	driver := GetDriver(db)
 	var buildParam func(i int) string
@@ -523,69 +564,6 @@ func UpdateMany(ctx context.Context, db *sql.DB, tableName string, objects []int
 			where,
 		)))
 	}
-	var count int64
-	for i := 0; i < len(query); i++ {
-		x, execErr := db.ExecContext(ctx, query[i], value[i]...)
-		if execErr != nil {
-			return 0, execErr
-		}
-		rowsAffected, _ := x.RowsAffected()
-		count += rowsAffected
-	}
-	return count, nil
-}
-
-func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
-	var placeholder []string
-	driver := GetDriver(db)
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
-	}
-	var query []string
-	var value [][]interface{}
-	if len(objects) == 0 {
-		return 0, nil
-	}
-	valueDefault := objects[0]
-	statement := newStatement(valueDefault, placeholder...)
-	columns := make([]string, 0) // columns set value for update
-	for _, key := range SortedKeys(statement.Attributes) {
-		columns = append(columns, QuoteByDriver(key, driver))
-	}
-	for _, obj := range objects {
-		scope := newStatement(obj, placeholder...)
-		// Append variables set column
-		for _, key := range SortedKeys(scope.Attributes) {
-			scope.Values = append(scope.Values, scope.Attributes[key])
-		}
-		// Append variables where
-		for _, key := range scope.Keys {
-			scope.Values = append(scope.Values, scope.AttributeKeys[key])
-		}
-		// Also append variables to mainScope
-		//statement.Values = append(statement.Values, scope.Values...)
-
-		n := len(scope.Columns)
-		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
-		if err1 != nil {
-			return 0, err1
-		}
-		value = append(value, setVal)
-		numKeys := len(scope.Keys)
-		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
-		if err2 != nil {
-			return 0, err2
-		}
-		value = append(value, whereVal)
-		query = append(query, fmt.Sprintf(fmt.Sprintf("update %s set %s where %s",
-			tableName,
-			sets,
-			where,
-		)))
-	}
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, err
@@ -606,7 +584,73 @@ func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 	total := int64(len(query))
 	return total, err
 }
+func PatchInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options...func(i int) string) (int64, error) {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
+	var query []string
+	var value [][]interface{}
+	if len(objects) == 0 {
+		return 0, nil
+	}
+	for _, obj := range objects {
+		scope := statement()
+		// Append variables set column
+		for key, _ := range obj {
+			if _, ok := Find(idTagJsonNames, key); !ok {
+				scope.Columns = append(scope.Columns, key)
+				scope.Values = append(scope.Values, obj[key])
+			}
+		}
+		// Append variables where
+		for i, key := range idTagJsonNames {
+			scope.Values = append(scope.Values, obj[key])
+			scope.Keys = append(scope.Keys, idColumNames[i])
+		}
 
+		n := len(scope.Columns)
+		sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
+		if err1 != nil {
+			return 0, err1
+		}
+		value = append(value, setVal)
+		numKeys := len(scope.Keys)
+		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
+		if err2 != nil {
+			return 0, err2
+		}
+		value = append(value, whereVal)
+		query = append(query, fmt.Sprintf("update %s set %s where %s",
+			tableName,
+			sets,
+			where,
+		))
+	}
+
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+
+	for i := 0; i < len(query); i++ {
+		_, execErr := tx.ExecContext(ctx, query[i], value[i]...)
+		if execErr != nil {
+			_ = tx.Rollback()
+			return 0, execErr
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return 0, err
+	}
+	total := int64(len(query))
+	return total, err
+}
 func PatchMaps(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
@@ -716,7 +760,7 @@ func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, 
 }
 
 func BuildParamWithNull(colName string) string {
-	return fmt.Sprintf("%v = null", colName)
+	return QuoteColumnName(colName)+"=null"
 }
 func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int, start int, joinStr string, buildParam func(int) string) (string, []interface{}, error) {
 	arr := make([]string, *n)
