@@ -70,19 +70,19 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 		uniqueCols := make([]string, 0)
 		values := make([]interface{}, 0, len(attrs)*2)
 		for ; i < len(sorted); i++ {
-			setColumns = append(setColumns, `"`+strings.Replace(sorted[i], `"`, `""`, -1)+`"`+" = excluded."+strings.Replace(sorted[i], `"`, `""`, -1))
-			dbColumns = append(dbColumns, "`"+strings.Replace(sorted[i], "`", "``", -1)+"`")
+			setColumns = append(setColumns, `"`+strings.Replace(sorted[i], `"`, `""`, -1)+`"`+" = EXCLUDED."+strings.Replace(sorted[i], `"`, `""`, -1))
+			dbColumns = append(dbColumns, `"`+strings.Replace(sorted[i], "`", "``", -1)+`"`)
 			variables = append(variables, "$"+strconv.Itoa(i+1))
 			values = append(values, attrs[sorted[i]])
 		}
 		for key, val := range unique {
-			i++
 			uniqueCols = append(uniqueCols, `"`+strings.Replace(key, `"`, `""`, -1)+`"`)
-			dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
+			dbColumns = append(dbColumns, `"`+strings.Replace(key, "`", "``", -1)+`"`)
 			variables = append(variables, "$"+strconv.Itoa(i+1))
 			values = append(values, val)
+			i++
 		}
-		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON CONFLICT (%s) DO UPDATE SET %s",
+		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s",
 			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
 			strings.Join(dbColumns, ", "),
 			strings.Join(variables, ", "),
@@ -150,7 +150,7 @@ func BuildSave(db *sql.DB, table string, model interface{}) (string, []interface
 				v, ok := GetDBValue(val)
 				dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
 				if ok {
-					setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = " + v)
+					setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = "+v)
 					variables = append(variables, v)
 				} else {
 					setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = ?")
