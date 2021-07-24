@@ -185,10 +185,10 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 								json = tagJsons[0]
 							}
 							f := FieldDB{
-								JSON: json,
+								JSON:   json,
 								column: col,
-								index: idx,
-								key: isKey,
+								index:  idx,
+								key:    isKey,
 								Update: update,
 							}
 							tTag, tOk := field.Tag.Lookup("true")
@@ -230,7 +230,7 @@ func BuildUpdateBatch(table string, models interface{}, buildParam func(int) str
 		i := 1
 		for _, col := range cols {
 			fdb := schema[col]
-			if !fdb.key && !fdb.Update {
+			if !fdb.key && fdb.Update {
 				f := mv.Field(fdb.index)
 				fieldValue := f.Interface()
 				isNil := false
@@ -242,13 +242,13 @@ func BuildUpdateBatch(table string, models interface{}, buildParam func(int) str
 					}
 				}
 				if isNil {
-					values = append(values, col + "=null")
+					values = append(values, col+"=null")
 				} else {
 					v, ok := GetDBValue(fieldValue)
 					if ok {
-						values = append(values, col + "=" + v)
+						values = append(values, col+"="+v)
 					} else {
-						values = append(values, col + "=" + buildParam(i))
+						values = append(values, col+"="+buildParam(i))
 						i = i + 1
 						args = append(args, fieldValue)
 					}
@@ -266,9 +266,9 @@ func BuildUpdateBatch(table string, models interface{}, buildParam func(int) str
 			}
 			v, ok := GetDBValue(fieldValue)
 			if ok {
-				where = append(where, col + "=" + v)
+				where = append(where, col+"="+v)
 			} else {
-				where = append(where, col + "=" + buildParam(i+1))
+				where = append(where, col+"="+buildParam(i))
 				i = i + 1
 				args = append(args, fieldValue)
 			}
@@ -302,11 +302,11 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, options ...f
 	driver := GetDriver(db)
 	slen := s.Len()
 	if driver != DriverOracle {
+		paramNumber := 1
 		for j := 0; j < slen; j++ {
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
 			values := make([]string, 0)
-			i := 1
 			for _, col := range cols {
 				fdb := schema[col]
 				f := mv.Field(fdb.index)
@@ -326,8 +326,8 @@ func BuildInsertBatch(db *sql.DB, table string, models interface{}, options ...f
 					if ok {
 						values = append(values, v)
 					} else {
-						values = append(values, buildParam(i))
-						i = i + 1
+						values = append(values, buildParam(paramNumber))
+						paramNumber = paramNumber + 1
 						args = append(args, fieldValue)
 					}
 				}
@@ -395,6 +395,7 @@ func BuildSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement, 
 	stmts := make([]Statement, 0)
 	driver := GetDriver(db)
 	if driver == DriverPostgres || driver == DriverMysql {
+		i := 1
 		for j := 0; j < slen; j++ {
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
@@ -402,7 +403,6 @@ func BuildSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement, 
 			values := make([]string, 0)
 			setColumns := make([]string, 0)
 			args := make([]interface{}, 0)
-			i := 1
 			for _, col := range cols {
 				fdb := schema[col]
 				f := mv.Field(fdb.index)
@@ -441,13 +441,13 @@ func BuildSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement, 
 						}
 					}
 					if isNil {
-						setColumns = append(setColumns, col + "=null")
+						setColumns = append(setColumns, col+"=null")
 					} else {
 						v, ok := GetDBValue(fieldValue)
 						if ok {
-							setColumns = append(setColumns, col + "=" + v)
+							setColumns = append(setColumns, col+"="+v)
 						} else {
-							setColumns = append(setColumns, col + "=" + buildParam(i))
+							setColumns = append(setColumns, col+"="+buildParam(i))
 							i = i + 1
 							args = append(args, fieldValue)
 						}

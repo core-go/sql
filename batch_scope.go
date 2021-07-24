@@ -513,7 +513,7 @@ func InterfaceSlice(slice interface{}) ([]interface{}, error) {
 	return ret, nil
 }
 
-func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options...func(i int) string) (int64, error) {
+func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []interface{}, options ...func(i int) string) (int64, error) {
 	var placeholder []string
 	driver := GetDriver(db)
 	var buildParam func(i int) string
@@ -584,7 +584,7 @@ func UpdateInTransaction(ctx context.Context, db *sql.DB, tableName string, obje
 	total := int64(len(query))
 	return total, err
 }
-func PatchInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options...func(i int) string) (int64, error) {
+func PatchInTransaction(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -592,12 +592,13 @@ func PatchInTransaction(ctx context.Context, db *sql.DB, tableName string, objec
 		buildParam = GetBuild(db)
 	}
 	var query []string
-	var value [][]interface{}
+	var values [][]interface{}
 	if len(objects) == 0 {
 		return 0, nil
 	}
 	for _, obj := range objects {
 		scope := statement()
+		valueRow := make([]interface{}, 0)
 		// Append variables set column
 		for key, _ := range obj {
 			if _, ok := Find(idTagJsonNames, key); !ok {
@@ -616,20 +617,20 @@ func PatchInTransaction(ctx context.Context, db *sql.DB, tableName string, objec
 		if err1 != nil {
 			return 0, err1
 		}
-		value = append(value, setVal)
+		valueRow = append(valueRow, setVal...)
 		numKeys := len(scope.Keys)
 		where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
 		if err2 != nil {
 			return 0, err2
 		}
-		value = append(value, whereVal)
+		valueRow = append(valueRow, whereVal...)
 		query = append(query, fmt.Sprintf("update %s set %s where %s",
 			tableName,
 			sets,
 			where,
 		))
+		values = append(values, valueRow)
 	}
-
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -637,7 +638,7 @@ func PatchInTransaction(ctx context.Context, db *sql.DB, tableName string, objec
 	}
 
 	for i := 0; i < len(query); i++ {
-		_, execErr := tx.ExecContext(ctx, query[i], value[i]...)
+		_, execErr := tx.ExecContext(ctx, query[i], values[i]...)
 		if execErr != nil {
 			_ = tx.Rollback()
 			return 0, execErr
@@ -651,7 +652,7 @@ func PatchInTransaction(ctx context.Context, db *sql.DB, tableName string, objec
 	total := int64(len(query))
 	return total, err
 }
-func PatchMaps(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options...func(i int) string) (int64, error) {
+func PatchMaps(ctx context.Context, db *sql.DB, tableName string, objects []map[string]interface{}, idTagJsonNames []string, idColumNames []string, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -760,7 +761,7 @@ func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, 
 }
 
 func BuildParamWithNull(colName string) string {
-	return QuoteColumnName(colName)+"=null"
+	return QuoteColumnName(colName) + "=null"
 }
 func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int, start int, joinStr string, buildParam func(int) string) (string, []interface{}, error) {
 	arr := make([]string, *n)
@@ -775,7 +776,7 @@ func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int,
 			values = values[:len(values)-1]
 			*n--
 		} else {
-			arr[i] = fmt.Sprintf("%s = %s", columnName, BuildParametersFrom(start, 1, buildParam))
+			arr[i] = fmt.Sprintf("%s = %s", columnName, BuildParametersFrom(j, 1, buildParam))
 			valueParams = append(valueParams, values[j])
 		}
 		j++
