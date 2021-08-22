@@ -22,13 +22,12 @@ func NewSearchBuilder(db *sql.DB, modelType reflect.Type, buildQuery func(interf
 	return builder
 }
 
-func (b *SearchBuilder) Search(ctx context.Context, m interface{}, results interface{}, pageIndex int64, pageSize int64, options...int64) (int64, error) {
+func (b *SearchBuilder) Search(ctx context.Context, m interface{}, results interface{}, limit int64, options...int64) (int64, string, error) {
 	sql, params := b.BuildQuery(m)
-	var firstPageSize int64
+	var offset int64 = 0
 	if len(options) > 0 && options[0] > 0 {
-		firstPageSize = options[0]
-	} else {
-		firstPageSize = 0
+		offset = options[0]
 	}
-	return BuildFromQuery(ctx, b.Database, results, sql, params, pageIndex, pageSize, firstPageSize, b.Map)
+	total, err := BuildFromQuery(ctx, b.Database, results, sql, params, limit, offset, b.Map)
+	return total, "", err
 }

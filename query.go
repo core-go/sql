@@ -16,14 +16,14 @@ const (
 	asc                 = "asc"
 )
 
-func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query string, params []interface{}, pageIndex int64, pageSize int64, initPageSize int64, options...func(context.Context, interface{}) (interface{}, error)) (int64, error) {
+func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query string, params []interface{}, limit int64, offset int64, options...func(context.Context, interface{}) (interface{}, error)) (int64, error) {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
 	}
 	var total int64
 	driver := GetDriver(db)
-	if pageSize <= 0 {
+	if limit <= 0 {
 		er1 := Query(ctx, db, models, query, params...)
 		if er1 != nil {
 			return -1, er1
@@ -37,7 +37,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query s
 		return total, er2
 	} else {
 		if driver == DriverOracle {
-			queryPaging := BuildPagingQueryByDriver(query, pageIndex, pageSize, initPageSize, driver)
+			queryPaging := BuildPagingQueryByDriver(query, limit, offset, driver)
 			er1 := QueryAndCount(ctx, db, models, &total, queryPaging, params...)
 			if er1 != nil {
 				return -1, er1
@@ -45,7 +45,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query s
 			er2 := BuildSearchResult(ctx, models, mp)
 			return total, er2
 		} else {
-			queryPaging := BuildPagingQuery(query, pageIndex, pageSize, initPageSize, driver)
+			queryPaging := BuildPagingQuery(query, limit, offset, driver)
 			queryCount, paramsCount := BuildCountQuery(query, params)
 			er1 := Query(ctx, db, models, queryPaging, params...)
 			if er1 != nil {
@@ -60,8 +60,8 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query s
 		}
 	}
 }
-func BuildPagingQueryByDriver(sql string, pageIndex int64, pageSize int64, initPageSize int64, driver string) string {
-	s2 := BuildPagingQuery(sql, pageIndex, pageSize, initPageSize, driver)
+func BuildPagingQueryByDriver(sql string, limit int64, offset int64, driver string) string {
+	s2 := BuildPagingQuery(sql, limit, offset, driver)
 	if driver != DriverOracle {
 		return s2
 	} else {
@@ -83,27 +83,14 @@ func BuildPagingQueryByDriver(sql string, pageIndex int64, pageSize int64, initP
 		return s2
 	}
 }
-func BuildPagingQuery(sql string, pageIndex int64, pageSize int64, initPageSize int64, driver string) string {
-	if pageSize > 0 {
-		var limit, offset int64
-		if initPageSize > 0 {
-			if pageIndex == 1 {
-				limit = initPageSize
-				offset = 0
-			} else {
-				limit = pageSize
-				offset = pageSize*(pageIndex-2) + initPageSize
-			}
-		} else {
-			limit = pageSize
-			offset = pageSize * (pageIndex - 1)
-		}
-
+func BuildPagingQuery(sql string, limit int64, offset int64, driver string) string {
+	if limit > 0 {
+		var offset int64
 		var pagingQuery string
 		if driver == DriverOracle {
-			pagingQuery = fmt.Sprintf(OraclePagingFormat, strconv.Itoa(int(offset)), strconv.Itoa(int(limit)))
+			pagingQuery = fmt.Sprintf(OraclePagingFormat, strconv.FormatInt(offset, 10), strconv.FormatInt(limit, 10))
 		} else {
-			pagingQuery = fmt.Sprintf(DefaultPagingFormat, strconv.Itoa(int(limit)), strconv.Itoa(int(offset)))
+			pagingQuery = fmt.Sprintf(DefaultPagingFormat, strconv.FormatInt(limit, 10), strconv.FormatInt(offset, 10))
 		}
 		sql += pagingQuery
 	}

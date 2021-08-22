@@ -80,12 +80,10 @@ func (s *StringService) Save(ctx context.Context, values []string) (int64, error
 			holders,
 		)
 	} else if driver == DriverMysql {
-		qKey := s.Field + " = " + s.Field
-		query = fmt.Sprintf("insert into %s (%s) values %s on duplicate key update %s",
+		query = fmt.Sprintf("insert ignore %s (%s) values %s ",
 			s.Table,
 			s.Field,
 			holders,
-			qKey,
 		)
 	} else if driver == DriverOracle || driver == DriverMssql {
 		onDupe := s.Table + "." + s.Field + " = " + "temp." + s.Field
