@@ -29,7 +29,7 @@ func Find(slice []string, val string) (int, bool) {
 	return -1, false
 }
 
-func BuildInsert(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
+func BuildToInsert(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
 	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, false)
 	var cols []string
 	var values []interface{}
@@ -66,7 +66,7 @@ func BuildInsert(table string, model interface{}, i int, buildParam func(int) st
 	return fmt.Sprintf("insert into %v(%v)values(%v)", table, column, strings.Join(params, ",")), values
 }
 
-func BuildInsertWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
+func BuildToInsertWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version index not found")
 	}
@@ -152,8 +152,12 @@ func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}
 				keys = append(keys, colName)
 				if !isNil {
 					if boolValue, ok := fieldValue.(bool); ok {
-						valueS := modelType.Field(i).Tag.Get(strconv.FormatBool(boolValue))
-						mapData[colName] = valueS
+						valueS, okS := modelType.Field(i).Tag.Lookup(strconv.FormatBool(boolValue))
+						if okS {
+							mapData[colName] = valueS
+						} else {
+							mapData[colName] = boolValue
+						}
 					} else {
 						mapData[colName] = fieldValue
 					}
