@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
@@ -35,175 +34,300 @@ func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model int
 }
 
 func BuildToSave(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
-	placeholders := make([]string, 0)
-	exclude := make([]string, 0)
+	driver := GetDriver(db)
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
 	numField := modelType.NumField()
-	for j := 0; j < numField; j++ {
-		field := modelType.Field(j)
-		ormTag := field.Tag.Get("gorm")
-		tags := strings.Split(ormTag, ";")
-		for _, tag := range tags {
-			if strings.TrimSpace(tag) == "-" {
-				exclude = append(exclude, field.Name)
-			}
-		}
-	}
-
-	attrs, unique, nAttrs, err := ExtractMapValue(model, &exclude, false)
-	if err != nil {
-		return "0", nil, fmt.Errorf("cannot extract object's values: %w", err)
-	}
-	//mainScope := db.NewScope(model)
-	//pkey := FindIdFields(modelType)
-	size := len(attrs)
-	dbColumns := make([]string, 0, size)
-	variables := make([]string, 0, size)
-	sorted := SortedKeys(attrs)
-
-	// Also append variables to mainScope
-	var setColumns []string
-	driver := GetDriver(db)
-	i := 0
-	switch driver {
-	case DriverPostgres:
-		uniqueCols := make([]string, 0)
-		values := make([]interface{}, 0, len(attrs)*2)
-		for ; i < len(sorted); i++ {
-			setColumns = append(setColumns, `"`+strings.Replace(sorted[i], `"`, `""`, -1)+`"`+" = EXCLUDED."+strings.Replace(sorted[i], `"`, `""`, -1))
-			dbColumns = append(dbColumns, `"`+strings.Replace(sorted[i], "`", "``", -1)+`"`)
-			variables = append(variables, "$"+strconv.Itoa(i+1))
-			values = append(values, attrs[sorted[i]])
-		}
-		for key, val := range unique {
-			uniqueCols = append(uniqueCols, `"`+strings.Replace(key, `"`, `""`, -1)+`"`)
-			dbColumns = append(dbColumns, `"`+strings.Replace(key, "`", "``", -1)+`"`)
-			variables = append(variables, "$"+strconv.Itoa(i+1))
-			values = append(values, val)
-			i++
-		}
-		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s",
-			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
-			strings.Join(dbColumns, ", "),
-			strings.Join(variables, ", "),
-			strings.Join(uniqueCols, ", "),
-			strings.Join(setColumns, ", "),
-		)
-		return query, values, nil
-	case DriverOracle:
-		uniqueCols := make([]string, 0)
-		inColumns := make([]string, 0)
-		values := make([]interface{}, 0, len(attrs)*2)
-		insertCols := make([]string, 0)
-		for v, key := range sorted {
-			values = append(values, attrs[key])
-			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
-			tkey = strings.ToUpper(tkey)
-			setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
-			inColumns = append(inColumns, "temp."+key)
-			variables = append(variables, fmt.Sprintf(":%d "+tkey, v))
-			insertCols = append(insertCols, tkey)
-		}
-		for key, val := range unique {
-			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
-			tkey = strings.ToUpper(tkey)
-			onDupe := "a." + tkey + " = " + "temp." + tkey
-			uniqueCols = append(uniqueCols, onDupe)
-			variables = append(variables, fmt.Sprintf(":%s "+tkey, key))
-			inColumns = append(inColumns, "temp."+key)
-			values = append(values, val)
-			insertCols = append(insertCols, tkey)
-		}
-		//for _, key := range sorted {
-		//	value = append(value, attrs[key])
-		//}
-		query := fmt.Sprintf("MERGE INTO %s a USING (SELECT %s FROM dual) temp ON  (%s) WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s)",
-			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
-			strings.Join(variables, ", "),
-			strings.Join(uniqueCols, " AND "),
-			strings.Join(setColumns, ", "),
-			strings.Join(insertCols, ", "),
-			strings.Join(inColumns, ", "),
-		)
-		return query, values, nil
-	case DriverMysql:
-		values := make([]interface{}, 0, len(attrs)*2)
-		updates := make([]interface{}, 0)
-		for key, val := range unique {
-			_, notNil := nAttrs[key]
-			//mainScope.AddToVars(attrs[key])
-			if notNil {
-				v, ok := GetDBValue(val)
-				dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
-				if ok {
-					variables = append(variables, v)
+	buildParam := GetBuild(db)
+	mv := reflect.Indirect(reflect.ValueOf(model))
+	if driver == DriverPostgres || driver == DriverMysql {
+		cols, keys, schema := MakeSchema(modelType)
+		iCols := make([]string, 0)
+		values := make([]string, 0)
+		setColumns := make([]string, 0)
+		args := make([]interface{}, 0)
+		i := 1
+		for _, col := range cols {
+			fdb := schema[col]
+			f := mv.Field(fdb.Index)
+			fieldValue := f.Interface()
+			isNil := false
+			if f.Kind() == reflect.Ptr {
+				if reflect.ValueOf(fieldValue).IsNil() {
+					isNil = true
 				} else {
-					variables = append(variables, "?")
-					values = append(values, val)
+					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+				}
+			}
+			if !isNil {
+				iCols = append(iCols, col)
+				v, ok := GetDBValue(fieldValue)
+				if ok {
+					values = append(values, v)
+				} else {
+					if boolValue, ok := fieldValue.(bool); ok {
+						if boolValue {
+							if fdb.True != nil {
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.True)
+							} else {
+								values = append(values, "1")
+							}
+						} else {
+							if fdb.False != nil {
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.False)
+							} else {
+								values = append(values, "0")
+							}
+						}
+					} else {
+						values = append(values, buildParam(i))
+						i = i + 1
+						args = append(args, fieldValue)
+					}
 				}
 			}
 		}
-		for _, key := range sorted {
-			//mainScope.AddToVars(attrs[key])
-			val, notNil := nAttrs[key]
-			if notNil {
-				v, ok := GetDBValue(val)
-				dbColumns = append(dbColumns, "`"+strings.Replace(key, "`", "``", -1)+"`")
-				if ok {
-					setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = "+v)
-					variables = append(variables, v)
-				} else {
-					setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = ?")
-					variables = append(variables, "?")
-					values = append(values, val)
-					updates = append(updates, val)
+		for _, col := range cols {
+			fdb := schema[col]
+			if !fdb.Key && fdb.Update {
+				f := mv.Field(fdb.Index)
+				fieldValue := f.Interface()
+				isNil := false
+				if f.Kind() == reflect.Ptr {
+					if reflect.ValueOf(fieldValue).IsNil() {
+						isNil = true
+					} else {
+						fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+					}
 				}
+				if isNil {
+					setColumns = append(setColumns, col+"=null")
+				} else {
+					v, ok := GetDBValue(fieldValue)
+					if ok {
+						setColumns = append(setColumns, col+"="+v)
+					} else {
+						if boolValue, ok := fieldValue.(bool); ok {
+							if driver == DriverPostgres {
+								if boolValue {
+									setColumns = append(setColumns, col+"=true")
+								} else {
+									setColumns = append(setColumns, col+"=false")
+								}
+							} else {
+								if boolValue {
+									if fdb.True != nil {
+										setColumns = append(setColumns, col+"="+buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.True)
+									} else {
+										values = append(values, "1")
+									}
+								} else {
+									if fdb.False != nil {
+										setColumns = append(setColumns, col+"="+buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.False)
+									} else {
+										values = append(values, "0")
+									}
+								}
+							}
+						} else {
+							setColumns = append(setColumns, col+"="+buildParam(i))
+							i = i + 1
+							args = append(args, fieldValue)
+						}
+					}
+				}
+			}
+		}
+		var query string
+		if len(setColumns) > 0 {
+			if driver == DriverPostgres {
+				query = fmt.Sprintf("insert into %s(%s) values (%s) on conflict (%s) do update set %s",
+					table,
+					strings.Join(iCols, ","),
+					strings.Join(values, ","),
+					strings.Join(keys, ","),
+					strings.Join(setColumns, ","),
+				)
 			} else {
-				setColumns = append(setColumns, "`"+strings.Replace(key, "`", "``", -1)+"`"+" = null")
+				query = fmt.Sprintf("insert into %s(%s) values (%s) on duplicate key update %s",
+					table,
+					strings.Join(iCols, ","),
+					strings.Join(values, ","),
+					strings.Join(setColumns, ","),
+				)
+			}
+		} else {
+			if driver == DriverPostgres {
+				query = fmt.Sprintf("insert into %s(%s) values (%s) on conflict (%s) do nothing",
+					table,
+					strings.Join(iCols, ","),
+					strings.Join(values, ","),
+					strings.Join(keys, ","),
+				)
+			} else {
+				query = fmt.Sprintf("insert ignore into %s(%s) values (%s)",
+					table,
+					strings.Join(iCols, ","),
+					strings.Join(values, ","),
+				)
 			}
 		}
-		valueQuery := "(" + strings.Join(variables, ", ") + ")"
-		placeholders = append(placeholders, valueQuery)
-		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s ON DUPLICATE KEY UPDATE %s",
-			"`"+strings.Replace(table, "`", "``", -1)+"`",
-			strings.Join(dbColumns, ", "),
-			strings.Join(placeholders, ", "),
-			strings.Join(setColumns, ", "),
-		)
-		for _, s := range updates {
-			values = append(values, s)
+		return query, args, nil
+	} else if driver == DriverSqlite3 {
+		cols, _, schema := MakeSchema(modelType)
+		iCols := make([]string, 0)
+		values := make([]string, 0)
+		args := make([]interface{}, 0)
+		i := 1
+		for _, col := range cols {
+			fdb := schema[col]
+			f := mv.Field(fdb.Index)
+			fieldValue := f.Interface()
+			isNil := false
+			if f.Kind() == reflect.Ptr {
+				if reflect.ValueOf(fieldValue).IsNil() {
+					isNil = true
+				} else {
+					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+				}
+			}
+			iCols = append(iCols, col)
+			if isNil {
+				values = append(values, "null")
+			} else {
+				v, ok := GetDBValue(fieldValue)
+				if ok {
+					values = append(values, v)
+				} else {
+					if boolValue, ok := fieldValue.(bool); ok {
+						if boolValue {
+							if fdb.True != nil {
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.True)
+							} else {
+								values = append(values, "1")
+							}
+						} else {
+							if fdb.False != nil {
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.False)
+							} else {
+								values = append(values, "0")
+							}
+						}
+					} else {
+						values = append(values, buildParam(i))
+						i = i + 1
+						args = append(args, fieldValue)
+					}
+				}
+			}
 		}
-		return query, values, nil
-	case DriverMssql:
-		uniqueCols := make([]string, 0)
-		values := make([]interface{}, 0, len(attrs)*2)
-		for _, key := range sorted {
-			//mainScope.AddToVars(attrs[key])
-			tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
-			dbColumns = append(dbColumns, tkey)
-			variables = append(variables, "?")
-			values = append(values, attrs[key])
-			setColumns = append(setColumns, tkey+" = temp."+tkey)
+		query := fmt.Sprintf("insert or replace into %s(%s) values (%s)", table, strings.Join(iCols, ","), strings.Join(values, ","))
+		return query, args, nil
+	} else {
+		exclude := make([]string, 0)
+		for j := 0; j < numField; j++ {
+			field := modelType.Field(j)
+			ormTag := field.Tag.Get("gorm")
+			tags := strings.Split(ormTag, ";")
+			for _, tag := range tags {
+				if strings.TrimSpace(tag) == "-" {
+					exclude = append(exclude, field.Name)
+				}
+			}
 		}
-		for i, val := range unique {
-			tkey := `"` + strings.Replace(i, `"`, `""`, -1) + `"`
-			dbColumns = append(dbColumns, `"`+strings.Replace(tkey, `"`, `""`, -1)+`"`)
-			variables = append(variables, "?")
-			values = append(values, val)
-			onDupe := table + "." + tkey + " = " + "temp." + tkey
-			uniqueCols = append(uniqueCols, onDupe)
+
+		attrs, unique, _, err := ExtractMapValue(model, &exclude, false)
+		if err != nil {
+			return "0", nil, fmt.Errorf("cannot extract object's values: %w", err)
 		}
-		query := fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
-			`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
-			strings.Join(variables, ", "),
-			strings.Join(dbColumns, ", "),
-			strings.Join(uniqueCols, " AND "),
-			strings.Join(setColumns, ", "),
-			strings.Join(dbColumns, ", "),
-			strings.Join(variables, ", "),
-		)
-		return query, values, nil
-	default:
-		return "", nil, fmt.Errorf("unsupported db vendor")
+		//mainScope := db.NewScope(model)
+		//pkey := FindIdFields(modelType)
+		size := len(attrs)
+		dbColumns := make([]string, 0, size)
+		variables := make([]string, 0, size)
+		sorted := SortedKeys(attrs)
+
+		// Also append variables to mainScope
+		var setColumns []string
+		switch driver {
+		case DriverOracle:
+			uniqueCols := make([]string, 0)
+			inColumns := make([]string, 0)
+			values := make([]interface{}, 0, len(attrs)*2)
+			insertCols := make([]string, 0)
+			for v, key := range sorted {
+				values = append(values, attrs[key])
+				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+				tkey = strings.ToUpper(tkey)
+				setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
+				inColumns = append(inColumns, "temp."+key)
+				variables = append(variables, fmt.Sprintf(":%d "+tkey, v))
+				insertCols = append(insertCols, tkey)
+			}
+			for key, val := range unique {
+				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+				tkey = strings.ToUpper(tkey)
+				onDupe := "a." + tkey + " = " + "temp." + tkey
+				uniqueCols = append(uniqueCols, onDupe)
+				variables = append(variables, fmt.Sprintf(":%s "+tkey, key))
+				inColumns = append(inColumns, "temp."+key)
+				values = append(values, val)
+				insertCols = append(insertCols, tkey)
+			}
+			//for _, key := range sorted {
+			//	value = append(value, attrs[key])
+			//}
+			query := fmt.Sprintf("MERGE INTO %s a USING (SELECT %s FROM dual) temp ON  (%s) WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s)",
+				`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
+				strings.Join(variables, ", "),
+				strings.Join(uniqueCols, " AND "),
+				strings.Join(setColumns, ", "),
+				strings.Join(insertCols, ", "),
+				strings.Join(inColumns, ", "),
+			)
+			return query, values, nil
+		case DriverMssql:
+			uniqueCols := make([]string, 0)
+			values := make([]interface{}, 0, len(attrs)*2)
+			for _, key := range sorted {
+				//mainScope.AddToVars(attrs[key])
+				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+				dbColumns = append(dbColumns, tkey)
+				variables = append(variables, "?")
+				values = append(values, attrs[key])
+				setColumns = append(setColumns, tkey+" = temp."+tkey)
+			}
+			for i, val := range unique {
+				tkey := `"` + strings.Replace(i, `"`, `""`, -1) + `"`
+				dbColumns = append(dbColumns, `"`+strings.Replace(tkey, `"`, `""`, -1)+`"`)
+				variables = append(variables, "?")
+				values = append(values, val)
+				onDupe := table + "." + tkey + " = " + "temp." + tkey
+				uniqueCols = append(uniqueCols, onDupe)
+			}
+			query := fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
+				`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
+				strings.Join(variables, ", "),
+				strings.Join(dbColumns, ", "),
+				strings.Join(uniqueCols, " AND "),
+				strings.Join(setColumns, ", "),
+				strings.Join(dbColumns, ", "),
+				strings.Join(variables, ", "),
+			)
+			return query, values, nil
+		default:
+			return "", nil, fmt.Errorf("unsupported db vendor")
+		}
 	}
 }
