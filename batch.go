@@ -379,7 +379,7 @@ func BuildToInsertBatch(db *sql.DB, table string, models interface{}, options ..
 		return query, args, nil
 	}
 }
-func BuildSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement, error) {
+func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models is not a slice")
@@ -601,7 +601,7 @@ func BuildSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement, 
 	return stmts, nil
 }
 
-func InsertMany(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
+func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
 	query, args, er1 := BuildToInsertBatch(db, tableName, models, options...)
 	if er1 != nil {
 		return 0, er1
@@ -612,7 +612,7 @@ func InsertMany(ctx context.Context, db *sql.DB, tableName string, models interf
 	}
 	return x.RowsAffected()
 }
-func UpdateMany(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
+func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
 	var buildParam func(int) string
 	if len(options) > 0 {
 		buildParam = options[0]
@@ -625,8 +625,8 @@ func UpdateMany(ctx context.Context, db *sql.DB, tableName string, models interf
 	}
 	return ExecuteAll(ctx, db, stmts)
 }
-func SaveMany(ctx context.Context, db *sql.DB, tableName string, models interface{}) (int64, error) {
-	stmts, er1 := BuildSaveBatch(db, tableName, models)
+func SaveBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}) (int64, error) {
+	stmts, er1 := BuildToSaveBatch(db, tableName, models)
 	if er1 != nil {
 		return 0, er1
 	}

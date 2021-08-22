@@ -46,7 +46,7 @@ func (w *BatchInserter) Write(ctx context.Context, models interface{}) ([]int, [
 		models2 = models
 	}
 	s := reflect.ValueOf(models2)
-	_, er2 := InsertMany(ctx, w.db, w.tableName, models2, w.BuildParam)
+	_, er2 := InsertBatch(ctx, w.db, w.tableName, models2, w.BuildParam)
 
 	if er2 == nil {
 		// Return full success

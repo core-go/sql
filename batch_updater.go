@@ -44,7 +44,7 @@ func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []
 	} else {
 		models2 = models
 	}
-	_, err := UpdateMany(ctx, w.db, w.tableName, models2, w.BuildParam)
+	_, err := UpdateBatch(ctx, w.db, w.tableName, models2, w.BuildParam)
 	s := reflect.ValueOf(models)
 	if err == nil {
 		// Return full success
