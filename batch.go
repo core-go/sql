@@ -208,7 +208,7 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 	}
 	return columns, keys, schema
 }
-func BuildUpdateBatch(table string, models interface{}, buildParam func(int) string) ([]Statement, error) {
+func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models is not a slice")
@@ -279,7 +279,7 @@ func BuildUpdateBatch(table string, models interface{}, buildParam func(int) str
 	}
 	return stmts, nil
 }
-func BuildInsertBatch(db *sql.DB, table string, models interface{}, options ...func(int) string) (string, []interface{}, error) {
+func BuildToInsertBatch(db *sql.DB, table string, models interface{}, options ...func(int) string) (string, []interface{}, error) {
 	var buildParam func(int) string
 	if len(options) > 0 {
 		buildParam = options[0]
@@ -602,7 +602,7 @@ func BuildSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement, 
 }
 
 func InsertMany(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
-	query, args, er1 := BuildInsertBatch(db, tableName, models, options...)
+	query, args, er1 := BuildToInsertBatch(db, tableName, models, options...)
 	if er1 != nil {
 		return 0, er1
 	}
@@ -619,7 +619,7 @@ func UpdateMany(ctx context.Context, db *sql.DB, tableName string, models interf
 	} else {
 		buildParam = GetBuild(db)
 	}
-	stmts, er1 := BuildUpdateBatch(tableName, models, buildParam)
+	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam)
 	if er1 != nil {
 		return 0, er1
 	}
