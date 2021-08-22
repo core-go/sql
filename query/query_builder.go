@@ -179,21 +179,18 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			value2 = s0
 		}
 		if v, ok := x.(*s.SearchModel); ok {
-			if len(v.Excluding) > 0 {
-				for key, val := range v.Excluding {
-					index, _, columnName := getFieldByJson(value.Type(), key)
-					if index == -1 || columnName == "" {
-						log.Panic("column name not found")
-					}
-					if len(val) > 0 {
-						format := fmt.Sprintf("(%s)", buildParametersFrom(marker, len(val), buildParam))
-						marker += len(val) - 1
-						rawConditions = append(rawConditions, fmt.Sprintf("%s NOT IN %s", columnName, format))
-						queryValues = extractArray(queryValues, val)
-					}
+			if v.Excluding != nil && len(v.Excluding) > 0 {
+				index, _, columnName := getFieldByBson(value.Type(), "_id")
+				if index == -1 || columnName == "" {
+					log.Panic("column name not found")
 				}
-			} else if len(v.Keyword) > 0 {
-				keyword = strings.TrimSpace(v.Keyword)
+				format := fmt.Sprintf("(%s)", buildParametersFrom(marker, len(v.Excluding), buildParam))
+				marker += len(v.Excluding) - 1
+				rawConditions = append(rawConditions, fmt.Sprintf("%s NOT IN %s", columnName, format))
+				queryValues = extractArray(queryValues, v.Excluding)
+			}
+			if len(v.Q) > 0 {
+				keyword = strings.TrimSpace(v.Q)
 			}
 			continue
 		} else if ps || kind == reflect.String {
@@ -272,19 +269,19 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			}
 		} else if dateRange, ok := x.(s.DateRange); ok {
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
-			queryValues = append(queryValues, dateRange.StartDate)
-			var eDate = dateRange.EndDate.Add(time.Hour * 24)
-			dateRange.EndDate = &eDate
+			queryValues = append(queryValues, dateRange.Min)
+			var eDate = dateRange.Max.Add(time.Hour * 24)
+			dateRange.Max = &eDate
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-			queryValues = append(queryValues, dateRange.EndDate)
+			queryValues = append(queryValues, dateRange.Max)
 			marker += 2
 		} else if dateRange, ok := x.(*s.DateRange); ok && dateRange != nil {
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
-			queryValues = append(queryValues, dateRange.StartDate)
-			var eDate = dateRange.EndDate.Add(time.Hour * 24)
-			dateRange.EndDate = &eDate
+			queryValues = append(queryValues, dateRange.Min)
+			var eDate = dateRange.Max.Add(time.Hour * 24)
+			dateRange.Max = &eDate
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-			queryValues = append(queryValues, dateRange.EndDate)
+			queryValues = append(queryValues, dateRange.Max)
 			marker += 2
 		} else if dateTime, ok := x.(s.TimeRange); ok {
 			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
@@ -363,7 +360,6 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 	s3 := s1 + sortString
 	return s3, queryValues
 }
-
 func extractArray(values []interface{}, field interface{}) []interface{} {
 	s := reflect.Indirect(reflect.ValueOf(field))
 	for i := 0; i < s.Len(); i++ {
@@ -395,6 +391,31 @@ func getFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 		}
 	}
 	return -1, jsonName, jsonName
+}
+func getFieldByBson(modelType reflect.Type, bsonName string) (int, string, string) {
+	numField := modelType.NumField()
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		tag1, ok1 := field.Tag.Lookup("bson")
+		if ok1 && strings.Split(tag1, ",")[0] == bsonName {
+			if tag2, ok2 := field.Tag.Lookup("gorm"); ok2 {
+				if has := strings.Contains(tag2, "column"); has {
+					str1 := strings.Split(tag2, ";")
+					num := len(str1)
+					for k := 0; k < num; k++ {
+						str2 := strings.Split(str1[k], ":")
+						for j := 0; j < len(str2); j++ {
+							if str2[j] == "column" {
+								return i, field.Name, str2[j+1]
+							}
+						}
+					}
+				}
+			}
+			return i, field.Name, ""
+		}
+	}
+	return -1, bsonName, bsonName
 }
 func getColumnName(modelType reflect.Type, fieldName string) (col string, colExist bool) {
 	field, ok := modelType.FieldByName(fieldName)
