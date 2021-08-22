@@ -660,7 +660,7 @@ func ExtractBySchema(value interface{}, columns []string, schema map[string]Fiel
 	for _, col := range columns {
 		fdb, ok := schema[col]
 		if ok {
-			f := rv.Field(fdb.index)
+			f := rv.Field(fdb.Index)
 			fieldValue := f.Interface()
 			isNil := false
 			if f.Kind() == reflect.Ptr {
@@ -670,15 +670,15 @@ func ExtractBySchema(value interface{}, columns []string, schema map[string]Fiel
 					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
 				}
 			}
-			if !fdb.key {
+			if !fdb.Key {
 				if !isNil {
 					if boolValue, ok := fieldValue.(bool); ok {
 						if boolValue {
-							attrs[col] = fdb.true
-							nAttrs[col] = fdb.true
+							attrs[col] = fdb.True
+							nAttrs[col] = fdb.True
 						} else {
-							attrs[col] = fdb.false
-							nAttrs[col] = fdb.false
+							attrs[col] = fdb.False
+							nAttrs[col] = fdb.False
 						}
 					} else {
 						attrs[col] = fieldValue

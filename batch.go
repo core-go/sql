@@ -144,13 +144,13 @@ func (s *DefaultStatements) Clear() Statements {
 
 type FieldDB struct {
 	JSON   string
-	column string
-	field  string
-	index  int
-	key    bool
+	Column string
+	Field  string
+	Index  int
+	Key    bool
 	Update bool
-	true   string
-	false  string
+	True   *string
+	False  *string
 }
 
 func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB) {
@@ -186,17 +186,17 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 							}
 							f := FieldDB{
 								JSON:   json,
-								column: col,
-								index:  idx,
-								key:    isKey,
+								Column: col,
+								Index:  idx,
+								Key:    isKey,
 								Update: update,
 							}
 							tTag, tOk := field.Tag.Lookup("true")
 							if tOk {
-								f.true = tTag
+								f.True = &tTag
 								fTag, fOk := field.Tag.Lookup("false")
 								if fOk {
-									f.false = fTag
+									f.False = &fTag
 								}
 							}
 							schema[col] = f
@@ -230,8 +230,8 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 		i := 1
 		for _, col := range cols {
 			fdb := schema[col]
-			if !fdb.key && fdb.Update {
-				f := mv.Field(fdb.index)
+			if !fdb.Key && fdb.Update {
+				f := mv.Field(fdb.Index)
 				fieldValue := f.Interface()
 				isNil := false
 				if f.Kind() == reflect.Ptr {
@@ -257,7 +257,7 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 		}
 		for _, col := range keys {
 			fdb := schema[col]
-			f := mv.Field(fdb.index)
+			f := mv.Field(fdb.Index)
 			fieldValue := f.Interface()
 			if f.Kind() == reflect.Ptr {
 				if !reflect.ValueOf(fieldValue).IsNil() {
@@ -302,14 +302,14 @@ func BuildToInsertBatch(db *sql.DB, table string, models interface{}, options ..
 	driver := GetDriver(db)
 	slen := s.Len()
 	if driver != DriverOracle {
-		paramNumber := 1
+		i := 1
 		for j := 0; j < slen; j++ {
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
 			values := make([]string, 0)
 			for _, col := range cols {
 				fdb := schema[col]
-				f := mv.Field(fdb.index)
+				f := mv.Field(fdb.Index)
 				fieldValue := f.Interface()
 				isNil := false
 				if f.Kind() == reflect.Ptr {
@@ -326,9 +326,37 @@ func BuildToInsertBatch(db *sql.DB, table string, models interface{}, options ..
 					if ok {
 						values = append(values, v)
 					} else {
-						values = append(values, buildParam(paramNumber))
-						paramNumber = paramNumber + 1
-						args = append(args, fieldValue)
+						if boolValue, ok := fieldValue.(bool); ok {
+							if driver == DriverPostgres {
+								if boolValue {
+									values = append(values, "true")
+								} else {
+									values = append(values, "false")
+								}
+							} else {
+								if boolValue {
+									if fdb.True != nil {
+										values = append(values, buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.True)
+									} else {
+										values = append(values, "1")
+									}
+								} else {
+									if fdb.False != nil {
+										values = append(values, buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.False)
+									} else {
+										values = append(values, "0")
+									}
+								}
+							}
+						} else {
+							values = append(values, buildParam(i))
+							i = i + 1
+							args = append(args, fieldValue)
+						}
 					}
 				}
 			}
@@ -350,7 +378,7 @@ func BuildToInsertBatch(db *sql.DB, table string, models interface{}, options ..
 			i := 1
 			for _, col := range cols {
 				fdb := schema[col]
-				f := mv.Field(fdb.index)
+				f := mv.Field(fdb.Index)
 				fieldValue := f.Interface()
 				isNil := false
 				if f.Kind() == reflect.Ptr {
@@ -366,9 +394,29 @@ func BuildToInsertBatch(db *sql.DB, table string, models interface{}, options ..
 					if ok {
 						values = append(values, v)
 					} else {
-						values = append(values, buildParam(i))
-						i = i + 1
-						args = append(args, fieldValue)
+						if boolValue, ok := fieldValue.(bool); ok {
+							if boolValue {
+								if fdb.True != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.True)
+								} else {
+									values = append(values, "'1'")
+								}
+							} else {
+								if fdb.False != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.False)
+								} else {
+									values = append(values, "'0'")
+								}
+							}
+						} else {
+							values = append(values, buildParam(i))
+							i = i + 1
+							args = append(args, fieldValue)
+						}
 					}
 				}
 			}
@@ -405,7 +453,7 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 			args := make([]interface{}, 0)
 			for _, col := range cols {
 				fdb := schema[col]
-				f := mv.Field(fdb.index)
+				f := mv.Field(fdb.Index)
 				fieldValue := f.Interface()
 				isNil := false
 				if f.Kind() == reflect.Ptr {
@@ -421,16 +469,36 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 					if ok {
 						values = append(values, v)
 					} else {
-						values = append(values, buildParam(i))
-						i = i + 1
-						args = append(args, fieldValue)
+						if boolValue, ok := fieldValue.(bool); ok {
+							if boolValue {
+								if fdb.True != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.True)
+								} else {
+									values = append(values, "1")
+								}
+							} else {
+								if fdb.False != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.False)
+								} else {
+									values = append(values, "0")
+								}
+							}
+						} else {
+							values = append(values, buildParam(i))
+							i = i + 1
+							args = append(args, fieldValue)
+						}
 					}
 				}
 			}
 			for _, col := range cols {
 				fdb := schema[col]
-				if !fdb.key && !fdb.Update {
-					f := mv.Field(fdb.index)
+				if !fdb.Key && fdb.Update {
+					f := mv.Field(fdb.Index)
 					fieldValue := f.Interface()
 					isNil := false
 					if f.Kind() == reflect.Ptr {
@@ -447,29 +515,74 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 						if ok {
 							setColumns = append(setColumns, col+"="+v)
 						} else {
-							setColumns = append(setColumns, col+"="+buildParam(i))
-							i = i + 1
-							args = append(args, fieldValue)
+							if boolValue, ok := fieldValue.(bool); ok {
+								if driver == DriverPostgres {
+									if boolValue {
+										setColumns = append(setColumns, col+"=true")
+									} else {
+										setColumns = append(setColumns, col+"=false")
+									}
+								} else {
+									if boolValue {
+										if fdb.True != nil {
+											setColumns = append(setColumns, col+"="+buildParam(i))
+											i = i + 1
+											args = append(args, *fdb.True)
+										} else {
+											values = append(values, "1")
+										}
+									} else {
+										if fdb.False != nil {
+											setColumns = append(setColumns, col+"="+buildParam(i))
+											i = i + 1
+											args = append(args, *fdb.False)
+										} else {
+											values = append(values, "0")
+										}
+									}
+								}
+							} else {
+								setColumns = append(setColumns, col+"="+buildParam(i))
+								i = i + 1
+								args = append(args, fieldValue)
+							}
 						}
 					}
 				}
 			}
 			var query string
-			if driver == DriverPostgres {
-				query = fmt.Sprintf("insert into %s(%s) values (%s) on conflict (%s) do update set %s",
-					table,
-					strings.Join(iCols, ","),
-					strings.Join(values, ","),
-					strings.Join(keys, ","),
-					strings.Join(setColumns, ","),
-				)
+			if len(setColumns) > 0 {
+				if driver == DriverPostgres {
+					query = fmt.Sprintf("insert into %s(%s) values (%s) on conflict (%s) do update set %s",
+						table,
+						strings.Join(iCols, ","),
+						strings.Join(values, ","),
+						strings.Join(keys, ","),
+						strings.Join(setColumns, ","),
+					)
+				} else {
+					query = fmt.Sprintf("insert into %s(%s) values (%s) on duplicate key update %s",
+						table,
+						strings.Join(iCols, ","),
+						strings.Join(values, ","),
+						strings.Join(setColumns, ","),
+					)
+				}
 			} else {
-				query = fmt.Sprintf("insert into %s(%s) values (%s) on duplicate key update %s",
-					table,
-					strings.Join(iCols, ","),
-					strings.Join(values, ","),
-					strings.Join(setColumns, ","),
-				)
+				if driver == DriverPostgres {
+					query = fmt.Sprintf("insert into %s(%s) values (%s) on conflict (%s) do nothing",
+						table,
+						strings.Join(iCols, ","),
+						strings.Join(values, ","),
+						strings.Join(keys, ","),
+					)
+				} else {
+					query = fmt.Sprintf("insert ignore into %s(%s) values (%s)",
+						table,
+						strings.Join(iCols, ","),
+						strings.Join(values, ","),
+					)
+				}
 			}
 			s := Statement{Query: query, Args: args}
 			stmts = append(stmts, s)
@@ -484,7 +597,7 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 			i := 1
 			for _, col := range cols {
 				fdb := schema[col]
-				f := mv.Field(fdb.index)
+				f := mv.Field(fdb.Index)
 				fieldValue := f.Interface()
 				isNil := false
 				if f.Kind() == reflect.Ptr {
@@ -502,9 +615,29 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 					if ok {
 						values = append(values, v)
 					} else {
-						values = append(values, buildParam(i))
-						i = i + 1
-						args = append(args, fieldValue)
+						if boolValue, ok := fieldValue.(bool); ok {
+							if boolValue {
+								if fdb.True != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.True)
+								} else {
+									values = append(values, "1")
+								}
+							} else {
+								if fdb.False != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.False)
+								} else {
+									values = append(values, "0")
+								}
+							}
+						} else {
+							values = append(values, buildParam(i))
+							i = i + 1
+							args = append(args, fieldValue)
+						}
 					}
 				}
 			}
