@@ -65,21 +65,29 @@ func BuildToSave(db *sql.DB, table string, model interface{}) (string, []interfa
 					values = append(values, v)
 				} else {
 					if boolValue, ok := fieldValue.(bool); ok {
-						if boolValue {
-							if fdb.True != nil {
-								values = append(values, buildParam(i))
-								i = i + 1
-								args = append(args, *fdb.True)
+						if driver == DriverPostgres {
+							if boolValue {
+								values = append(values, "true")
 							} else {
-								values = append(values, "1")
+								values = append(values, "false")
 							}
 						} else {
-							if fdb.False != nil {
-								values = append(values, buildParam(i))
-								i = i + 1
-								args = append(args, *fdb.False)
+							if boolValue {
+								if fdb.True != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.True)
+								} else {
+									values = append(values, "1")
+								}
 							} else {
-								values = append(values, "0")
+								if fdb.False != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.False)
+								} else {
+									values = append(values, "0")
+								}
 							}
 						}
 					} else {

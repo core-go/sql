@@ -208,7 +208,11 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 	}
 	return columns, keys, schema
 }
-func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string) ([]Statement, error) {
+func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, options...*sql.DB) ([]Statement, error) {
+	driver := ""
+	if len(options) > 0 {
+		driver = GetDriver(options[0])
+	}
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models is not a slice")
@@ -248,9 +252,37 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 					if ok {
 						values = append(values, col+"="+v)
 					} else {
-						values = append(values, col+"="+buildParam(i))
-						i = i + 1
-						args = append(args, fieldValue)
+						if boolValue, ok := fieldValue.(bool); ok {
+							if driver == DriverPostgres {
+								if boolValue {
+									values = append(values, col+"=true")
+								} else {
+									values = append(values, col+"=false")
+								}
+							} else {
+								if boolValue {
+									if fdb.True != nil {
+										values = append(values, col+"="+buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.True)
+									} else {
+										values = append(values, col+"=1")
+									}
+								} else {
+									if fdb.False != nil {
+										values = append(values, col+"="+buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.False)
+									} else {
+										values = append(values, col+"=0")
+									}
+								}
+							}
+						} else {
+							values = append(values, col+"="+buildParam(i))
+							i = i + 1
+							args = append(args, fieldValue)
+						}
 					}
 				}
 			}
@@ -445,6 +477,7 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 	if driver == DriverPostgres || driver == DriverMysql {
 		i := 1
 		for j := 0; j < slen; j++ {
+			i = 1
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
 			iCols := make([]string, 0)
@@ -470,21 +503,29 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 						values = append(values, v)
 					} else {
 						if boolValue, ok := fieldValue.(bool); ok {
-							if boolValue {
-								if fdb.True != nil {
-									values = append(values, buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.True)
+							if driver == DriverPostgres {
+								if boolValue {
+									values = append(values, "true")
 								} else {
-									values = append(values, "1")
+									values = append(values, "false")
 								}
 							} else {
-								if fdb.False != nil {
-									values = append(values, buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.False)
+								if boolValue {
+									if fdb.True != nil {
+										values = append(values, buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.True)
+									} else {
+										values = append(values, "1")
+									}
 								} else {
-									values = append(values, "0")
+									if fdb.False != nil {
+										values = append(values, buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.False)
+									} else {
+										values = append(values, "0")
+									}
 								}
 							}
 						} else {
@@ -752,7 +793,7 @@ func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 	} else {
 		buildParam = GetBuild(db)
 	}
-	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam)
+	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, db)
 	if er1 != nil {
 		return 0, er1
 	}

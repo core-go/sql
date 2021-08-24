@@ -1209,9 +1209,10 @@ func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, ind
 				modelField = modelType.Field(index)
 				valueField = maps.Field(index)
 			}
+			x := valueField.Addr().Interface()
 			tagBool := modelField.Tag.Get("true")
 			if tagBool == "" {
-				r = append(r, valueField.Addr().Interface())
+				r = append(r, x)
 			} else {
 				var str string
 				swapValues[index] = reflect.New(reflect.TypeOf(str)).Elem().Addr().Interface()
