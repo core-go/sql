@@ -1215,10 +1215,10 @@ func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, ind
 				r = append(r, x)
 			} else {
 				var str string
-				swapValues[index] = reflect.New(reflect.TypeOf(str)).Elem().Addr().Interface()
+				y := reflect.New(reflect.TypeOf(str))
+				swapValues[index] = y.Elem().Addr().Interface()
 				r = append(r, swapValues[index])
 			}
-
 		}
 	}
 	return
@@ -1237,11 +1237,17 @@ func SwapValuesToBool(s interface{}, swap *map[int]interface{}) {
 					maps.Field(index).SetBool(*dbValue2)
 				}
 			} else {
-				var isBool bool
-				boolStr := modelType.Field(index).Tag.Get("true")
 				dbValue, ok := element.(*string)
 				if ok {
-					isBool = *dbValue == boolStr
+					var isBool bool
+					if *dbValue == "true" {
+						isBool = true
+					} else if *dbValue == "false" {
+						isBool = false
+					} else {
+						boolStr := modelType.Field(index).Tag.Get("true")
+						isBool = *dbValue == boolStr
+					}
 					if maps.Field(index).Kind() == reflect.Ptr {
 						maps.Field(index).Set(reflect.ValueOf(&isBool))
 					} else {
