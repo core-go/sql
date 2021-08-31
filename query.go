@@ -85,7 +85,6 @@ func BuildPagingQueryByDriver(sql string, limit int64, offset int64, driver stri
 }
 func BuildPagingQuery(sql string, limit int64, offset int64, driver string) string {
 	if limit > 0 {
-		var offset int64
 		var pagingQuery string
 		if driver == DriverOracle {
 			pagingQuery = fmt.Sprintf(OraclePagingFormat, strconv.FormatInt(offset, 10), strconv.FormatInt(limit, 10))
