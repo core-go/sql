@@ -720,7 +720,7 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 				insertCols = append(insertCols, tkey)
 			}
 			query := fmt.Sprintf("MERGE INTO %s a USING (SELECT %s FROM dual) temp ON  (%s) WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s)",
-				`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
+				table,
 				strings.Join(variables, ", "),
 				strings.Join(uniqueCols, " AND "),
 				strings.Join(setColumns, ", "),
