@@ -208,7 +208,7 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 	}
 	return columns, keys, schema
 }
-func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, options...*sql.DB) ([]Statement, error) {
+func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, options ...*sql.DB) ([]Statement, error) {
 	driver := ""
 	if len(options) > 0 {
 		driver = GetDriver(options[0])
@@ -695,18 +695,24 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 			setColumns := make([]string, 0)
 			values := make([]interface{}, 0)
 			insertCols := make([]string, 0)
+			count := 0
 			attrs, unique, _, err := ExtractBySchema(model, cols, schema)
 			sorted := SortedKeys(attrs)
 			if err != nil {
 				return nil, fmt.Errorf("cannot extract object's values: %w", err)
 			}
-			for v, key := range sorted {
-				values = append(values, attrs[key])
+			for _, key := range sorted {
 				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
 				tkey = strings.ToUpper(tkey)
 				setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
 				inColumns = append(inColumns, "temp."+key)
-				variables = append(variables, fmt.Sprintf(":%d "+tkey, v))
+				if r, ok := checkValue(attrs[key]); ok {
+					variables = append(variables, r+" "+tkey)
+				} else {
+					variables = append(variables, fmt.Sprintf(":%d "+tkey, count))
+					values = append(values, attrs[key])
+					count++
+				}
 				insertCols = append(insertCols, tkey)
 			}
 			for key, val := range unique {
