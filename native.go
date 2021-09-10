@@ -270,22 +270,59 @@ func BuildToSave(db *sql.DB, table string, model interface{}) (string, []interfa
 		var setColumns []string
 		switch driver {
 		case DriverOracle:
+			_, _, schema := MakeSchema(modelType)
 			uniqueCols := make([]string, 0)
 			inColumns := make([]string, 0)
 			values := make([]interface{}, 0, len(attrs)*2)
 			insertCols := make([]string, 0)
-			count := 0
+			i := 0
 			for _, key := range sorted {
+				fdb := schema[key]
+				f := mv.Field(fdb.Index)
+				fieldValue := f.Interface()
 				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
 				tkey = strings.ToUpper(tkey)
 				setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
 				inColumns = append(inColumns, "temp."+key)
-				if r, ok := checkValue(attrs[key]); ok {
-					variables = append(variables, r+" "+tkey)
+				isNil := false
+				if f.Kind() == reflect.Ptr {
+					if reflect.ValueOf(fieldValue).IsNil() {
+						isNil = true
+					} else {
+						attrs[key] = reflect.Indirect(reflect.ValueOf(attrs[key])).Interface()
+					}
+				}
+				if isNil {
+					variables = append(variables, "null "+tkey)
 				} else {
-					variables = append(variables, fmt.Sprintf(":%d "+tkey, count))
-					values = append(values, attrs[key])
-					count++
+					v, ok := GetDBValue(attrs[key])
+					if ok {
+						variables = append(variables, v+" "+tkey)
+					} else {
+						if boolValue, ok := attrs[key].(bool); ok {
+							if boolValue {
+								if fdb.True != nil {
+									variables = append(variables, fmt.Sprintf(":%d "+tkey, i))
+									values = append(values, attrs[key])
+									i++
+								} else {
+									variables = append(variables, "1 "+tkey)
+								}
+							} else {
+								if fdb.False != nil {
+									variables = append(variables, fmt.Sprintf(":%d "+tkey, i))
+									values = append(values, attrs[key])
+									i++
+								} else {
+									variables = append(variables, "0 "+tkey)
+								}
+							}
+						} else {
+							variables = append(variables, fmt.Sprintf(":%d "+tkey, i))
+							values = append(values, attrs[key])
+							i++
+						}
+					}
 				}
 				insertCols = append(insertCols, tkey)
 			}
@@ -344,33 +381,4 @@ func BuildToSave(db *sql.DB, table string, model interface{}) (string, []interfa
 			return "", nil, fmt.Errorf("unsupported db vendor")
 		}
 	}
-}
-
-func checkValue(value interface{}) (string, bool) {
-	typeValue := reflect.TypeOf(value)
-	v := reflect.ValueOf(value)
-	res := ""
-	flag := false
-	switch typeValue.Kind() {
-	case reflect.Ptr:
-		if v.IsNil() {
-			res = "null"
-			flag = true
-			t := typeValue.Elem()
-			if t.Kind() == reflect.Bool {
-				res = "1"
-			}
-		}
-		break
-	case reflect.String:
-		if v.IsZero() {
-			res = "''"
-			flag = true
-		}
-		break
-	default:
-		flag = false
-		break
-	}
-	return res, flag
 }

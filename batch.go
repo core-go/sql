@@ -102,7 +102,7 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 }
 
 type Statement struct {
-	Query string        `mapstructure:"sql" json:"sql,omitempty" gorm:"column:sql" bson:"sql,omitempty" dynamodbav:"sql,omitempty" firestore:"sql,omitempty"`
+	Query string        `mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
 	Args  []interface{} `mapstructure:"args" json:"args,omitempty" gorm:"column:args" bson:"args,omitempty" dynamodbav:"args,omitempty" firestore:"args,omitempty"`
 }
 type Statements interface {
@@ -688,14 +688,16 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 		}
 	} else if driver == DriverOracle {
 		for j := 0; j < slen; j++ {
+			_, _, schema := MakeSchema(modelType)
 			model := s.Index(j).Interface()
+			mv := reflect.ValueOf(model)
 			uniqueCols := make([]string, 0)
 			inColumns := make([]string, 0)
 			variables := make([]string, 0)
 			setColumns := make([]string, 0)
 			values := make([]interface{}, 0)
 			insertCols := make([]string, 0)
-			count := 0
+			i := 0
 			attrs, unique, _, err := ExtractBySchema(model, cols, schema)
 			sorted := SortedKeys(attrs)
 			if err != nil {
@@ -706,12 +708,48 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 				tkey = strings.ToUpper(tkey)
 				setColumns = append(setColumns, "a."+tkey+" = temp."+tkey)
 				inColumns = append(inColumns, "temp."+key)
-				if r, ok := checkValue(attrs[key]); ok {
-					variables = append(variables, r+" "+tkey)
+				fdb := schema[key]
+				f := mv.Field(fdb.Index)
+				fieldValue := f.Interface()
+				isNil := false
+				if f.Kind() == reflect.Ptr {
+					if reflect.ValueOf(fieldValue).IsNil() {
+						isNil = true
+					} else {
+						attrs[key] = reflect.Indirect(reflect.ValueOf(attrs[key])).Interface()
+					}
+				}
+				if isNil {
+					variables = append(variables, "null "+tkey)
 				} else {
-					variables = append(variables, fmt.Sprintf(":%d "+tkey, count))
-					values = append(values, attrs[key])
-					count++
+					v, ok := GetDBValue(attrs[key])
+					if ok {
+						variables = append(variables, v+" "+tkey)
+					} else {
+						if boolValue, ok := attrs[key].(bool); ok {
+							if boolValue {
+								if fdb.True != nil {
+									variables = append(variables, fmt.Sprintf(":%d "+tkey, i))
+									values = append(values, attrs[key])
+									i++
+								} else {
+									variables = append(variables, "1 "+tkey)
+								}
+							} else {
+								if fdb.False != nil {
+									variables = append(variables, fmt.Sprintf(":%d "+tkey, i))
+									values = append(values, attrs[key])
+									i++
+								} else {
+									variables = append(variables, "0 "+tkey)
+								}
+							}
+						} else {
+							variables = append(variables, fmt.Sprintf(":%d "+tkey, i))
+							values = append(values, attrs[key])
+							i++
+						}
+					}
 				}
 				insertCols = append(insertCols, tkey)
 			}
