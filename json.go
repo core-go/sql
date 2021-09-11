@@ -97,6 +97,48 @@ func (h *Handler) Exec(w http.ResponseWriter, r *http.Request) {
 	succeed(w, r, http.StatusOK, a2)
 }
 
+func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
+	s := JStatement{}
+	er0 := json.NewDecoder(r.Body).Decode(&s)
+	if er0 != nil {
+		http.Error(w, er0.Error(), http.StatusBadRequest)
+		return
+	}
+	s.Args = ParseDates(s.Args, s.Dates)
+	rows, er1 := h.DB.Query(s.Query, s.Args)
+	if er1 != nil {
+		handleError(w, r, 500, er1.Error(), h.Error, er1)
+		return
+	}
+	defer rows.Close()
+	cols, _ := rows.Columns()
+	res := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		// Create a slice of interface{}'s to represent each column,
+		// and a second slice to contain pointers to each item in the columns slice.
+		columns := make([]interface{}, len(cols))
+		columnPointers := make([]interface{}, len(cols))
+		for i, _ := range columns {
+			columnPointers[i] = &columns[i]
+		}
+		// Scan the result into the column pointers...
+		if err := rows.Scan(columnPointers...); err != nil {
+			handleError(w, r, http.StatusInternalServerError, err.Error(), h.Error, err)
+			return
+		}
+		// Create our map, and retrieve the value for each column from the pointers slice,
+		// storing it in the map with the name of the column as the key.
+		m := make(map[string]interface{})
+		for i, colName := range cols {
+			val := columnPointers[i].(*interface{})
+			m[colName] = *val
+		}
+		// Outputs: map[columnName:value columnName2:value2 columnName3:value3 ...]
+		res = append(res, m)
+	}
+	succeed(w, r, http.StatusOK, res)
+}
+
 func (h *Handler) ExecBatch(w http.ResponseWriter, r *http.Request) {
 	var s []JStatement
 	b := make([]Statement, 0)
