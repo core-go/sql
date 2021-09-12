@@ -9,76 +9,6 @@ import (
 	"time"
 )
 
-type JStatement struct {
-	Query  string        `mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
-	Params []interface{} `mapstructure:"params" json:"params,omitempty" gorm:"column:params" bson:"params,omitempty" dynamodbav:"params,omitempty" firestore:"params,omitempty"`
-	Dates  []int         `mapstructure:"dates" json:"dates,omitempty" gorm:"column:dates" bson:"dates,omitempty" dynamodbav:"dates,omitempty" firestore:"dates,omitempty"`
-}
-
-const (
-	t1 = "2006-01-02T15:04:05Z"
-	t2 = "2006-01-02T15:04:05-0700"
-	t3 = "2006-01-02T15:04:05.0000000-0700"
-
-	l1 = len(t1)
-	l2 = len(t2)
-	l3 = len(t3)
-)
-
-func ToDates(args []interface{}) []int {
-	if args == nil || len(args) == 0 {
-		ag2 := make([]int, 0)
-		return ag2
-	}
-	var dates []int
-	for i, arg := range args {
-		if _, ok := arg.(time.Time); ok {
-			dates = append(dates, i)
-		}
-		if _, ok := arg.(*time.Time); ok {
-			dates = append(dates, i)
-		}
-	}
-	return dates
-}
-
-func ParseDates(args []interface{}, dates []int) []interface{} {
-	if args == nil || len(args) == 0 {
-		ag2 := make([]interface{}, 0)
-		return ag2
-	}
-	if dates == nil || len(dates) == 0 {
-		return args
-	}
-	res := append([]interface{}{}, args...)
-	for _, d := range dates {
-		if d >= len(args) {
-			break
-		}
-		a := args[d]
-		if s, ok := a.(string); ok {
-			switch len(s) {
-			case l1:
-				t, err := time.Parse(t1, s)
-				if err == nil {
-					res[d] = t
-				}
-			case l2:
-				t, err := time.Parse(t2, s)
-				if err == nil {
-					res[d] = t
-				}
-			case l3:
-				t, err := time.Parse(t3, s)
-				if err == nil {
-					res[d] = t
-				}
-			}
-		}
-	}
-	return res
-}
-
 type Handler struct {
 	DB        *sql.DB
 	Transform func(s string) string
@@ -89,11 +19,18 @@ type Handler struct {
 }
 
 const d = 120 * time.Second
-func NewHandler(db *sql.DB, master string, logError func(context.Context, string)) *Handler {
+func NewHandlerWithTx(db *sql.DB, transform func(s string) string, master string, cache TxCache, generate func(context.Context) (string, error), options... func(context.Context, string)) *Handler {
 	if len(master) == 0 {
 		master = "master"
 	}
-	return &Handler{DB: db, Master: master, Error: logError}
+	var logError func(context.Context, string)
+	if len(options) >= 1 {
+		logError = options[0]
+	}
+	return &Handler{DB: db, Transform: transform, Master: master, Cache: cache, Generate: generate, Error: logError}
+}
+func NewHandler(db *sql.DB, transform func(s string) string, master string, options... func(context.Context, string)) *Handler {
+	return NewHandlerWithTx(db, transform, master, nil, nil, options...)
 }
 func (h *Handler) BeginTransaction(w http.ResponseWriter, r *http.Request) {
 	id, er0 := h.Generate(r.Context())

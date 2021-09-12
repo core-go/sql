@@ -6,6 +6,7 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"time"
 )
 
 func GetDriver(db *sql.DB) string {
@@ -27,6 +28,76 @@ func GetDriver(db *sql.DB) string {
 	default:
 		return DriverNotSupport
 	}
+}
+
+type JStatement struct {
+	Query  string        `mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
+	Params []interface{} `mapstructure:"params" json:"params,omitempty" gorm:"column:params" bson:"params,omitempty" dynamodbav:"params,omitempty" firestore:"params,omitempty"`
+	Dates  []int         `mapstructure:"dates" json:"dates,omitempty" gorm:"column:dates" bson:"dates,omitempty" dynamodbav:"dates,omitempty" firestore:"dates,omitempty"`
+}
+
+const (
+	t1 = "2006-01-02T15:04:05Z"
+	t2 = "2006-01-02T15:04:05-0700"
+	t3 = "2006-01-02T15:04:05.0000000-0700"
+
+	l1 = len(t1)
+	l2 = len(t2)
+	l3 = len(t3)
+)
+
+func ToDates(args []interface{}) []int {
+	if args == nil || len(args) == 0 {
+		ag2 := make([]int, 0)
+		return ag2
+	}
+	var dates []int
+	for i, arg := range args {
+		if _, ok := arg.(time.Time); ok {
+			dates = append(dates, i)
+		}
+		if _, ok := arg.(*time.Time); ok {
+			dates = append(dates, i)
+		}
+	}
+	return dates
+}
+
+func ParseDates(args []interface{}, dates []int) []interface{} {
+	if args == nil || len(args) == 0 {
+		ag2 := make([]interface{}, 0)
+		return ag2
+	}
+	if dates == nil || len(dates) == 0 {
+		return args
+	}
+	res := append([]interface{}{}, args...)
+	for _, d := range dates {
+		if d >= len(args) {
+			break
+		}
+		a := args[d]
+		if s, ok := a.(string); ok {
+			switch len(s) {
+			case l1:
+				t, err := time.Parse(t1, s)
+				if err == nil {
+					res[d] = t
+				}
+			case l2:
+				t, err := time.Parse(t2, s)
+				if err == nil {
+					res[d] = t
+				}
+			case l3:
+				t, err := time.Parse(t3, s)
+				if err == nil {
+					res[d] = t
+				}
+			}
+		}
+	}
+	return res
 }
 func Count(ctx context.Context, db *sql.DB, sql string, values ...interface{}) (int64, error) {
 	var total int64
@@ -510,4 +581,65 @@ func ScanRow(row *sql.Row, structType reflect.Type) (t interface{}, err error) {
 	err = row.Scan(r...)
 	SwapValuesToBool(t, &swapValues)
 	return
+}
+func ToCamelCase(s string) string {
+	s2 := strings.ToLower(s)
+	s1 := string(s[0])
+	for i := 1; i < len(s); i++ {
+		if string(s[i-1]) == "_" {
+			s1 = s1[:len(s1)-1]
+			s1 += strings.ToUpper(string(s2[i]))
+		} else {
+			s1 += string(s[i])
+		}
+	}
+	return s1
+}
+func BuildStatement(query string, values ...interface{}) *JStatement {
+	stm := JStatement{Query: query}
+	l := len(values)
+	if l > 0 {
+		ag2 := make([]interface{}, 0)
+		dates := make([]int, 0)
+		for i := 0; i < l; i++ {
+			arg := values[i]
+			if _, ok := arg.(time.Time); ok {
+				dates = append(dates, i)
+			} else if _, ok := arg.(*time.Time); ok {
+				dates = append(dates, i)
+			}
+			ag2 = append(ag2, values[i])
+		}
+		stm.Params = ag2
+		if len(dates) > 0 {
+			stm.Dates = dates
+		}
+	}
+	return &stm
+}
+func BuildJStatements(sts ...Statement) []JStatement {
+	b := make([]JStatement, 0)
+	if sts == nil || len(sts) == 0 {
+		return b
+	}
+	for _, s := range sts {
+		j := JStatement{Query: s.Query}
+		if s.Params != nil && len(s.Params) > 0 {
+			j.Params = s.Params
+			j.Dates = ToDates(s.Params)
+		}
+		b = append(b, j)
+	}
+	return b
+}
+type Proxy interface {
+	BeginTransaction(ctx context.Context) (string, error)
+	CommitTransaction(ctx context.Context, tx string) (string, error)
+	RollbackTransaction(ctx context.Context, tx string) (string, error)
+	Exec(ctx context.Context, query string, values ...interface{}) (int64, error)
+	ExecBatch(ctx context.Context, stm...Statement) (int64, error)
+	Query(ctx context.Context, result interface{}, query string, values ...interface{}) error
+	ExecWithTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error)
+	ExecBatchWithTx(ctx context.Context, tx string, commit bool, stm...Statement) (int64, error)
+	QueryWithTx(ctx context.Context, result interface{}, tx string, query string, values ...interface{}) error
 }
