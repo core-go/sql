@@ -37,6 +37,17 @@ func OpenByConfig(c Config) (*sql.DB, error) {
 		return Open(c, durations...)
 	}
 }
+type TxCache interface {
+	Put(key string, obj interface{}, timeToLive time.Duration) error
+	Expire(key string, timeToLive time.Duration) (bool, error)
+	Get(key string) (*sql.Tx, error)
+	Remove(key string) (bool, error)
+	Clear() error
+	Keys() ([]string, error)
+	Count() (int64, error)
+	Size() (int64, error)
+}
+
 func open(c Config) (*sql.DB, error) {
 	dsn := c.DataSourceName
 	if len(dsn) == 0 {

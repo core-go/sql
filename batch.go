@@ -8,10 +8,39 @@ import (
 	"strings"
 )
 
-func ExecuteStatements(ctx context.Context, db *sql.DB, sts []Statement) (int64, error) {
-	return ExecuteBatch(ctx, db, sts, true, false)
+func ExecuteStatements(ctx context.Context, tx *sql.Tx, commit bool, stmts ...Statement) (int64, error) {
+	if stmts == nil || len(stmts) == 0 {
+		return 0, nil
+	}
+	var count int64
+	count = 0
+	for _, stmt := range stmts {
+		r2, er3 := tx.ExecContext(ctx, stmt.Query, stmt.Params...)
+		if er3 != nil {
+			er4 := tx.Rollback()
+			if er4 != nil {
+				return count, er4
+			}
+			return count, er3
+		}
+		a2, er5 := r2.RowsAffected()
+		if er5 != nil {
+			tx.Rollback()
+			return count, er5
+		}
+		count = count + a2
+	}
+	if commit {
+		er6 := tx.Commit()
+		return count, er6
+	} else {
+		return count, nil
+	}
 }
-func ExecuteAll(ctx context.Context, db *sql.DB, stmts []Statement) (int64, error) {
+func ExecuteAll(ctx context.Context, db *sql.DB, stmts ...Statement) (int64, error) {
+	if stmts == nil || len(stmts) == 0 {
+		return 0, nil
+	}
 	tx, er1 := db.Begin()
 	if er1 != nil {
 		return 0, er1
@@ -127,9 +156,9 @@ type DefaultStatements struct {
 
 func (s *DefaultStatements) Exec(ctx context.Context, db *sql.DB) (int64, error) {
 	if s.SuccessFirst {
-		return ExecuteStatements(ctx, db, s.Statements)
+		return ExecuteBatch(ctx, db, s.Statements, true, false)
 	} else {
-		return ExecuteAll(ctx, db, s.Statements)
+		return ExecuteAll(ctx, db, s.Statements...)
 	}
 }
 func (s *DefaultStatements) Add(sql string, args []interface{}) Statements {
@@ -841,14 +870,14 @@ func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 	if er1 != nil {
 		return 0, er1
 	}
-	return ExecuteAll(ctx, db, stmts)
+	return ExecuteAll(ctx, db, stmts...)
 }
 func SaveBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}) (int64, error) {
 	stmts, er1 := BuildToSaveBatch(db, tableName, models)
 	if er1 != nil {
 		return 0, er1
 	}
-	_, err := ExecuteAll(ctx, db, stmts)
+	_, err := ExecuteAll(ctx, db, stmts...)
 	total := int64(len(stmts))
 	return total, err
 }

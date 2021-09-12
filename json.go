@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -79,18 +80,79 @@ func ParseDates(args []interface{}, dates []int) []interface{} {
 }
 
 type Handler struct {
-	DB     *sql.DB
-	Master string
-	Error  func(context.Context, string)
+	DB        *sql.DB
+	Transform func(s string) string
+	Master    string
+	Cache     TxCache
+	Generate  func(ctx context.Context) (string, error)
+	Error     func(context.Context, string)
 }
 
+const d = 120 * time.Second
 func NewHandler(db *sql.DB, master string, logError func(context.Context, string)) *Handler {
 	if len(master) == 0 {
 		master = "master"
 	}
 	return &Handler{DB: db, Master: master, Error: logError}
 }
-
+func (h *Handler) BeginTransaction(w http.ResponseWriter, r *http.Request) {
+	id, er0 := h.Generate(r.Context())
+	if er0 != nil {
+		http.Error(w, er0.Error(), http.StatusInternalServerError)
+		return
+	}
+	tx, er1 := h.DB.Begin()
+	if er1 != nil {
+		http.Error(w, er1.Error(), http.StatusInternalServerError)
+		return
+	}
+	ps := r.URL.Query()
+	t := d
+	stimeout := ps.Get("timeout")
+	if len(stimeout) > 0 {
+		i, er2 := strconv.ParseInt(stimeout, 10, 64)
+		if er2 == nil && i > 0 {
+			t = time.Duration(i) * time.Second
+		}
+	}
+	h.Cache.Put(id, tx, t)
+	succeed(w, r, http.StatusOK, id)
+}
+func (h *Handler) EndTransaction(w http.ResponseWriter, r *http.Request) {
+	ps := r.URL.Query()
+	stx := ps.Get("tx")
+	if len(stx) == 0 {
+		http.Error(w, "tx is required", http.StatusBadRequest)
+		return
+	}
+	tx, er0 := h.Cache.Get(stx)
+	if er0 != nil {
+		http.Error(w, er0.Error(), http.StatusInternalServerError)
+		return
+	}
+	if tx == nil {
+		http.Error(w, "cannot get tx from cache. Maybe tx got timeout", http.StatusInternalServerError)
+		return
+	}
+	roleback := ps.Get("roleback")
+	if roleback == "true" {
+		er1 := tx.Rollback()
+		if er1 != nil {
+			http.Error(w, er1.Error(), http.StatusInternalServerError)
+		} else {
+			h.Cache.Remove(stx)
+			succeed(w, r, http.StatusOK, true)
+		}
+	} else {
+		er1 := tx.Commit()
+		if er1 != nil {
+			http.Error(w, er1.Error(), http.StatusInternalServerError)
+		} else {
+			h.Cache.Remove(stx)
+			succeed(w, r, http.StatusOK, true)
+		}
+	}
+}
 func (h *Handler) Exec(w http.ResponseWriter, r *http.Request) {
 	s := JStatement{}
 	er0 := json.NewDecoder(r.Body).Decode(&s)
@@ -99,17 +161,50 @@ func (h *Handler) Exec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Params = ParseDates(s.Params, s.Dates)
-	res, er1 := h.DB.Exec(s.Query, s.Params...)
-	if er1 != nil {
-		handleError(w, r, 500, er1.Error(), h.Error, er1)
-		return
+	ps := r.URL.Query()
+	stx := ps.Get("tx")
+	if len(stx) == 0 {
+		res, er1 := h.DB.Exec(s.Query, s.Params...)
+		if er1 != nil {
+			handleError(w, r, 500, er1.Error(), h.Error, er1)
+			return
+		}
+		a2, er2 := res.RowsAffected()
+		if er2 != nil {
+			handleError(w, r, http.StatusInternalServerError, er2.Error(), h.Error, er2)
+			return
+		}
+		succeed(w, r, http.StatusOK, a2)
+	} else {
+		tx, er0 := h.Cache.Get(stx)
+		if er0 != nil {
+			http.Error(w, er0.Error(), http.StatusInternalServerError)
+			return
+		}
+		if tx == nil {
+			http.Error(w, "cannot get tx from cache. Maybe tx got timeout", http.StatusInternalServerError)
+			return
+		}
+		res, er1 := tx.Exec(s.Query, s.Params...)
+		if er1 != nil {
+			handleError(w, r, 500, er1.Error(), h.Error, er1)
+			return
+		}
+		a2, er2 := res.RowsAffected()
+		if er2 != nil {
+			handleError(w, r, http.StatusInternalServerError, er2.Error(), h.Error, er2)
+			return
+		}
+		commit := ps.Get("commit")
+		if commit == "true" {
+			er3 := tx.Commit()
+			if er3 != nil {
+				handleError(w, r, http.StatusInternalServerError, er3.Error(), h.Error, er3)
+				return
+			}
+		}
+		succeed(w, r, http.StatusOK, a2)
 	}
-	a2, er2 := res.RowsAffected()
-	if er2 != nil {
-		handleError(w, r, http.StatusInternalServerError, er2.Error(), h.Error, er2)
-		return
-	}
-	succeed(w, r, http.StatusOK, a2)
 }
 
 func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
@@ -120,12 +215,32 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Params = ParseDates(s.Params, s.Dates)
-	res, er1 := QueryMap(r.Context(), h.DB, s.Query, s.Params...)
-	if er1 != nil {
-		handleError(w, r, 500, er1.Error(), h.Error, er1)
-		return
+	ps := r.URL.Query()
+	stx := ps.Get("tx")
+	if len(stx) == 0 {
+		res, er1 := QueryMap(r.Context(), h.DB, h.Transform, s.Query, s.Params...)
+		if er1 != nil {
+			handleError(w, r, 500, er1.Error(), h.Error, er1)
+			return
+		}
+		succeed(w, r, http.StatusOK, res)
+	} else {
+		tx, er0 := h.Cache.Get(stx)
+		if er0 != nil {
+			http.Error(w, er0.Error(), http.StatusInternalServerError)
+			return
+		}
+		if tx == nil {
+			http.Error(w, "cannot get tx from cache. Maybe tx got timeout", http.StatusInternalServerError)
+			return
+		}
+		res, er1 := QueryMapWithTx(r.Context(), tx, h.Transform, s.Query, s.Params...)
+		if er1 != nil {
+			handleError(w, r, 500, er1.Error(), h.Error, er1)
+			return
+		}
+		succeed(w, r, http.StatusOK, res)
 	}
-	succeed(w, r, http.StatusOK, res)
 }
 
 func (h *Handler) ExecBatch(w http.ResponseWriter, r *http.Request) {
@@ -144,13 +259,35 @@ func (h *Handler) ExecBatch(w http.ResponseWriter, r *http.Request) {
 		b = append(b, st)
 	}
 	ps := r.URL.Query()
-	master := ps.Get(h.Master)
+	stx := ps.Get("tx")
 	var er1 error
 	var res int64
-	if master == "true" {
-		res, er1 = ExecuteBatch(r.Context(), h.DB, b, true, true)
+	if len(stx) == 0 {
+		master := ps.Get(h.Master)
+		if master == "true" {
+			res, er1 = ExecuteBatch(r.Context(), h.DB, b, true, true)
+		} else {
+			res, er1 = ExecuteAll(r.Context(), h.DB, b...)
+		}
 	} else {
-		res, er1 = ExecuteAll(r.Context(), h.DB, b)
+		tx, er0 := h.Cache.Get(stx)
+		if er0 != nil {
+			http.Error(w, er0.Error(), http.StatusInternalServerError)
+			return
+		}
+		if tx == nil {
+			http.Error(w, "cannot get tx from cache. Maybe tx got timeout", http.StatusInternalServerError)
+			return
+		}
+		tc := false
+		commit := ps.Get("commit")
+		if commit == "true" {
+			tc = true
+		}
+		res, er1 = ExecuteStatements(r.Context(), tx, tc, b...)
+		if tc && er1 == nil {
+			h.Cache.Remove(stx)
+		}
 	}
 	if er1 != nil {
 		handleError(w, r, 500, er1.Error(), h.Error, er1)
@@ -181,7 +318,7 @@ func returnJSON(w http.ResponseWriter, code int, result interface{}) error {
 	response, err := marshal(result)
 	if err != nil {
 		// log.Println("cannot marshal of result: " + err.Error())
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
 	}
 	w.Write(response)
