@@ -19,7 +19,7 @@ func ExecuteAll(ctx context.Context, db *sql.DB, stmts []Statement) (int64, erro
 	var count int64
 	count = 0
 	for _, stmt := range stmts {
-		r2, er3 := tx.ExecContext(ctx, stmt.Query, stmt.Args...)
+		r2, er3 := tx.ExecContext(ctx, stmt.Query, stmt.Params...)
 		if er3 != nil {
 			er4 := tx.Rollback()
 			if er4 != nil {
@@ -46,7 +46,7 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	if er0 != nil {
 		return 0, er0
 	}
-	result, er1 := tx.ExecContext(ctx, sts[0].Query, sts[0].Args...)
+	result, er1 := tx.ExecContext(ctx, sts[0].Query, sts[0].Params...)
 	if er1 != nil {
 		_ = tx.Rollback()
 		str := er1.Error()
@@ -76,7 +76,7 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	}
 	count := rowAffected
 	for i := 1; i < len(sts); i++ {
-		r2, er3 := tx.ExecContext(ctx, sts[i].Query, sts[i].Args...)
+		r2, er3 := tx.ExecContext(ctx, sts[i].Query, sts[i].Params...)
 		if er3 != nil {
 			er4 := tx.Rollback()
 			if er4 != nil {
@@ -102,8 +102,8 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 }
 
 type Statement struct {
-	Query string        `mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
-	Args  []interface{} `mapstructure:"args" json:"args,omitempty" gorm:"column:args" bson:"args,omitempty" dynamodbav:"args,omitempty" firestore:"args,omitempty"`
+	Query  string        `mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
+	Params []interface{} `mapstructure:"params" json:"params,omitempty" gorm:"column:params" bson:"params,omitempty" dynamodbav:"params,omitempty" firestore:"params,omitempty"`
 }
 type Statements interface {
 	Exec(ctx context.Context, db *sql.DB) (int64, error)
@@ -133,7 +133,7 @@ func (s *DefaultStatements) Exec(ctx context.Context, db *sql.DB) (int64, error)
 	}
 }
 func (s *DefaultStatements) Add(sql string, args []interface{}) Statements {
-	var stm = Statement{Query: sql, Args: args}
+	var stm = Statement{Query: sql, Params: args}
 	s.Statements = append(s.Statements, stm)
 	return s
 }
@@ -306,7 +306,7 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 			}
 		}
 		query := fmt.Sprintf("update %v set %v where %v", table, strings.Join(values, ","), strings.Join(where, ","))
-		s := Statement{Query: query, Args: args}
+		s := Statement{Query: query, Params: args}
 		stmts = append(stmts, s)
 	}
 	return stmts, nil
@@ -625,7 +625,7 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 					)
 				}
 			}
-			s := Statement{Query: query, Args: args}
+			s := Statement{Query: query, Params: args}
 			stmts = append(stmts, s)
 		}
 	} else if driver == DriverSqlite3 {
@@ -683,7 +683,7 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 				}
 			}
 			query := fmt.Sprintf("insert or replace into %s(%s) values (%s)", table, strings.Join(iCols, ","), strings.Join(values, ","))
-			s := Statement{Query: query, Args: args}
+			s := Statement{Query: query, Params: args}
 			stmts = append(stmts, s)
 		}
 	} else if driver == DriverOracle {
@@ -771,7 +771,7 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 				strings.Join(insertCols, ", "),
 				strings.Join(inColumns, ", "),
 			)
-			s := Statement{Query: query, Args: values}
+			s := Statement{Query: query, Params: values}
 			stmts = append(stmts, s)
 		}
 	} else if driver == DriverMssql {
@@ -812,7 +812,7 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 				strings.Join(dbColumns, ", "),
 				strings.Join(variables, ", "),
 			)
-			s := Statement{Query: query, Args: values}
+			s := Statement{Query: query, Params: values}
 			stmts = append(stmts, s)
 		}
 	}

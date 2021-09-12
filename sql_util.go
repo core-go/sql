@@ -37,6 +37,49 @@ func Count(ctx context.Context, db *sql.DB, sql string, values ...interface{}) (
 	}
 	return total, nil
 }
+func QueryMap(ctx context.Context, db *sql.DB, sql string, values ...interface{}) ([]map[string]interface{}, error) {
+	rows, er1 := db.QueryContext(ctx, sql, values...)
+	if er1 != nil {
+		return nil, er1
+	}
+	defer rows.Close()
+	cols, _ := rows.Columns()
+	res := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		// Create a slice of interface{}'s to represent each column,
+		// and a second slice to contain pointers to each item in the columns slice.
+		columns := make([]interface{}, len(cols))
+		columnPointers := make([]interface{}, len(cols))
+		for i, _ := range columns {
+			columnPointers[i] = &columns[i]
+		}
+		// Scan the result into the column pointers...
+		if err := rows.Scan(columnPointers...); err != nil {
+			return nil, err
+		}
+		// Create our map, and retrieve the value for each column from the pointers slice,
+		// storing it in the map with the name of the column as the key.
+		m := make(map[string]interface{})
+		for i, colName := range cols {
+			val := columnPointers[i].(*interface{})
+			x := *val
+			switch s := x.(type) {
+			case *[]byte:
+				x2 := *s
+				s2 := string(x2)
+				m[colName] = s2
+			case []byte:
+				s2 := string(s)
+				m[colName] = s2
+			default:
+				m[colName] = *val
+			}
+		}
+		// Outputs: map[columnName:value columnName2:value2 columnName3:value3 ...]
+		res = append(res, m)
+	}
+	return res, nil
+}
 func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, values ...interface{}) error {
 	rows, er1 := db.QueryContext(ctx, sql, values...)
 	if er1 != nil {

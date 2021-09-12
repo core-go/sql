@@ -9,9 +9,9 @@ import (
 )
 
 type JStatement struct {
-	Query string        `mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
-	Args  []interface{} `mapstructure:"args" json:"args,omitempty" gorm:"column:args" bson:"args,omitempty" dynamodbav:"args,omitempty" firestore:"args,omitempty"`
-	Dates []int         `mapstructure:"dates" json:"dates,omitempty" gorm:"column:dates" bson:"dates,omitempty" dynamodbav:"dates,omitempty" firestore:"dates,omitempty"`
+	Query  string        `mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
+	Params []interface{} `mapstructure:"params" json:"params,omitempty" gorm:"column:params" bson:"params,omitempty" dynamodbav:"params,omitempty" firestore:"params,omitempty"`
+	Dates  []int         `mapstructure:"dates" json:"dates,omitempty" gorm:"column:dates" bson:"dates,omitempty" dynamodbav:"dates,omitempty" firestore:"dates,omitempty"`
 }
 
 const (
@@ -25,6 +25,10 @@ const (
 )
 
 func ToDates(args []interface{}) []int {
+	if args == nil || len(args) == 0 {
+		ag2 := make([]int, 0)
+		return ag2
+	}
 	var dates []int
 	for i, arg := range args {
 		if _, ok := arg.(time.Time); ok {
@@ -38,6 +42,13 @@ func ToDates(args []interface{}) []int {
 }
 
 func ParseDates(args []interface{}, dates []int) []interface{} {
+	if args == nil || len(args) == 0 {
+		ag2 := make([]interface{}, 0)
+		return ag2
+	}
+	if dates == nil || len(dates) == 0 {
+		return args
+	}
 	res := append([]interface{}{}, args...)
 	for _, d := range dates {
 		if d >= len(args) {
@@ -68,12 +79,16 @@ func ParseDates(args []interface{}, dates []int) []interface{} {
 }
 
 type Handler struct {
-	DB *sql.DB
-	Error func(context.Context, string)
+	DB     *sql.DB
+	Master string
+	Error  func(context.Context, string)
 }
 
-func NewHandler(db *sql.DB, logError func(context.Context, string)) *Handler {
-	return &Handler{db, logError}
+func NewHandler(db *sql.DB, master string, logError func(context.Context, string)) *Handler {
+	if len(master) == 0 {
+		master = "master"
+	}
+	return &Handler{DB: db, Master: master, Error: logError}
 }
 
 func (h *Handler) Exec(w http.ResponseWriter, r *http.Request) {
@@ -83,8 +98,8 @@ func (h *Handler) Exec(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, er0.Error(), http.StatusBadRequest)
 		return
 	}
-	s.Args = ParseDates(s.Args, s.Dates)
-	res, er1 := h.DB.Exec(s.Query, s.Args...)
+	s.Params = ParseDates(s.Params, s.Dates)
+	res, er1 := h.DB.Exec(s.Query, s.Params...)
 	if er1 != nil {
 		handleError(w, r, 500, er1.Error(), h.Error, er1)
 		return
@@ -104,37 +119,11 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, er0.Error(), http.StatusBadRequest)
 		return
 	}
-	s.Args = ParseDates(s.Args, s.Dates)
-	rows, er1 := h.DB.Query(s.Query, s.Args)
+	s.Params = ParseDates(s.Params, s.Dates)
+	res, er1 := QueryMap(r.Context(), h.DB, s.Query, s.Params...)
 	if er1 != nil {
 		handleError(w, r, 500, er1.Error(), h.Error, er1)
 		return
-	}
-	defer rows.Close()
-	cols, _ := rows.Columns()
-	res := make([]map[string]interface{}, 0)
-	for rows.Next() {
-		// Create a slice of interface{}'s to represent each column,
-		// and a second slice to contain pointers to each item in the columns slice.
-		columns := make([]interface{}, len(cols))
-		columnPointers := make([]interface{}, len(cols))
-		for i, _ := range columns {
-			columnPointers[i] = &columns[i]
-		}
-		// Scan the result into the column pointers...
-		if err := rows.Scan(columnPointers...); err != nil {
-			handleError(w, r, http.StatusInternalServerError, err.Error(), h.Error, err)
-			return
-		}
-		// Create our map, and retrieve the value for each column from the pointers slice,
-		// storing it in the map with the name of the column as the key.
-		m := make(map[string]interface{})
-		for i, colName := range cols {
-			val := columnPointers[i].(*interface{})
-			m[colName] = *val
-		}
-		// Outputs: map[columnName:value columnName2:value2 columnName3:value3 ...]
-		res = append(res, m)
 	}
 	succeed(w, r, http.StatusOK, res)
 }
@@ -151,11 +140,18 @@ func (h *Handler) ExecBatch(w http.ResponseWriter, r *http.Request) {
 	for i := 0; i < l; i++ {
 		st := Statement{}
 		st.Query = s[i].Query
-		st.Args = ParseDates(s[i].Args, s[i].Dates)
+		st.Params = ParseDates(s[i].Params, s[i].Dates)
 		b = append(b, st)
 	}
-
-	res, er1 := ExecuteAll(r.Context(), h.DB, b)
+	ps := r.URL.Query()
+	master := ps.Get(h.Master)
+	var er1 error
+	var res int64
+	if master == "true" {
+		res, er1 = ExecuteBatch(r.Context(), h.DB, b, true, true)
+	} else {
+		res, er1 = ExecuteAll(r.Context(), h.DB, b)
+	}
 	if er1 != nil {
 		handleError(w, r, 500, er1.Error(), h.Error, er1)
 		return
