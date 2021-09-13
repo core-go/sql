@@ -584,13 +584,13 @@ func ScanRow(row *sql.Row, structType reflect.Type) (t interface{}, err error) {
 }
 func ToCamelCase(s string) string {
 	s2 := strings.ToLower(s)
-	s1 := string(s[0])
+	s1 := string(s2[0])
 	for i := 1; i < len(s); i++ {
-		if string(s[i-1]) == "_" {
+		if string(s2[i-1]) == "_" {
 			s1 = s1[:len(s1)-1]
 			s1 += strings.ToUpper(string(s2[i]))
 		} else {
-			s1 += string(s[i])
+			s1 += string(s2[i])
 		}
 	}
 	return s1
@@ -632,14 +632,15 @@ func BuildJStatements(sts ...Statement) []JStatement {
 	}
 	return b
 }
+
 type Proxy interface {
 	BeginTransaction(ctx context.Context, timeout int64) (string, error)
 	CommitTransaction(ctx context.Context, tx string) (string, error)
 	RollbackTransaction(ctx context.Context, tx string) (string, error)
 	Exec(ctx context.Context, query string, values ...interface{}) (int64, error)
-	ExecBatch(ctx context.Context, stm...Statement) (int64, error)
+	ExecBatch(ctx context.Context, stm ...Statement) (int64, error)
 	Query(ctx context.Context, result interface{}, query string, values ...interface{}) error
 	ExecWithTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error)
-	ExecBatchWithTx(ctx context.Context, tx string, commit bool, stm...Statement) (int64, error)
+	ExecBatchWithTx(ctx context.Context, tx string, commit bool, stm ...Statement) (int64, error)
 	QueryWithTx(ctx context.Context, result interface{}, tx string, commit bool, query string, values ...interface{}) error
 }

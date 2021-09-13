@@ -349,32 +349,75 @@ func BuildToSave(db *sql.DB, table string, model interface{}) (string, []interfa
 			)
 			return query, values, nil
 		case DriverMssql:
+			_, _, schema := MakeSchema(modelType)
 			uniqueCols := make([]string, 0)
 			values := make([]interface{}, 0, len(attrs)*2)
+			inColumns := make([]string, 0)
 			for _, key := range sorted {
-				//mainScope.AddToVars(attrs[key])
-				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+				fdb := schema[key]
+				f := mv.Field(fdb.Index)
+				fieldValue := f.Interface()
+				tkey := strings.Replace(key, `"`, `""`, -1)
+				isNil := false
+				if f.Kind() == reflect.Ptr {
+					if reflect.ValueOf(fieldValue).IsNil() {
+						isNil = true
+					} else {
+						attrs[key] = reflect.Indirect(reflect.ValueOf(attrs[key])).Interface()
+					}
+				}
+				if isNil {
+					variables = append(variables, "null")
+				} else {
+					v, ok := GetDBValue(attrs[key])
+					if ok {
+						variables = append(variables, v)
+					} else {
+						if boolValue, ok := attrs[key].(bool); ok {
+							if boolValue {
+								if fdb.True != nil {
+									variables = append(variables, "?")
+									values = append(values, attrs[key])
+								} else {
+									variables = append(variables, "1 "+tkey)
+								}
+							} else {
+								if fdb.False != nil {
+									variables = append(variables, "?")
+									values = append(values, attrs[key])
+								} else {
+									variables = append(variables, "0 "+tkey)
+								}
+							}
+						} else {
+							variables = append(variables, "?")
+							values = append(values, attrs[key])
+						}
+					}
+				}
 				dbColumns = append(dbColumns, tkey)
-				variables = append(variables, "?")
-				values = append(values, attrs[key])
-				setColumns = append(setColumns, tkey+" = temp."+tkey)
+				setColumns = append(setColumns, table+"."+tkey+"=temp."+tkey)
+				inColumns = append(inColumns, "temp."+key)
 			}
 			for i, val := range unique {
-				tkey := `"` + strings.Replace(i, `"`, `""`, -1) + `"`
-				dbColumns = append(dbColumns, `"`+strings.Replace(tkey, `"`, `""`, -1)+`"`)
+				tkey := strings.Replace(i, `"`, `""`, -1)
+				fmt.Println(tkey)
+				dbColumns = append(dbColumns, tkey)
+				//dbColumns = append(dbColumns, `"`+strings.Replace(tkey, `"`, `""`, -1)+`"`)
 				variables = append(variables, "?")
 				values = append(values, val)
-				onDupe := table + "." + tkey + " = " + "temp." + tkey
+				inColumns = append(inColumns, "temp."+i)
+				onDupe := table + "." + tkey + "=" + "temp." + tkey
 				uniqueCols = append(uniqueCols, onDupe)
 			}
-			query := fmt.Sprintf("MERGE INTO %s USING (VALUES %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES %s;",
-				`"`+strings.Replace(table, `"`, `""`, -1)+`"`,
+			query := fmt.Sprintf("MERGE INTO %s USING (SELECT %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s);",
+				table,
 				strings.Join(variables, ", "),
 				strings.Join(dbColumns, ", "),
 				strings.Join(uniqueCols, " AND "),
 				strings.Join(setColumns, ", "),
 				strings.Join(dbColumns, ", "),
-				strings.Join(variables, ", "),
+				strings.Join(inColumns, ", "),
 			)
 			return query, values, nil
 		default:
