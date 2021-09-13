@@ -115,7 +115,7 @@ func (c *MemoryCacheService) ContainsKey(key string) (bool, error) {
 // Put new record set key and value
 func (c *MemoryCacheService) Put(key string, value *sql.Tx, expire time.Duration) error {
 	if expire == 0 {
-		expire = 24 * time.Hour
+		expire = 5 * time.Minute
 	}
 
 	if err := c.client.Push(key, Item{
