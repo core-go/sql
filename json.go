@@ -45,9 +45,9 @@ func (h *Handler) BeginTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	ps := r.URL.Query()
 	t := d
-	stimeout := ps.Get("timeout")
-	if len(stimeout) > 0 {
-		i, er2 := strconv.ParseInt(stimeout, 10, 64)
+	st := ps.Get("timeout")
+	if len(st) > 0 {
+		i, er2 := strconv.ParseInt(st, 10, 64)
 		if er2 == nil && i > 0 {
 			t = time.Duration(i) * time.Second
 		}
@@ -71,8 +71,8 @@ func (h *Handler) EndTransaction(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cannot get tx from cache. Maybe tx got timeout", http.StatusInternalServerError)
 		return
 	}
-	roleback := ps.Get("roleback")
-	if roleback == "true" {
+	rollback := ps.Get("rollback")
+	if rollback == "true" {
 		er1 := tx.Rollback()
 		if er1 != nil {
 			http.Error(w, er1.Error(), http.StatusInternalServerError)
@@ -139,6 +139,7 @@ func (h *Handler) Exec(w http.ResponseWriter, r *http.Request) {
 				handleError(w, r, http.StatusInternalServerError, er3.Error(), h.Error, er3)
 				return
 			}
+			h.Cache.Remove(stx)
 		}
 		succeed(w, r, http.StatusOK, a2)
 	}
@@ -175,6 +176,15 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 		if er1 != nil {
 			handleError(w, r, 500, er1.Error(), h.Error, er1)
 			return
+		}
+		commit := ps.Get("commit")
+		if commit == "true" {
+			er3 := tx.Commit()
+			if er3 != nil {
+				handleError(w, r, http.StatusInternalServerError, er3.Error(), h.Error, er3)
+				return
+			}
+			h.Cache.Remove(stx)
 		}
 		succeed(w, r, http.StatusOK, res)
 	}
