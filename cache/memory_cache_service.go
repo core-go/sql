@@ -7,19 +7,20 @@ import (
 	"unsafe"
 )
 
-// MemoryCacheService manage all custom caching action
 type MemoryCacheService struct {
 	client *Client
 	close  chan struct{}
 }
 
-// NewMemoryCacheService init new instance
-func NewMemoryCacheService(config CacheConfig) (*MemoryCacheService, error) {
-	currentSession := &MemoryCacheService{NewClient(config.Size, config.CleaningEnable), make(chan struct{})}
+func NewMemoryCacheServiceByConfig(conf CacheConfig) (*MemoryCacheService, error) {
+	return NewMemoryCacheService(conf.Size, conf.CleaningEnable, conf.CleaningInterval)
+}
+func NewMemoryCacheService(size int64, cleaningEnable bool, cleaningInterval time.Duration) (*MemoryCacheService, error) {
+	currentSession := &MemoryCacheService{NewClient(size, cleaningEnable), make(chan struct{})}
 
 	// Check record expiration time and remove
 	go func() {
-		ticker := time.NewTicker(config.CleaningInterval)
+		ticker := time.NewTicker(cleaningInterval)
 		defer ticker.Stop()
 
 		for {
