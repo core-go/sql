@@ -65,8 +65,7 @@ func ToDates(args []interface{}) []int {
 
 func ParseDates(args []interface{}, dates []int) []interface{} {
 	if args == nil || len(args) == 0 {
-		ag2 := make([]interface{}, 0)
-		return ag2
+		return nil
 	}
 	if dates == nil || len(dates) == 0 {
 		return args

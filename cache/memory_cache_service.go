@@ -33,8 +33,9 @@ func NewMemoryCacheService(size int64, cleaningEnable bool, cleaningInterval tim
 					if item.Expires < time.Now().UnixNano() {
 						k, _ := key.(string)
 						currentSession.client.Get(k)
+						tx, _ := item.Data.(*sql.Tx)
+						tx.Rollback()
 					}
-
 					return true
 				})
 

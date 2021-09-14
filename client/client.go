@@ -221,6 +221,14 @@ func PostWithHeader(ctx context.Context, url string, obj interface{}, headers ma
 func PostAndDecode(ctx context.Context, url string, obj interface{}, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
 	return PostWithHeaderAndDecode(ctx, url, obj, nil, result, options...)
 }
+func PostWithClientAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, result interface{}) error {
+	decoder, er1 := DoWithClient(ctx, client, post, url, obj, nil)
+	if er1 != nil {
+		return er1
+	}
+	er2 := decoder.Decode(result)
+	return er2
+}
 func PostWithHeaderAndDecode(ctx context.Context, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
 	decoder, er1 := DoWithClient(ctx, sClient, post, url, obj, headers, options...)
 	if er1 != nil {

@@ -13,28 +13,27 @@ import (
 
 const d = 120 * time.Second
 
-// GrpcServer grpc server is used to implement oracle.GreeterServer.
-type GrpcServer struct {
+type GRPCHandler struct {
 	grpc.UnimplementedGoDbProxyServer
+	DB        *sql.DB
 	Transform func(s string) string
 	Cache     q.TxCache
-	db        *sql.DB
 	Generate  func(ctx context.Context) (string, error)
 	Error     func(context.Context, string)
 }
 
-func NewGrpcGreeterServer(db *sql.DB, transform func(s string) string, cache q.TxCache, generate func(ctx context.Context) (string, error), err func(context.Context, string)) GrpcServer {
-	g := GrpcServer{
+func NewHandler(db *sql.DB, transform func(s string) string, cache q.TxCache, generate func(ctx context.Context) (string, error), err func(context.Context, string)) *GRPCHandler {
+	g := GRPCHandler{
 		Transform: transform,
 		Cache:     cache,
-		db:        db,
+		DB:        db,
 		Generate:  generate,
 		Error:     err,
 	}
-	return g
+	return &g
 }
 
-func ConvertJStatementBatchRequest(in *grpc.JStatementBatchRequest) ([]q.JStatement, error) {
+func CreateStatements(in *grpc.JStatementBatchRequest) ([]q.JStatement, error) {
 	var (
 		statements []q.JStatement
 		err        error
@@ -55,7 +54,7 @@ func ConvertJStatementBatchRequest(in *grpc.JStatementBatchRequest) ([]q.JStatem
 	return statements, err
 }
 
-func (s *GrpcServer) Query(ctx context.Context, in *grpc.JStatementRequest) (*grpc.JStatementReply, error) {
+func (s *GRPCHandler) Query(ctx context.Context, in *grpc.JStatementRequest) (*grpc.JStatementReply, error) {
 	statement := q.JStatement{}
 	err := json.NewDecoder(bytes.NewBuffer(in.Params)).Decode(&statement.Params)
 	if err != nil {
@@ -68,7 +67,7 @@ func (s *GrpcServer) Query(ctx context.Context, in *grpc.JStatementRequest) (*gr
 	statement.Params = q.ParseDates(statement.Params, statement.Dates)
 	stx := in.Tx
 	if len(stx) == 0 {
-		res, err := q.QueryMap(ctx, s.db, s.Transform, statement.Query, statement.Params...)
+		res, err := q.QueryMap(ctx, s.DB, s.Transform, statement.Query, statement.Params...)
 		return &grpc.JStatementReply{
 			Message: "success",
 			Details: int64(len(res)),
@@ -101,7 +100,7 @@ func (s *GrpcServer) Query(ctx context.Context, in *grpc.JStatementRequest) (*gr
 	}
 }
 
-func (s *GrpcServer) Execute(ctx context.Context, in *grpc.JStatementRequest) (*grpc.JStatementReply, error) {
+func (s *GRPCHandler) Execute(ctx context.Context, in *grpc.JStatementRequest) (*grpc.JStatementReply, error) {
 	statement := q.JStatement{}
 	err := json.NewDecoder(bytes.NewBuffer(in.Params)).Decode(&statement.Params)
 	if err != nil {
@@ -112,7 +111,7 @@ func (s *GrpcServer) Execute(ctx context.Context, in *grpc.JStatementRequest) (*
 		statement.Dates = append(statement.Dates, int(v))
 	}
 	statement.Params = q.ParseDates(statement.Params, statement.Dates)
-	result, err := s.db.Exec(statement.Query, statement.Params...)
+	result, err := s.DB.Exec(statement.Query, statement.Params...)
 	if err != nil {
 		return &grpc.JStatementReply{Message: "Error: " + err.Error()}, err
 	}
@@ -123,8 +122,8 @@ func (s *GrpcServer) Execute(ctx context.Context, in *grpc.JStatementRequest) (*
 	return &grpc.JStatementReply{Message: "Execute Successfully", Details: affected}, err
 }
 
-func (s *GrpcServer) ExecBatch(ctx context.Context, in *grpc.JStatementBatchRequest) (*grpc.JStatementBatchReply, error) {
-	statements, err := ConvertJStatementBatchRequest(in)
+func (s *GRPCHandler) ExecBatch(ctx context.Context, in *grpc.JStatementBatchRequest) (*grpc.JStatementBatchReply, error) {
+	statements, err := CreateStatements(in)
 	if err != nil {
 		return &grpc.JStatementBatchReply{Message: "Error: " + err.Error(), Result: 0}, err
 	}
@@ -142,9 +141,9 @@ func (s *GrpcServer) ExecBatch(ctx context.Context, in *grpc.JStatementBatchRequ
 	if len(stx) == 0 {
 		master := in.Master
 		if master == "true" {
-			res, er1 = q.ExecuteBatch(ctx, s.db, b, true, true)
+			res, er1 = q.ExecuteBatch(ctx, s.DB, b, true, true)
 		} else {
-			res, er1 = q.ExecuteAll(ctx, s.db, b...)
+			res, er1 = q.ExecuteAll(ctx, s.DB, b...)
 		}
 	} else {
 		tx, er0 := s.Cache.Get(stx)
@@ -167,12 +166,12 @@ func (s *GrpcServer) ExecBatch(ctx context.Context, in *grpc.JStatementBatchRequ
 	return &grpc.JStatementBatchReply{Message: "success", Result: res}, err
 }
 
-func (s *GrpcServer) BeginTransaction(ctx context.Context, in *grpc.BeginTransactionRequest) (*grpc.BeginTransactionReply, error) {
+func (s *GRPCHandler) BeginTransaction(ctx context.Context, in *grpc.BeginTransactionRequest) (*grpc.BeginTransactionReply, error) {
 	id, er0 := s.Generate(ctx)
 	if er0 != nil {
 		return &grpc.BeginTransactionReply{Id: ""}, er0
 	}
-	tx, er1 := s.db.Begin()
+	tx, er1 := s.DB.Begin()
 	if er1 != nil {
 		return &grpc.BeginTransactionReply{Id: ""}, er1
 	}
@@ -188,7 +187,7 @@ func (s *GrpcServer) BeginTransaction(ctx context.Context, in *grpc.BeginTransac
 	return &grpc.BeginTransactionReply{Id: id}, err
 }
 
-func (s *GrpcServer) EndTransaction(ctx context.Context, in *grpc.EndTransactionRequest) (*grpc.EndTransactionReply, error) {
+func (s *GRPCHandler) EndTransaction(ctx context.Context, in *grpc.EndTransactionRequest) (*grpc.EndTransactionReply, error) {
 	stx := in.Tx
 	if len(stx) == 0 {
 		return nil, errors.New("tx is required")
