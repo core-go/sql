@@ -29,11 +29,12 @@ func Find(slice []string, val string) (int, bool) {
 	return -1, false
 }
 
-func BuildToInsert(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
+func BuildToInsert(table string, model interface{}, buildParam func(int) string) (string, []interface{}) {
 	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, false)
 	var cols []string
 	var values []interface{}
 	var params []string
+	i := 1
 	for _, columnName := range keys {
 		if value, ok := mapKey[columnName]; ok {
 			cols = append(cols, QuoteColumnName(columnName))
@@ -66,7 +67,7 @@ func BuildToInsert(table string, model interface{}, i int, buildParam func(int) 
 	return fmt.Sprintf("insert into %v(%v)values(%v)", table, column, strings.Join(params, ",")), values
 }
 
-func BuildToInsertWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
+func BuildToInsertWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version index not found")
 	}
@@ -76,6 +77,7 @@ func BuildToInsertWithVersion(table string, model interface{}, i int, versionInd
 	if err != nil {
 		panic(err)
 	}
+	i := 1
 	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, false)
 	var cols []string
 	var values []interface{}

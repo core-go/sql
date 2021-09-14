@@ -211,7 +211,7 @@ func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, op
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryInsert, values := BuildToInsert(table, model, 0, buildParam)
+	queryInsert, values := BuildToInsert(table, model, buildParam)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -246,7 +246,7 @@ func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryInsert, values := BuildToInsert(table, model, 0, buildParam)
+	queryInsert, values := BuildToInsert(table, model, buildParam)
 	result, err := tx.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
 		return handleDuplicate(db, err)
@@ -264,7 +264,7 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryInsert, values := BuildToInsertWithVersion(table, model, 0, versionIndex, buildParam)
+	queryInsert, values := BuildToInsertWithVersion(table, model, versionIndex, buildParam)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -302,7 +302,7 @@ func Update(ctx context.Context, db *sql.DB, table string, model interface{}, op
 	} else {
 		buildParam = GetBuild(db)
 	}
-	query, values := BuildToUpdate(table, model, 0, buildParam)
+	query, values := BuildToUpdate(table, model, buildParam)
 	r, err0 := db.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -317,7 +317,7 @@ func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	} else {
 		buildParam = GetBuild(db)
 	}
-	query, values := BuildToUpdate(table, model, 0, buildParam)
+	query, values := BuildToUpdate(table, model, buildParam)
 	r, err0 := tx.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -336,7 +336,7 @@ func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	} else {
 		buildParam = GetBuild(db)
 	}
-	query, values := BuildToUpdateWithVersion(table, model, 0, versionIndex, buildParam)
+	query, values := BuildToUpdateWithVersion(table, model, versionIndex, buildParam)
 
 	result, err := db.ExecContext(ctx, query, values...)
 
@@ -442,7 +442,7 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	return -1, jsonName, jsonName
 }
 
-func BuildToUpdate(table string, model interface{}, i int, buildParam func(int) string) (string, []interface{}) {
+func BuildToUpdate(table string, model interface{}, buildParam func(int) string) (string, []interface{}) {
 	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, true)
 	var values []interface{}
 	colSet := make([]string, 0)
@@ -455,7 +455,7 @@ func BuildToUpdate(table string, model interface{}, i int, buildParam func(int) 
 				colSet = append(colSet, QuoteColumnName(colName)+"="+v3)
 			} else {
 				values = append(values, v1)
-				colSet = append(colSet, QuoteColumnName(colName)+"="+buildParam(colNumber+i))
+				colSet = append(colSet, QuoteColumnName(colName)+"="+buildParam(colNumber))
 				colNumber++
 			}
 		} else {
@@ -469,7 +469,7 @@ func BuildToUpdate(table string, model interface{}, i int, buildParam func(int) 
 				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + v3)
 			} else {
 				values = append(values, v2)
-				colQuery = append(colQuery, QuoteColumnName(colName)+"="+buildParam(colNumber+i))
+				colQuery = append(colQuery, QuoteColumnName(colName)+"="+buildParam(colNumber))
 			}
 			colNumber++
 		}
@@ -497,7 +497,7 @@ func GetDBValue(v interface{}) (string, bool) {
 		return "", false
 	}
 }
-func BuildToUpdateWithVersion(table string, model interface{}, i int, versionIndex int, buildParam func(int) string) (string, []interface{}) {
+func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version's index not found")
 	}
@@ -527,7 +527,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, i int, versionInd
 				colSet = append(colSet, fmt.Sprintf("%v = "+v3, colName))
 			} else {
 				values = append(values, v1)
-				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber+i))
+				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber))
 				colNumber++
 			}
 		} else {
@@ -541,7 +541,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, i int, versionInd
 				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + v3)
 			} else {
 				values = append(values, v2)
-				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber+i))
+				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber))
 			}
 			colNumber++
 		}
@@ -1142,6 +1142,18 @@ func BuildMsSqlParam(i int) string {
 }
 func BuildDollarParam(i int) string {
 	return "$" + strconv.Itoa(i)
+}
+func GetBuildByDriver(driver string) func(i int) string {
+	switch driver {
+	case DriverPostgres:
+		return BuildDollarParam
+	case DriverOracle:
+		return BuildOracleParam
+	case DriverMssql:
+		return BuildMsSqlParam
+	default:
+		return BuildParam
+	}
 }
 func GetBuild(db *sql.DB) func(i int) string {
 	driver := reflect.TypeOf(db.Driver()).String()

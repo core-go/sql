@@ -10,7 +10,8 @@ import (
 
 // raw query
 func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int64, error) {
-	queryString, value, err := BuildToSave(db, table, model)
+	driver := GetDriver(db)
+	queryString, value, err := BuildToSave(table, model, driver)
 	if err != nil {
 		return 0, err
 	}
@@ -22,7 +23,8 @@ func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int
 }
 
 func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
-	query, values, err0 := BuildToSave(db, table, model)
+	driver := GetDriver(db)
+	query, values, err0 := BuildToSave(table, model, driver)
 	if err0 != nil {
 		return -1, err0
 	}
@@ -33,11 +35,16 @@ func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model int
 	return r.RowsAffected()
 }
 
-func BuildToSave(db *sql.DB, table string, model interface{}) (string, []interface{}, error) {
-	driver := GetDriver(db)
+func BuildToSave(table string, model interface{}, driver string, options...func(i int) string) (string, []interface{}, error) {
+	// driver := GetDriver(db)
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
 	numField := modelType.NumField()
-	buildParam := GetBuild(db)
+	var buildParam func(i int) string
+	if len(options) > 0 {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuildByDriver(driver)
+	}
 	mv := reflect.Indirect(reflect.ValueOf(model))
 	if driver == DriverPostgres || driver == DriverMysql {
 		cols, keys, schema := MakeSchema(modelType)

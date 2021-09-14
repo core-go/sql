@@ -237,10 +237,10 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 	}
 	return columns, keys, schema
 }
-func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, options ...*sql.DB) ([]Statement, error) {
+func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, options ...string) ([]Statement, error) {
 	driver := ""
 	if len(options) > 0 {
-		driver = GetDriver(options[0])
+		driver = options[0]
 	}
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
@@ -340,12 +340,12 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 	}
 	return stmts, nil
 }
-func BuildToInsertBatch(db *sql.DB, table string, models interface{}, options ...func(int) string) (string, []interface{}, error) {
+func BuildToInsertBatch(table string, models interface{}, driver string, options ...func(int) string) (string, []interface{}, error) {
 	var buildParam func(int) string
 	if len(options) > 0 {
 		buildParam = options[0]
 	} else {
-		buildParam = GetBuild(db)
+		buildParam = GetBuildByDriver(driver)
 	}
 
 	s := reflect.Indirect(reflect.ValueOf(models))
@@ -360,7 +360,6 @@ func BuildToInsertBatch(db *sql.DB, table string, models interface{}, options ..
 	first := s.Index(0).Interface()
 	modelType := reflect.TypeOf(first)
 	cols, _, schema := MakeSchema(modelType)
-	driver := GetDriver(db)
 	slen := s.Len()
 	if driver != DriverOracle {
 		i := 1
@@ -488,7 +487,7 @@ func BuildToInsertBatch(db *sql.DB, table string, models interface{}, options ..
 		return query, args, nil
 	}
 }
-func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement, error) {
+func BuildToSaveBatch(table string, models interface{}, driver string, options...func(i int) string) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models is not a slice")
@@ -496,13 +495,18 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 	if s.Len() == 0 {
 		return nil, nil
 	}
-	buildParam := GetBuild(db)
+	var buildParam func(i int) string
+	if len(options) > 0 {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuildByDriver(driver)
+	}
+
 	first := s.Index(0).Interface()
 	modelType := reflect.TypeOf(first)
 	cols, keys, schema := MakeSchema(modelType)
 	slen := s.Len()
 	stmts := make([]Statement, 0)
-	driver := GetDriver(db)
 	if driver == DriverPostgres || driver == DriverMysql {
 		i := 1
 		for j := 0; j < slen; j++ {
@@ -893,7 +897,8 @@ func BuildToSaveBatch(db *sql.DB, table string, models interface{}) ([]Statement
 }
 
 func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
-	query, args, er1 := BuildToInsertBatch(db, tableName, models, options...)
+	driver := GetDriver(db)
+	query, args, er1 := BuildToInsertBatch(tableName, models, driver, options...)
 	if er1 != nil {
 		return 0, er1
 	}
@@ -910,14 +915,16 @@ func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 	} else {
 		buildParam = GetBuild(db)
 	}
-	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, db)
+	driver := GetDriver(db)
+	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, driver)
 	if er1 != nil {
 		return 0, er1
 	}
 	return ExecuteAll(ctx, db, stmts...)
 }
 func SaveBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}) (int64, error) {
-	stmts, er1 := BuildToSaveBatch(db, tableName, models)
+	driver := GetDriver(db)
+	stmts, er1 := BuildToSaveBatch(tableName, models, driver)
 	if er1 != nil {
 		return 0, er1
 	}

@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package oracle;
+
+option go_package = "go-db-proxy/internal/grpc/;grpc";
+
+message JStatementRequest {
+  string query = 1;
+  bytes params = 2;
+  repeated int32 dates = 3;
+  string tx = 4;
+  string master = 5;
+  string commit = 6;
+}
+
+message JStatementBatchRequest {
+  repeated JStatementRequest batch = 1;
+  string tx = 2;
+  string master = 3;
+  string commit = 4;
+}
+
+message JStatementBatchReply {
+  string message = 1;
+  int64 result = 2;
+}
+
+message JStatementReply {
+  string message = 1;
+  int64 details = 2;
+}
+
+message BeginTransactionRequest {
+  int64 timeout = 1;
+}
+
+message BeginTransactionReply {
+  string id = 1;
+}
+
+message EndTransactionRequest {
+  string tx = 1;
+  string rollback = 2;
+}
+
+message EndTransactionReply {
+  string response = 1;
+}
+
+// Define service
+service GoDbProxy {
+  rpc Query (JStatementRequest) returns (JStatementReply) {}
+  rpc Execute (JStatementRequest) returns (JStatementReply) {}
+  rpc ExecBatch (JStatementBatchRequest) returns (JStatementBatchReply) {}
+  rpc BeginTransaction (BeginTransactionRequest) returns (BeginTransactionReply) {}
+  rpc EndTransaction (EndTransactionRequest) returns (EndTransactionReply) {}
+}
