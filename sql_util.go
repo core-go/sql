@@ -637,9 +637,9 @@ type Proxy interface {
 	CommitTransaction(ctx context.Context, tx string) error
 	RollbackTransaction(ctx context.Context, tx string) error
 	Exec(ctx context.Context, query string, values ...interface{}) (int64, error)
-	ExecBatch(ctx context.Context, stm ...Statement) (int64, error)
+	ExecBatch(ctx context.Context, master bool, stm ...Statement) (int64, error)
 	Query(ctx context.Context, result interface{}, query string, values ...interface{}) error
 	ExecWithTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error)
-	ExecBatchWithTx(ctx context.Context, tx string, commit bool, stm ...Statement) (int64, error)
+	ExecBatchWithTx(ctx context.Context, tx string, commit bool, master bool, stm ...Statement) (int64, error)
 	QueryWithTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error
 }

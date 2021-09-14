@@ -124,6 +124,8 @@ func (h *Handler) Exec(w http.ResponseWriter, r *http.Request) {
 		}
 		res, er1 := tx.Exec(s.Query, s.Params...)
 		if er1 != nil {
+			tx.Rollback()
+			h.Cache.Remove(stx)
 			handleError(w, r, 500, er1.Error(), h.Error, er1)
 			return
 		}

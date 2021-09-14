@@ -30,6 +30,11 @@ message JStatementReply {
   int64 details = 2;
 }
 
+message QueryReply {
+  string message = 1;
+  string details = 2;
+}
+
 message BeginTransactionRequest {
   int64 timeout = 1;
 }
@@ -49,7 +54,7 @@ message EndTransactionReply {
 
 // Define service
 service GoDbProxy {
-  rpc Query (JStatementRequest) returns (JStatementReply) {}
+  rpc Query (JStatementRequest) returns (QueryReply) {}
   rpc Execute (JStatementRequest) returns (JStatementReply) {}
   rpc ExecBatch (JStatementBatchRequest) returns (JStatementBatchReply) {}
   rpc BeginTransaction (BeginTransactionRequest) returns (BeginTransactionReply) {}

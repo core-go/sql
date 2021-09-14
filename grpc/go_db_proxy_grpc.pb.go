@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GoDbProxyClient interface {
-	Query(ctx context.Context, in *JStatementRequest, opts ...grpc.CallOption) (*JStatementReply, error)
+	Query(ctx context.Context, in *JStatementRequest, opts ...grpc.CallOption) (*QueryReply, error)
 	Execute(ctx context.Context, in *JStatementRequest, opts ...grpc.CallOption) (*JStatementReply, error)
 	ExecBatch(ctx context.Context, in *JStatementBatchRequest, opts ...grpc.CallOption) (*JStatementBatchReply, error)
 	BeginTransaction(ctx context.Context, in *BeginTransactionRequest, opts ...grpc.CallOption) (*BeginTransactionReply, error)
@@ -33,8 +33,8 @@ func NewGoDbProxyClient(cc grpc.ClientConnInterface) GoDbProxyClient {
 	return &goDbProxyClient{cc}
 }
 
-func (c *goDbProxyClient) Query(ctx context.Context, in *JStatementRequest, opts ...grpc.CallOption) (*JStatementReply, error) {
-	out := new(JStatementReply)
+func (c *goDbProxyClient) Query(ctx context.Context, in *JStatementRequest, opts ...grpc.CallOption) (*QueryReply, error) {
+	out := new(QueryReply)
 	err := c.cc.Invoke(ctx, "/oracle.GoDbProxy/Query", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func (c *goDbProxyClient) EndTransaction(ctx context.Context, in *EndTransaction
 // All implementations must embed UnimplementedGoDbProxyServer
 // for forward compatibility
 type GoDbProxyServer interface {
-	Query(context.Context, *JStatementRequest) (*JStatementReply, error)
+	Query(context.Context, *JStatementRequest) (*QueryReply, error)
 	Execute(context.Context, *JStatementRequest) (*JStatementReply, error)
 	ExecBatch(context.Context, *JStatementBatchRequest) (*JStatementBatchReply, error)
 	BeginTransaction(context.Context, *BeginTransactionRequest) (*BeginTransactionReply, error)
@@ -94,7 +94,7 @@ type GoDbProxyServer interface {
 type UnimplementedGoDbProxyServer struct {
 }
 
-func (UnimplementedGoDbProxyServer) Query(context.Context, *JStatementRequest) (*JStatementReply, error) {
+func (UnimplementedGoDbProxyServer) Query(context.Context, *JStatementRequest) (*QueryReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Query not implemented")
 }
 func (UnimplementedGoDbProxyServer) Execute(context.Context, *JStatementRequest) (*JStatementReply, error) {
