@@ -1,12 +1,12 @@
 package cache
 
 import (
-	"database/sql"
 	"errors"
 	"time"
 	"unsafe"
 )
 
+// MemoryCacheService manage all custom caching action
 type MemoryCacheService struct {
 	client *Client
 	close  chan struct{}
@@ -15,6 +15,7 @@ type MemoryCacheService struct {
 func NewMemoryCacheServiceByConfig(conf CacheConfig) (*MemoryCacheService, error) {
 	return NewMemoryCacheService(conf.Size, conf.CleaningEnable, conf.CleaningInterval)
 }
+// NewMemoryCacheService init new instance
 func NewMemoryCacheService(size int64, cleaningEnable bool, cleaningInterval time.Duration) (*MemoryCacheService, error) {
 	currentSession := &MemoryCacheService{NewClient(size, cleaningEnable), make(chan struct{})}
 
@@ -33,9 +34,8 @@ func NewMemoryCacheService(size int64, cleaningEnable bool, cleaningInterval tim
 					if item.Expires < time.Now().UnixNano() {
 						k, _ := key.(string)
 						currentSession.client.Get(k)
-						tx, _ := item.Data.(*sql.Tx)
-						tx.Rollback()
 					}
+
 					return true
 				})
 
@@ -49,7 +49,7 @@ func NewMemoryCacheService(size int64, cleaningEnable bool, cleaningInterval tim
 }
 
 // Get return value based on the key provided
-func (c *MemoryCacheService) Get(key string) (*sql.Tx, error) {
+func (c *MemoryCacheService) Get(key string) (interface{}, error) {
 	obj, err := c.client.Read(key)
 	if err != nil {
 		return nil, err
@@ -63,17 +63,13 @@ func (c *MemoryCacheService) Get(key string) (*sql.Tx, error) {
 	if item.Expires < time.Now().UnixNano() {
 		return nil, nil
 	}
-	t, ok2 := item.Data.(*sql.Tx)
-	if ok2 {
-		return t, nil
-	} else {
-		return nil, nil
-	}
+
+	return item.Data, nil
 }
 
 // Get return value based on the list of keys provided
-func (c *MemoryCacheService) GetMany(keys []string) (map[string]*sql.Tx, []string, error) {
-	var itemFound map[string]*sql.Tx
+func (c *MemoryCacheService) GetMany(keys []string) (map[string]interface{}, []string, error) {
+	var itemFound map[string]interface{}
 	var itemNotFound []string
 
 	for _, key := range keys {
@@ -86,11 +82,32 @@ func (c *MemoryCacheService) GetMany(keys []string) (map[string]*sql.Tx, []strin
 		if !ok {
 			return nil, nil, errors.New("can not map object to Item model")
 		}
-		t, ok2 := item.Data.(*sql.Tx)
-		if ok2 {
-			itemFound[key] = t
-		}
+
+		itemFound[key] = item.Data
 	}
+
+	return itemFound, itemNotFound, nil
+}
+
+// Get return value based on the list of keys provided
+func (c *MemoryCacheService) GetManyStrings(keys []string) (map[string]string, []string, error) {
+	var itemFound map[string]string
+	var itemNotFound []string
+
+	for _, key := range keys {
+		obj, err := c.client.Read(key)
+		if obj == nil && err == nil {
+			itemNotFound = append(itemNotFound, key)
+		}
+
+		item, ok := obj.(Item)
+		if !ok {
+			return nil, nil, errors.New("can not map object to Item model")
+		}
+
+		itemFound[key] = item.Data.(string)
+	}
+
 	return itemFound, itemNotFound, nil
 }
 
@@ -114,9 +131,9 @@ func (c *MemoryCacheService) ContainsKey(key string) (bool, error) {
 }
 
 // Put new record set key and value
-func (c *MemoryCacheService) Put(key string, value *sql.Tx, expire time.Duration) error {
+func (c *MemoryCacheService) Put(key string, value interface{}, expire time.Duration) error {
 	if expire == 0 {
-		expire = 5 * time.Minute
+		expire = 24 * time.Hour
 	}
 
 	if err := c.client.Push(key, Item{
