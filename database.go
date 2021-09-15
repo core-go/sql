@@ -38,7 +38,7 @@ func OpenByConfig(c Config) (*sql.DB, error) {
 	}
 }
 type TxCache interface {
-	Put(key string, obj interface{}, timeToLive time.Duration) error
+	Put(key string, value *sql.Tx, timeToLive time.Duration) error
 	Expire(key string, timeToLive time.Duration) (bool, error)
 	Get(key string) (*sql.Tx, error)
 	Remove(key string) (bool, error)
