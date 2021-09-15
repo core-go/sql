@@ -524,7 +524,7 @@ func buildParam(i int) string {
 	return "?"
 }
 func buildOracleParam(i int) string {
-	return ":val" + strconv.Itoa(i)
+	return ":" + strconv.Itoa(i)
 }
 func buildMsSqlParam(i int) string {
 	return "@p" + strconv.Itoa(i)

@@ -14,230 +14,230 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
-// GoDbProxyClient is the client API for GoDbProxy service.
+// DbProxyClient is the client API for DbProxy service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type GoDbProxyClient interface {
-	Query(ctx context.Context, in *JStatementRequest, opts ...grpc.CallOption) (*QueryReply, error)
-	Execute(ctx context.Context, in *JStatementRequest, opts ...grpc.CallOption) (*JStatementReply, error)
-	ExecBatch(ctx context.Context, in *JStatementBatchRequest, opts ...grpc.CallOption) (*JStatementBatchReply, error)
-	BeginTransaction(ctx context.Context, in *BeginTransactionRequest, opts ...grpc.CallOption) (*BeginTransactionReply, error)
-	EndTransaction(ctx context.Context, in *EndTransactionRequest, opts ...grpc.CallOption) (*EndTransactionReply, error)
+type DbProxyClient interface {
+	Query(ctx context.Context, in *Request, opts ...grpc.CallOption) (*QueryResponse, error)
+	Execute(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
+	ExecBatch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*Response, error)
+	BeginTransaction(ctx context.Context, in *BeginTransactionRequest, opts ...grpc.CallOption) (*BeginTransactionResponse, error)
+	EndTransaction(ctx context.Context, in *EndTransactionRequest, opts ...grpc.CallOption) (*QueryResponse, error)
 }
 
-type goDbProxyClient struct {
+type dbProxyClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewGoDbProxyClient(cc grpc.ClientConnInterface) GoDbProxyClient {
-	return &goDbProxyClient{cc}
+func NewDbProxyClient(cc grpc.ClientConnInterface) DbProxyClient {
+	return &dbProxyClient{cc}
 }
 
-func (c *goDbProxyClient) Query(ctx context.Context, in *JStatementRequest, opts ...grpc.CallOption) (*QueryReply, error) {
-	out := new(QueryReply)
-	err := c.cc.Invoke(ctx, "/oracle.GoDbProxy/Query", in, out, opts...)
+func (c *dbProxyClient) Query(ctx context.Context, in *Request, opts ...grpc.CallOption) (*QueryResponse, error) {
+	out := new(QueryResponse)
+	err := c.cc.Invoke(ctx, "/query.DbProxy/Query", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *goDbProxyClient) Execute(ctx context.Context, in *JStatementRequest, opts ...grpc.CallOption) (*JStatementReply, error) {
-	out := new(JStatementReply)
-	err := c.cc.Invoke(ctx, "/oracle.GoDbProxy/Execute", in, out, opts...)
+func (c *dbProxyClient) Execute(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error) {
+	out := new(Response)
+	err := c.cc.Invoke(ctx, "/query.DbProxy/Execute", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *goDbProxyClient) ExecBatch(ctx context.Context, in *JStatementBatchRequest, opts ...grpc.CallOption) (*JStatementBatchReply, error) {
-	out := new(JStatementBatchReply)
-	err := c.cc.Invoke(ctx, "/oracle.GoDbProxy/ExecBatch", in, out, opts...)
+func (c *dbProxyClient) ExecBatch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*Response, error) {
+	out := new(Response)
+	err := c.cc.Invoke(ctx, "/query.DbProxy/ExecBatch", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *goDbProxyClient) BeginTransaction(ctx context.Context, in *BeginTransactionRequest, opts ...grpc.CallOption) (*BeginTransactionReply, error) {
-	out := new(BeginTransactionReply)
-	err := c.cc.Invoke(ctx, "/oracle.GoDbProxy/BeginTransaction", in, out, opts...)
+func (c *dbProxyClient) BeginTransaction(ctx context.Context, in *BeginTransactionRequest, opts ...grpc.CallOption) (*BeginTransactionResponse, error) {
+	out := new(BeginTransactionResponse)
+	err := c.cc.Invoke(ctx, "/query.DbProxy/BeginTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *goDbProxyClient) EndTransaction(ctx context.Context, in *EndTransactionRequest, opts ...grpc.CallOption) (*EndTransactionReply, error) {
-	out := new(EndTransactionReply)
-	err := c.cc.Invoke(ctx, "/oracle.GoDbProxy/EndTransaction", in, out, opts...)
+func (c *dbProxyClient) EndTransaction(ctx context.Context, in *EndTransactionRequest, opts ...grpc.CallOption) (*QueryResponse, error) {
+	out := new(QueryResponse)
+	err := c.cc.Invoke(ctx, "/query.DbProxy/EndTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// GoDbProxyServer is the server API for GoDbProxy service.
-// All implementations must embed UnimplementedGoDbProxyServer
+// DbProxyServer is the server API for DbProxy service.
+// All implementations must embed UnimplementedDbProxyServer
 // for forward compatibility
-type GoDbProxyServer interface {
-	Query(context.Context, *JStatementRequest) (*QueryReply, error)
-	Execute(context.Context, *JStatementRequest) (*JStatementReply, error)
-	ExecBatch(context.Context, *JStatementBatchRequest) (*JStatementBatchReply, error)
-	BeginTransaction(context.Context, *BeginTransactionRequest) (*BeginTransactionReply, error)
-	EndTransaction(context.Context, *EndTransactionRequest) (*EndTransactionReply, error)
-	mustEmbedUnimplementedGoDbProxyServer()
+type DbProxyServer interface {
+	Query(context.Context, *Request) (*QueryResponse, error)
+	Execute(context.Context, *Request) (*Response, error)
+	ExecBatch(context.Context, *BatchRequest) (*Response, error)
+	BeginTransaction(context.Context, *BeginTransactionRequest) (*BeginTransactionResponse, error)
+	EndTransaction(context.Context, *EndTransactionRequest) (*QueryResponse, error)
+	mustEmbedUnimplementedDbProxyServer()
 }
 
-// UnimplementedGoDbProxyServer must be embedded to have forward compatible implementations.
-type UnimplementedGoDbProxyServer struct {
+// UnimplementedDbProxyServer must be embedded to have forward compatible implementations.
+type UnimplementedDbProxyServer struct {
 }
 
-func (UnimplementedGoDbProxyServer) Query(context.Context, *JStatementRequest) (*QueryReply, error) {
+func (UnimplementedDbProxyServer) Query(context.Context, *Request) (*QueryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Query not implemented")
 }
-func (UnimplementedGoDbProxyServer) Execute(context.Context, *JStatementRequest) (*JStatementReply, error) {
+func (UnimplementedDbProxyServer) Execute(context.Context, *Request) (*Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Execute not implemented")
 }
-func (UnimplementedGoDbProxyServer) ExecBatch(context.Context, *JStatementBatchRequest) (*JStatementBatchReply, error) {
+func (UnimplementedDbProxyServer) ExecBatch(context.Context, *BatchRequest) (*Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecBatch not implemented")
 }
-func (UnimplementedGoDbProxyServer) BeginTransaction(context.Context, *BeginTransactionRequest) (*BeginTransactionReply, error) {
+func (UnimplementedDbProxyServer) BeginTransaction(context.Context, *BeginTransactionRequest) (*BeginTransactionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BeginTransaction not implemented")
 }
-func (UnimplementedGoDbProxyServer) EndTransaction(context.Context, *EndTransactionRequest) (*EndTransactionReply, error) {
+func (UnimplementedDbProxyServer) EndTransaction(context.Context, *EndTransactionRequest) (*QueryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EndTransaction not implemented")
 }
-func (UnimplementedGoDbProxyServer) mustEmbedUnimplementedGoDbProxyServer() {}
+func (UnimplementedDbProxyServer) mustEmbedUnimplementedDbProxyServer() {}
 
-// UnsafeGoDbProxyServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to GoDbProxyServer will
+// UnsafeDbProxyServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to DbProxyServer will
 // result in compilation errors.
-type UnsafeGoDbProxyServer interface {
-	mustEmbedUnimplementedGoDbProxyServer()
+type UnsafeDbProxyServer interface {
+	mustEmbedUnimplementedDbProxyServer()
 }
 
-func RegisterGoDbProxyServer(s grpc.ServiceRegistrar, srv GoDbProxyServer) {
-	s.RegisterService(&GoDbProxy_ServiceDesc, srv)
+func RegisterDbProxyServer(s grpc.ServiceRegistrar, srv DbProxyServer) {
+	s.RegisterService(&DbProxy_ServiceDesc, srv)
 }
 
-func _GoDbProxy_Query_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(JStatementRequest)
+func _DbProxy_Query_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Request)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GoDbProxyServer).Query(ctx, in)
+		return srv.(DbProxyServer).Query(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/oracle.GoDbProxy/Query",
+		FullMethod: "/query.DbProxy/Query",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GoDbProxyServer).Query(ctx, req.(*JStatementRequest))
+		return srv.(DbProxyServer).Query(ctx, req.(*Request))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GoDbProxy_Execute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(JStatementRequest)
+func _DbProxy_Execute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Request)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GoDbProxyServer).Execute(ctx, in)
+		return srv.(DbProxyServer).Execute(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/oracle.GoDbProxy/Execute",
+		FullMethod: "/query.DbProxy/Execute",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GoDbProxyServer).Execute(ctx, req.(*JStatementRequest))
+		return srv.(DbProxyServer).Execute(ctx, req.(*Request))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GoDbProxy_ExecBatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(JStatementBatchRequest)
+func _DbProxy_ExecBatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BatchRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GoDbProxyServer).ExecBatch(ctx, in)
+		return srv.(DbProxyServer).ExecBatch(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/oracle.GoDbProxy/ExecBatch",
+		FullMethod: "/query.DbProxy/ExecBatch",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GoDbProxyServer).ExecBatch(ctx, req.(*JStatementBatchRequest))
+		return srv.(DbProxyServer).ExecBatch(ctx, req.(*BatchRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GoDbProxy_BeginTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DbProxy_BeginTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(BeginTransactionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GoDbProxyServer).BeginTransaction(ctx, in)
+		return srv.(DbProxyServer).BeginTransaction(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/oracle.GoDbProxy/BeginTransaction",
+		FullMethod: "/query.DbProxy/BeginTransaction",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GoDbProxyServer).BeginTransaction(ctx, req.(*BeginTransactionRequest))
+		return srv.(DbProxyServer).BeginTransaction(ctx, req.(*BeginTransactionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GoDbProxy_EndTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DbProxy_EndTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EndTransactionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GoDbProxyServer).EndTransaction(ctx, in)
+		return srv.(DbProxyServer).EndTransaction(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/oracle.GoDbProxy/EndTransaction",
+		FullMethod: "/query.DbProxy/EndTransaction",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GoDbProxyServer).EndTransaction(ctx, req.(*EndTransactionRequest))
+		return srv.(DbProxyServer).EndTransaction(ctx, req.(*EndTransactionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// GoDbProxy_ServiceDesc is the grpc.ServiceDesc for GoDbProxy service.
+// DbProxy_ServiceDesc is the grpc.ServiceDesc for DbProxy service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var GoDbProxy_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "oracle.GoDbProxy",
-	HandlerType: (*GoDbProxyServer)(nil),
+var DbProxy_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "query.DbProxy",
+	HandlerType: (*DbProxyServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Query",
-			Handler:    _GoDbProxy_Query_Handler,
+			Handler:    _DbProxy_Query_Handler,
 		},
 		{
 			MethodName: "Execute",
-			Handler:    _GoDbProxy_Execute_Handler,
+			Handler:    _DbProxy_Execute_Handler,
 		},
 		{
 			MethodName: "ExecBatch",
-			Handler:    _GoDbProxy_ExecBatch_Handler,
+			Handler:    _DbProxy_ExecBatch_Handler,
 		},
 		{
 			MethodName: "BeginTransaction",
-			Handler:    _GoDbProxy_BeginTransaction_Handler,
+			Handler:    _DbProxy_BeginTransaction_Handler,
 		},
 		{
 			MethodName: "EndTransaction",
-			Handler:    _GoDbProxy_EndTransaction_Handler,
+			Handler:    _DbProxy_EndTransaction_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

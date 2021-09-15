@@ -15,7 +15,7 @@ const d = 120 * time.Second
 
 // GRPCHandler grpc server is used to implement oracle.GreeterServer.
 type GRPCHandler struct {
-	grpc.UnimplementedGoDbProxyServer
+	grpc.DbProxyServer
 	DB        *sql.DB
 	Transform func(s string) string
 	Cache     q.TxCache
@@ -34,7 +34,7 @@ func NewHandler(db *sql.DB, transform func(s string) string, cache q.TxCache, ge
 	return &g
 }
 
-func CreateStatements(in *grpc.JStatementBatchRequest) ([]q.JStatement, error) {
+func CreateStatements(in *grpc.BatchRequest) ([]q.JStatement, error) {
 	var (
 		statements []q.JStatement
 		err        error
@@ -55,11 +55,11 @@ func CreateStatements(in *grpc.JStatementBatchRequest) ([]q.JStatement, error) {
 	return statements, err
 }
 
-func (s *GRPCHandler) Query(ctx context.Context, in *grpc.JStatementRequest) (*grpc.QueryReply, error) {
+func (s *GRPCHandler) Query(ctx context.Context, in *grpc.Request) (*grpc.QueryResponse, error) {
 	statement := q.JStatement{}
 	err := json.NewDecoder(bytes.NewBuffer(in.Params)).Decode(&statement.Params)
 	if err != nil {
-		return &grpc.QueryReply{Message: "Error: " + err.Error()}, err
+		return &grpc.QueryResponse{Message: "Error: " + err.Error()}, err
 	}
 	statement.Query = in.Query
 	for _, v := range in.Dates {
@@ -72,50 +72,45 @@ func (s *GRPCHandler) Query(ctx context.Context, in *grpc.JStatementRequest) (*g
 		data := new(bytes.Buffer)
 		err = json.NewEncoder(data).Encode(&res)
 		if err != nil {
-			return &grpc.QueryReply{Message: "Error: " + err.Error()}, err
+			return &grpc.QueryResponse{Message: "Error: " + err.Error()}, err
 		}
-		return &grpc.QueryReply{
-			Message: "success",
-			Details: data.String(),
+		return &grpc.QueryResponse{
+			Message: data.String(),
 		}, err
 	} else {
 		tx, er0 := s.Cache.Get(stx)
 		if er0 != nil {
-			return &grpc.QueryReply{
+			return &grpc.QueryResponse{
 				Message: "",
-				Details: "",
 			}, er0
 		}
 		if tx == nil {
-			return &grpc.QueryReply{
+			return &grpc.QueryResponse{
 				Message: "cannot get tx from cache. Maybe tx got timeout",
-				Details: "",
 			}, err
 		}
 		res, er1 := q.QueryMapWithTx(ctx, tx, s.Transform, statement.Query, statement.Params...)
 		if er1 != nil {
-			return &grpc.QueryReply{
+			return &grpc.QueryResponse{
 				Message: "",
-				Details: "",
 			}, er1
 		}
 		data := new(bytes.Buffer)
 		err = json.NewEncoder(data).Encode(&res)
 		if err != nil {
-			return &grpc.QueryReply{Message: "Error: " + err.Error()}, err
+			return &grpc.QueryResponse{Message: "Error: " + err.Error()}, err
 		}
-		return &grpc.QueryReply{
-			Message: "success",
-			Details: data.String(),
+		return &grpc.QueryResponse{
+			Message: data.String(),
 		}, err
 	}
 }
 
-func (s *GRPCHandler) Exec(ctx context.Context, in *grpc.JStatementRequest) (*grpc.JStatementReply, error) {
+func (s *GRPCHandler) Execute(ctx context.Context, in *grpc.Request) (*grpc.Response, error) {
 	statement := q.JStatement{}
 	er0 := json.NewDecoder(bytes.NewBuffer(in.Params)).Decode(&statement.Params)
 	if er0 != nil {
-		return &grpc.JStatementReply{Message: "Error: " + er0.Error()}, er0
+		return &grpc.Response{Result: -1}, er0
 	}
 	statement.Query = in.Query
 	for _, v := range in.Dates {
@@ -126,26 +121,26 @@ func (s *GRPCHandler) Exec(ctx context.Context, in *grpc.JStatementRequest) (*gr
 	if len(stx) == 0 {
 		result, er1 := s.DB.Exec(statement.Query, statement.Params...)
 		if er1 != nil {
-			return &grpc.JStatementReply{Message: "Error: " + er1.Error()}, er1
+			return &grpc.Response{Result: -1}, er1
 		}
 		affected, er2 := result.RowsAffected()
 		if er2 != nil {
 			return nil, er2
 		}
-		return &grpc.JStatementReply{Message: "Execute Successfully", Details: affected}, er2
+		return &grpc.Response{Result: affected}, er2
 	} else {
 		tx, er1 := s.Cache.Get(stx)
 		if er1 != nil {
-			return &grpc.JStatementReply{Message: "", Details: 0}, er1
+			return &grpc.Response{Result: -1}, er1
 		}
 		if tx == nil {
-			return &grpc.JStatementReply{Message: "", Details: 0}, errors.New("cannot get tx from cache. Maybe tx got timeout")
+			return &grpc.Response{Result: -1}, errors.New("cannot get tx from cache. Maybe tx got timeout")
 		}
 		result, er2 := tx.Exec(statement.Query, statement.Params...)
 		if er2 != nil {
 			tx.Rollback()
 			s.Cache.Remove(stx)
-			return &grpc.JStatementReply{Message: "Error: " + er2.Error()}, er0
+			return &grpc.Response{Result: -1}, er0
 		}
 		affected, er3 := result.RowsAffected()
 		if er3 != nil {
@@ -156,17 +151,17 @@ func (s *GRPCHandler) Exec(ctx context.Context, in *grpc.JStatementRequest) (*gr
 		if in.Commit == "true" {
 			er4 := tx.Commit()
 			s.Cache.Remove(stx)
-			return &grpc.JStatementReply{Message: "Execute Successfully", Details: affected}, er4
+			return &grpc.Response{Result: affected}, er4
 		} else {
-			return &grpc.JStatementReply{Message: "Execute Successfully", Details: affected}, er3
+			return &grpc.Response{Result: affected}, er3
 		}
 	}
 }
 
-func (s *GRPCHandler) ExecBatch(ctx context.Context, in *grpc.JStatementBatchRequest) (*grpc.JStatementBatchReply, error) {
+func (s *GRPCHandler) ExecBatch(ctx context.Context, in *grpc.BatchRequest) (*grpc.Response, error) {
 	statements, err := CreateStatements(in)
 	if err != nil {
-		return &grpc.JStatementBatchReply{Message: "Error: " + err.Error(), Result: 0}, err
+		return &grpc.Response{Result: -1}, err
 	}
 	b := make([]q.Statement, 0)
 	l := len(statements)
@@ -189,10 +184,10 @@ func (s *GRPCHandler) ExecBatch(ctx context.Context, in *grpc.JStatementBatchReq
 	} else {
 		tx, er0 := s.Cache.Get(stx)
 		if er0 != nil {
-			return &grpc.JStatementBatchReply{Message: "", Result: 0}, er0
+			return &grpc.Response{Result: -1}, er0
 		}
 		if tx == nil {
-			return &grpc.JStatementBatchReply{Message: "", Result: 0}, errors.New("cannot get tx from cache. Maybe tx got timeout")
+			return &grpc.Response{Result: -1}, errors.New("cannot get tx from cache. Maybe tx got timeout")
 		}
 		tc := false
 		commit := in.Commit
@@ -204,17 +199,17 @@ func (s *GRPCHandler) ExecBatch(ctx context.Context, in *grpc.JStatementBatchReq
 			s.Cache.Remove(stx)
 		}
 	}
-	return &grpc.JStatementBatchReply{Message: "success", Result: res}, err
+	return &grpc.Response{Result: res}, err
 }
 
-func (s *GRPCHandler) BeginTransaction(ctx context.Context, in *grpc.BeginTransactionRequest) (*grpc.BeginTransactionReply, error) {
+func (s *GRPCHandler) BeginTransaction(ctx context.Context, in *grpc.BeginTransactionRequest) (*grpc.BeginTransactionResponse, error) {
 	id, er0 := s.Generate(ctx)
 	if er0 != nil {
-		return &grpc.BeginTransactionReply{Id: ""}, er0
+		return &grpc.BeginTransactionResponse{Id: ""}, er0
 	}
 	tx, er1 := s.DB.Begin()
 	if er1 != nil {
-		return &grpc.BeginTransactionReply{Id: ""}, er1
+		return &grpc.BeginTransactionResponse{Id: ""}, er1
 	}
 	t := d
 	st := in.Timeout
@@ -225,10 +220,10 @@ func (s *GRPCHandler) BeginTransaction(ctx context.Context, in *grpc.BeginTransa
 	if err != nil {
 		return nil, err
 	}
-	return &grpc.BeginTransactionReply{Id: id}, err
+	return &grpc.BeginTransactionResponse{Id: id}, err
 }
 
-func (s *GRPCHandler) EndTransaction(ctx context.Context, in *grpc.EndTransactionRequest) (*grpc.EndTransactionReply, error) {
+func (s *GRPCHandler) EndTransaction(ctx context.Context, in *grpc.EndTransactionRequest) (*grpc.QueryResponse, error) {
 	stx := in.Tx
 	if len(stx) == 0 {
 		return nil, errors.New("tx is required")
@@ -244,24 +239,24 @@ func (s *GRPCHandler) EndTransaction(ctx context.Context, in *grpc.EndTransactio
 	if rollback == "true" {
 		er1 := tx.Rollback()
 		if er1 != nil {
-			return &grpc.EndTransactionReply{Response: "false"}, er1
+			return &grpc.QueryResponse{Message: "false"}, er1
 		} else {
 			_, err := s.Cache.Remove(stx)
 			if err != nil {
-				return &grpc.EndTransactionReply{Response: "true"}, err
+				return &grpc.QueryResponse{Message: "true"}, err
 			}
-			return &grpc.EndTransactionReply{Response: "false"}, err
+			return &grpc.QueryResponse{Message: "false"}, err
 		}
 	} else {
 		er1 := tx.Commit()
 		if er1 != nil {
-			return &grpc.EndTransactionReply{Response: ""}, er1
+			return &grpc.QueryResponse{Message: "false"}, er1
 		} else {
 			_, err := s.Cache.Remove(stx)
 			if err != nil {
-				return &grpc.EndTransactionReply{Response: "true"}, err
+				return &grpc.QueryResponse{Message: "true"}, err
 			}
-			return &grpc.EndTransactionReply{Response: "false"}, err
+			return &grpc.QueryResponse{Message: "false"}, err
 		}
 	}
 }

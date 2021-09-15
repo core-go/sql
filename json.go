@@ -12,25 +12,18 @@ import (
 type Handler struct {
 	DB        *sql.DB
 	Transform func(s string) string
-	Master    string
 	Cache     TxCache
 	Generate  func(ctx context.Context) (string, error)
 	Error     func(context.Context, string)
 }
 
 const d = 120 * time.Second
-func NewHandlerWithTx(db *sql.DB, transform func(s string) string, master string, cache TxCache, generate func(context.Context) (string, error), options... func(context.Context, string)) *Handler {
-	if len(master) == 0 {
-		master = "master"
-	}
+func NewHandler(db *sql.DB, transform func(s string) string, cache TxCache, generate func(context.Context) (string, error), options... func(context.Context, string)) *Handler {
 	var logError func(context.Context, string)
 	if len(options) >= 1 {
 		logError = options[0]
 	}
-	return &Handler{DB: db, Transform: transform, Master: master, Cache: cache, Generate: generate, Error: logError}
-}
-func NewHandler(db *sql.DB, transform func(s string) string, master string, options... func(context.Context, string)) *Handler {
-	return NewHandlerWithTx(db, transform, master, nil, nil, options...)
+	return &Handler{DB: db, Transform: transform, Cache: cache, Generate: generate, Error: logError}
 }
 func (h *Handler) BeginTransaction(w http.ResponseWriter, r *http.Request) {
 	id, er0 := h.Generate(r.Context())
@@ -212,7 +205,7 @@ func (h *Handler) ExecBatch(w http.ResponseWriter, r *http.Request) {
 	var er1 error
 	var res int64
 	if len(stx) == 0 {
-		master := ps.Get(h.Master)
+		master := ps.Get("master")
 		if master == "true" {
 			res, er1 = ExecuteBatch(r.Context(), h.DB, b, true, true)
 		} else {

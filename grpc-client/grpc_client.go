@@ -12,7 +12,7 @@ import (
 
 type GRPCClient struct {
 	Url    string
-	Client pb.GoDbProxyClient
+	Client pb.DbProxyClient
 	Conn   *grpc.ClientConn
 }
 
@@ -21,7 +21,7 @@ func NewGRPCClient(url string) (*GRPCClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := pb.NewGoDbProxyClient(conn)
+	c := pb.NewDbProxyClient(conn)
 	return &GRPCClient{url, c, conn}, nil
 }
 func (c *GRPCClient) BeginTransaction(ctx context.Context, timeout int64) (string, error) {
@@ -55,19 +55,19 @@ func (c *GRPCClient) Exec(ctx context.Context, query string, values ...interface
 			dates = append(dates, int32(v))
 		}
 	}
-	rq := &pb.JStatementRequest{Query: stm.Query, Params: argsData.Bytes(), Dates: dates}
+	rq := &pb.Request{Query: stm.Query, Params: argsData.Bytes(), Dates: dates}
 	rs, er2 := c.Client.Execute(ctx, rq)
 	if er2 != nil {
 		return -1, er2
 	}
-	return rs.Details, er2
+	return rs.Result, er2
 }
 func (c *GRPCClient) ExecBatch(ctx context.Context, master bool, stm...sql.Statement) (int64, error) {
 	stmts := sql.BuildJStatements(stm...)
 	if len(stmts) == 0 {
 		return 0, nil
 	}
-	batch := make([]*pb.JStatementRequest, 0)
+	batch := make([]*pb.Request, 0)
 	for _, s := range stmts {
 		argsData := new(bytes.Buffer)
 		er1 := json.NewEncoder(argsData).Encode(&s.Params)
@@ -81,14 +81,14 @@ func (c *GRPCClient) ExecBatch(ctx context.Context, master bool, stm...sql.State
 				dates = append(dates, int32(v))
 			}
 		}
-		js := &pb.JStatementRequest{Query: s.Query, Params: argsData.Bytes(), Dates: dates}
+		js := &pb.Request{Query: s.Query, Params: argsData.Bytes(), Dates: dates}
 		batch = append(batch, js)
 	}
 	sm := ""
 	if master {
 		sm = "true"
 	}
-	rq := &pb.JStatementBatchRequest{Batch: batch, Master: sm}
+	rq := &pb.BatchRequest{Batch: batch, Master: sm}
 	rs, err := c.Client.ExecBatch(ctx, rq)
 	if err != nil {
 		return 0, err
@@ -108,12 +108,12 @@ func (c *GRPCClient) Query(ctx context.Context, result interface{}, query string
 			dates = append(dates, int32(v))
 		}
 	}
-	rq := &pb.JStatementRequest{Query: stm.Query, Params: argsData.Bytes(), Dates: dates}
+	rq := &pb.Request{Query: stm.Query, Params: argsData.Bytes(), Dates: dates}
 	rs, er2 := c.Client.Query(ctx, rq)
 	if er2 != nil {
 		return er2
 	}
-	x := json.NewDecoder(bytes.NewBuffer([]byte(rs.Details)))
+	x := json.NewDecoder(bytes.NewBuffer([]byte(rs.Message)))
 	er3 := x.Decode(result)
 	return er3
 }
@@ -135,19 +135,19 @@ func (c *GRPCClient) ExecWithTx(ctx context.Context, tx string, commit bool, que
 	if commit {
 		sc = "true"
 	}
-	rq := &pb.JStatementRequest{Query: stm.Query, Params: argsData.Bytes(), Dates: dates, Tx: tx, Commit: sc}
+	rq := &pb.Request{Query: stm.Query, Params: argsData.Bytes(), Dates: dates, Tx: tx, Commit: sc}
 	rs, er2 := c.Client.Execute(ctx, rq)
 	if er2 != nil {
 		return -1, er2
 	}
-	return rs.Details, er2
+	return rs.Result, er2
 }
 func (c *GRPCClient) ExecBatchWithTx(ctx context.Context, tx string, commit bool, master bool, stm...sql.Statement) (int64, error) {
 	stmts := sql.BuildJStatements(stm...)
 	if len(stmts) == 0 {
 		return 0, nil
 	}
-	batch := make([]*pb.JStatementRequest, 0)
+	batch := make([]*pb.Request, 0)
 	for _, s := range stmts {
 		argsData := new(bytes.Buffer)
 		er1 := json.NewEncoder(argsData).Encode(&s.Params)
@@ -161,7 +161,7 @@ func (c *GRPCClient) ExecBatchWithTx(ctx context.Context, tx string, commit bool
 				dates = append(dates, int32(v))
 			}
 		}
-		js := &pb.JStatementRequest{Query: s.Query, Params: argsData.Bytes(), Dates: dates}
+		js := &pb.Request{Query: s.Query, Params: argsData.Bytes(), Dates: dates}
 		batch = append(batch, js)
 	}
 	sc := ""
@@ -172,7 +172,7 @@ func (c *GRPCClient) ExecBatchWithTx(ctx context.Context, tx string, commit bool
 	if master {
 		sm = "true"
 	}
-	rq := &pb.JStatementBatchRequest{Batch: batch, Tx: tx, Commit: sc, Master: sm}
+	rq := &pb.BatchRequest{Batch: batch, Tx: tx, Commit: sc, Master: sm}
 	rs, err := c.Client.ExecBatch(ctx, rq)
 	if err != nil {
 		return 0, err
@@ -196,12 +196,12 @@ func (c *GRPCClient) QueryWithTx(ctx context.Context, tx string, commit bool, re
 	if commit {
 		sc = "true"
 	}
-	rq := &pb.JStatementRequest{Query: stm.Query, Params: argsData.Bytes(), Dates: dates, Tx: tx, Commit: sc}
+	rq := &pb.Request{Query: stm.Query, Params: argsData.Bytes(), Dates: dates, Tx: tx, Commit: sc}
 	rs, er2 := c.Client.Query(ctx, rq)
 	if er2 != nil {
 		return er2
 	}
-	x := json.NewDecoder(bytes.NewBuffer([]byte(rs.Details)))
+	x := json.NewDecoder(bytes.NewBuffer([]byte(rs.Message)))
 	er3 := x.Decode(result)
 	return er3
 }

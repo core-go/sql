@@ -1071,7 +1071,7 @@ func ReplaceQueryArgs(driver string, query string) string {
 	if driver == DriverOracle || driver == DriverPostgres || driver == DriverSqlite3 {
 		var x string
 		if driver == DriverOracle {
-			x = ":val"
+			x = ":"
 		} else {
 			x = "$"
 		}
@@ -1135,7 +1135,7 @@ func BuildParam(i int) string {
 	return "?"
 }
 func BuildOracleParam(i int) string {
-	return ":val" + strconv.Itoa(i)
+	return ":" + strconv.Itoa(i)
 }
 func BuildMsSqlParam(i int) string {
 	return "@p" + strconv.Itoa(i)

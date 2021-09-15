@@ -787,7 +787,7 @@ func ReplaceParameters(driver string, query string, n int) string {
 	if driver == DriverOracle || driver == DriverPostgres || driver == DriverSqlite3 {
 		var x string
 		if driver == DriverOracle {
-			x = ":val"
+			x = ":"
 		} else {
 			x = "$"
 		}
