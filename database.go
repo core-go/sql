@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lib/pq"
 	"log"
 	"reflect"
 	"sort"
@@ -443,42 +444,99 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	return -1, jsonName, jsonName
 }
 
-func BuildToUpdate(table string, model interface{}, buildParam func(int) string) (string, []interface{}) {
-	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, true)
-	var values []interface{}
-	colSet := make([]string, 0)
-	colQuery := make([]string, 0)
-	colNumber := 1
-	for _, colName := range columns {
-		if v1, ok := mapData[colName]; ok {
-			v3, ok3 := GetDBValue(v1)
-			if ok3 {
-				colSet = append(colSet, QuoteColumnName(colName)+"="+v3)
-			} else {
-				values = append(values, v1)
-				colSet = append(colSet, QuoteColumnName(colName)+"="+buildParam(colNumber))
-				colNumber++
+func BuildToUpdate(table string, model interface{}, buildParam func(int) string, options ...string) (string, []interface{}) {
+	driver := ""
+	if len(options) > 0 {
+		driver = options[0]
+	}
+	modelType := reflect.TypeOf(model)
+	cols, keys, schema := MakeSchema(modelType)
+	mv := reflect.ValueOf(model)
+	values := make([]string, 0)
+	where := make([]string, 0)
+	args := make([]interface{}, 0)
+	i := 1
+	for _, col := range cols {
+		fdb := schema[col]
+		if !fdb.Key && fdb.Update {
+			f := mv.Field(fdb.Index)
+			fieldValue := f.Interface()
+			isNil := false
+			if f.Kind() == reflect.Ptr {
+				if reflect.ValueOf(fieldValue).IsNil() {
+					isNil = true
+				} else {
+					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+				}
 			}
+			if isNil {
+				values = append(values, col+"=null")
+			} else {
+				v, ok := GetDBValue(fieldValue)
+				if ok {
+					values = append(values, col+"="+v)
+				} else {
+					if boolValue, ok := fieldValue.(bool); ok {
+						if driver == DriverPostgres || driver == DriverCassandra {
+							if boolValue {
+								values = append(values, col+"=true")
+							} else {
+								values = append(values, col+"=false")
+							}
+						} else {
+							if boolValue {
+								if fdb.True != nil {
+									values = append(values, col+"="+buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.True)
+								} else {
+									values = append(values, col+"=1")
+								}
+							} else {
+								if fdb.False != nil {
+									values = append(values, col+"="+buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.False)
+								} else {
+									values = append(values, col+"=0")
+								}
+							}
+						}
+					} else {
+						if driver == DriverPostgres && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+							values = append(values, col+"="+buildParam(i))
+							i = i + 1
+							args = append(args, pq.Array(fieldValue))
+						}else{
+							values = append(values, col+"="+buildParam(i))
+							i = i + 1
+							args = append(args, fieldValue)
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, col := range keys {
+		fdb := schema[col]
+		f := mv.Field(fdb.Index)
+		fieldValue := f.Interface()
+		if f.Kind() == reflect.Ptr {
+			if !reflect.ValueOf(fieldValue).IsNil() {
+				fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+			}
+		}
+		v, ok := GetDBValue(fieldValue)
+		if ok {
+			where = append(where, col+"="+v)
 		} else {
-			colSet = append(colSet, BuildParamWithNull(colName))
+			where = append(where, col+"="+buildParam(i))
+			i = i + 1
+			args = append(args, fieldValue)
 		}
 	}
-	for _, colName := range keys {
-		if v2, ok := mapKey[colName]; ok {
-			v3, ok3 := GetDBValue(v2)
-			if ok3 {
-				colQuery = append(colQuery, QuoteColumnName(colName)+"="+v3)
-			} else {
-				values = append(values, v2)
-				colQuery = append(colQuery, QuoteColumnName(colName)+"="+buildParam(colNumber))
-			}
-			colNumber++
-		}
-	}
-	queryWhere := strings.Join(colQuery, " and ")
-	querySet := strings.Join(colSet, ",")
-	query := fmt.Sprintf("update %v set %v where %v", table, querySet, queryWhere)
-	return query, values
+	query := fmt.Sprintf("update %v set %v where %v", table, strings.Join(values, ","), strings.Join(where, ","))
+	return query, args
 }
 func GetDBValue(v interface{}) (string, bool) {
 	switch v.(type) {
