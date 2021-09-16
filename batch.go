@@ -282,7 +282,7 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 						values = append(values, col+"="+v)
 					} else {
 						if boolValue, ok := fieldValue.(bool); ok {
-							if driver == DriverPostgres {
+							if driver == DriverPostgres || driver == DriverCassandra {
 								if boolValue {
 									values = append(values, col+"=true")
 								} else {
@@ -387,7 +387,7 @@ func BuildToInsertBatch(table string, models interface{}, driver string, options
 						values = append(values, v)
 					} else {
 						if boolValue, ok := fieldValue.(bool); ok {
-							if driver == DriverPostgres {
+							if driver == DriverPostgres || driver == DriverCassandra {
 								if boolValue {
 									values = append(values, "true")
 								} else {
@@ -536,7 +536,7 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options..
 						values = append(values, v)
 					} else {
 						if boolValue, ok := fieldValue.(bool); ok {
-							if driver == DriverPostgres {
+							if driver == DriverPostgres || driver == DriverCassandra {
 								if boolValue {
 									values = append(values, "true")
 								} else {
@@ -590,7 +590,7 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options..
 							setColumns = append(setColumns, col+"="+v)
 						} else {
 							if boolValue, ok := fieldValue.(bool); ok {
-								if driver == DriverPostgres {
+								if driver == DriverPostgres || driver == DriverCassandra {
 									if boolValue {
 										setColumns = append(setColumns, col+"=true")
 									} else {

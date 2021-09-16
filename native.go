@@ -72,7 +72,7 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 					values = append(values, v)
 				} else {
 					if boolValue, ok := fieldValue.(bool); ok {
-						if driver == DriverPostgres {
+						if driver == DriverPostgres || driver == DriverCassandra {
 							if boolValue {
 								values = append(values, "true")
 							} else {
@@ -126,7 +126,7 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 						setColumns = append(setColumns, col+"="+v)
 					} else {
 						if boolValue, ok := fieldValue.(bool); ok {
-							if driver == DriverPostgres {
+							if driver == DriverPostgres || driver == DriverCassandra {
 								if boolValue {
 									setColumns = append(setColumns, col+"=true")
 								} else {

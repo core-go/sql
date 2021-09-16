@@ -18,6 +18,7 @@ const (
 	PrimaryKey      = "primary_key"
 	IgnoreReadWrite = "-"
 
+	DriverCassandra  = "cassandra"
 	DriverPostgres   = "postgres"
 	DriverMysql      = "mysql"
 	DriverMssql      = "mssql"
@@ -406,7 +407,7 @@ func Delete(ctx context.Context, db *sql.DB, table string, query map[string]inte
 	} else {
 		buildParam = GetBuild(db)
 	}
-	sql, values := BuildDelete(table, query, buildParam)
+	sql, values := BuildToDelete(table, query, buildParam)
 
 	result, err := db.ExecContext(ctx, sql, values...)
 
@@ -466,7 +467,7 @@ func BuildToUpdate(table string, model interface{}, buildParam func(int) string)
 		if v2, ok := mapKey[colName]; ok {
 			v3, ok3 := GetDBValue(v2)
 			if ok3 {
-				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + v3)
+				colQuery = append(colQuery, QuoteColumnName(colName)+"="+v3)
 			} else {
 				values = append(values, v2)
 				colQuery = append(colQuery, QuoteColumnName(colName)+"="+buildParam(colNumber))
@@ -527,7 +528,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 				colSet = append(colSet, fmt.Sprintf("%v = "+v3, colName))
 			} else {
 				values = append(values, v1)
-				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber))
+				colQuery = append(colQuery, QuoteColumnName(colName)+"="+buildParam(colNumber))
 				colNumber++
 			}
 		} else {
@@ -538,10 +539,10 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 		if v2, ok := mapKey[colName]; ok {
 			v3, ok3 := GetDBValue(v2)
 			if ok3 {
-				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + v3)
+				colQuery = append(colQuery, QuoteColumnName(colName)+"="+v3)
 			} else {
 				values = append(values, v2)
-				colQuery = append(colQuery, QuoteColumnName(colName) + "=" + buildParam(colNumber))
+				colQuery = append(colQuery, QuoteColumnName(colName)+"="+buildParam(colNumber))
 			}
 			colNumber++
 		}
@@ -641,7 +642,7 @@ func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonCo
 	return query, value
 }
 
-func BuildDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
+func BuildToDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
 	var values []interface{}
 	var queryArr []string
 	i := 1
@@ -708,6 +709,7 @@ func ExtractBySchema(value interface{}, columns []string, schema map[string]Fiel
 	}
 	return attrs, attrsKey, nAttrs, nil
 }
+
 // Obtain columns and values required for insert from interface
 func ExtractMapValue(value interface{}, excludeColumns *[]string, ignoreNull bool) (map[string]interface{}, map[string]interface{}, map[string]interface{}, error) {
 	rv := reflect.ValueOf(value)
