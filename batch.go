@@ -238,8 +238,10 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 	}
 	return columns, keys, schema
 }
-func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, options ...string) ([]Statement, error) {
-	driver := ""
+func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, driver string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...string) ([]Statement, error) {
 	if len(options) > 0 {
 		driver = options[0]
 	}
@@ -309,9 +311,15 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 								}
 							}
 						} else {
-							values = append(values, col+"="+buildParam(i))
-							i = i + 1
-							args = append(args, fieldValue)
+							if driver == DriverPostgres && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+								values = append(values, col+"="+buildParam(i))
+								i = i + 1
+								args = append(args, toArray(fieldValue))
+							}else{
+								values = append(values, col+"="+buildParam(i))
+								i = i + 1
+								args = append(args, fieldValue)
+							}
 						}
 					}
 				}
@@ -921,7 +929,10 @@ func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 	}
 	return x.RowsAffected()
 }
-func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
+func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(int) string) (int64, error) {
 	var buildParam func(int) string
 	if len(options) > 0 {
 		buildParam = options[0]
@@ -929,7 +940,7 @@ func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, driver)
+	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, driver , toArray)
 	if er1 != nil {
 		return 0, er1
 	}
