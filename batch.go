@@ -182,7 +182,11 @@ type FieldDB struct {
 	True   *string
 	False  *string
 }
-
+type Schema struct {
+	Keys    []string
+	Columns []string
+	Fields  map[string]FieldDB
+}
 func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB) {
 	numField := modelType.NumField()
 	columns := make([]string, 0)
@@ -315,7 +319,7 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 								values = append(values, col+"="+buildParam(i))
 								i = i + 1
 								args = append(args, toArray(fieldValue))
-							}else{
+							} else {
 								values = append(values, col+"="+buildParam(i))
 								i = i + 1
 								args = append(args, fieldValue)
@@ -429,7 +433,7 @@ func BuildToInsertBatch(table string, models interface{}, driver string, toArray
 								values = append(values, buildParam(i))
 								i = i + 1
 								args = append(args, toArray(fieldValue))
-							}else{
+							} else {
 								values = append(values, buildParam(i))
 								i = i + 1
 								args = append(args, fieldValue)
@@ -505,7 +509,7 @@ func BuildToInsertBatch(table string, models interface{}, driver string, toArray
 		return query, args, nil
 	}
 }
-func BuildToSaveBatch(table string, models interface{}, driver string, options...func(i int) string) ([]Statement, error) {
+func BuildToSaveBatch(table string, models interface{}, driver string, options ...func(i int) string) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models is not a slice")
@@ -940,7 +944,7 @@ func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, driver , toArray)
+	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, driver, toArray)
 	if er1 != nil {
 		return 0, er1
 	}

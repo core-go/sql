@@ -314,15 +314,20 @@ func Exec(ctx context.Context, stmt *sql.Stmt, values ...interface{}) (int64, er
 func Update(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
+}, buildParam func(i int) string, options...Schema) (int64, error) {
+	/*
+		var buildParam func(i int) string
+		if len(options) > 0 && options[0] != nil {
+			buildParam = options[0]
+		} else {
+			buildParam = GetBuild(db)
+		}
+	*/
+	if buildParam == nil {
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	query, values := BuildToUpdate(table, model, buildParam, toArray, driver)
+	query, values := BuildToUpdateWithSchema(table, model, buildParam, toArray, driver, options...)
 	r, err0 := db.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -333,15 +338,19 @@ func Update(ctx context.Context, db *sql.DB, table string, model interface{}, to
 func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
+}, buildParam func(i int) string, options...Schema) (int64, error) {
+	/*
+		var buildParam func(i int) string
+		if len(options) > 0 && options[0] != nil {
+			buildParam = options[0]
+		} else {
+			buildParam = GetBuild(db)
+		}*/
+	if buildParam == nil {
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	query, values := BuildToUpdate(table, model, buildParam, toArray, driver)
+	query, values := BuildToUpdateWithSchema(table, model, buildParam, toArray, driver, options...)
 	r, err0 := tx.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -465,17 +474,31 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	}
 	return -1, jsonName, jsonName
 }
-
 func BuildToUpdate(table string, model interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...string) (string, []interface{}) {
+}, options...string) (string, []interface{}) {
 	driver := ""
 	if len(options) > 0 {
 		driver = options[0]
 	}
+	return BuildToUpdateWithSchema(table, model, buildParam, toArray, driver)
+}
+func BuildToUpdateWithSchema(table string, model interface{}, buildParam func(int) string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, driver string, options...Schema) (string, []interface{}) {
+	var cols, keys []string
+	var schema map[string]FieldDB
 	modelType := reflect.TypeOf(model)
-	cols, keys, schema := MakeSchema(modelType)
+	if len(options) > 0 {
+		m := options[0]
+		cols = m.Columns
+		keys = m.Keys
+		schema = m.Fields
+	} else {
+		cols, keys, schema = MakeSchema(modelType)
+	}
 	mv := reflect.ValueOf(model)
 	values := make([]string, 0)
 	where := make([]string, 0)
