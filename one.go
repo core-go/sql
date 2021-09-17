@@ -107,7 +107,10 @@ func BuildToInsert(table string, model interface{}, buildParam func(int) string,
 	return fmt.Sprintf("insert into %v(%v) values (%v)", table, strings.Join(cols, ","), strings.Join(values, ",")), args
 }
 
-func BuildToInsertWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string) (string, []interface{}) {
+func BuildToInsertWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string, driver string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version index not found")
 	}
@@ -118,40 +121,72 @@ func BuildToInsertWithVersion(table string, model interface{}, versionIndex int,
 		panic(err)
 	}
 	i := 1
-	mapData, mapKey, columns, keys := BuildMapDataAndKeys(model, false)
-	var cols []string
-	var values []interface{}
-	var params []string
-	for _, columnName := range keys {
-		if value, ok := mapKey[columnName]; ok {
-			cols = append(cols, QuoteColumnName(columnName))
-			v2b, ok2 := GetDBValue(value)
-			if ok2 {
-				params = append(params, v2b)
+	modelType := reflect.TypeOf(model)
+	cols, _, schema := MakeSchema(modelType)
+	mv := reflect.ValueOf(model)
+	values := make([]string, 0)
+	args := make([]interface{}, 0)
+	for _, col := range cols {
+		fdb := schema[col]
+		f := mv.Field(fdb.Index)
+		fieldValue := f.Interface()
+		isNil := false
+		if f.Kind() == reflect.Ptr {
+			if reflect.ValueOf(fieldValue).IsNil() {
+				isNil = true
 			} else {
-				values = append(values, value)
-				p := buildParam(i)
-				params = append(params, p)
-				i++
+				fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
 			}
 		}
-	}
-	for _, columnName := range columns {
-		if v1, ok := mapData[columnName]; ok {
-			cols = append(cols, QuoteColumnName(columnName))
-			v1b, ok1 := GetDBValue(v1)
-			if ok1 {
-				params = append(params, v1b)
+		if isNil {
+			values = append(values, "null")
+		} else {
+			v, ok := GetDBValue(fieldValue)
+			if ok {
+				values = append(values, v)
 			} else {
-				values = append(values, v1)
-				p := buildParam(i)
-				params = append(params, p)
-				i++
+				if boolValue, ok := fieldValue.(bool); ok {
+					if driver == DriverPostgres || driver == DriverCassandra {
+						if boolValue {
+							values = append(values, "true")
+						} else {
+							values = append(values, "false")
+						}
+					} else {
+						if boolValue {
+							if fdb.True != nil {
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.True)
+							} else {
+								values = append(values, "1")
+							}
+						} else {
+							if fdb.False != nil {
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.False)
+							} else {
+								values = append(values, "0")
+							}
+						}
+					}
+				} else {
+					if driver == DriverPostgres && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+						values = append(values, buildParam(i))
+						i = i + 1
+						args = append(args, toArray(fieldValue))
+					}else{
+						values = append(values, buildParam(i))
+						i = i + 1
+						args = append(args, fieldValue)
+					}
+				}
 			}
 		}
 	}
 	column := strings.Join(cols, ",")
-	return fmt.Sprintf("insert into %v(%v)values(%v)", table, column, strings.Join(params, ",")), values
+	return fmt.Sprintf("insert into %v(%v)values(%v)", table, column, strings.Join(values, ",")), args
 }
 
 func QuoteColumnName(str string) string {

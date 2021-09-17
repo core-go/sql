@@ -266,7 +266,10 @@ func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	return result.RowsAffected()
 }
 
-func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, options ...func(i int) string) (int64, error) {
+func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version index not found")
 	}
@@ -276,7 +279,8 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryInsert, values := BuildToInsertWithVersion(table, model, versionIndex, buildParam)
+	driver := GetDriver(db)
+	queryInsert, values := BuildToInsertWithVersion(table, model, versionIndex, buildParam, driver, toArray)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
