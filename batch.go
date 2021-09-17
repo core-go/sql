@@ -295,7 +295,7 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 										i = i + 1
 										args = append(args, *fdb.True)
 									} else {
-										values = append(values, col+"=1")
+										values = append(values, col+"='1'")
 									}
 								} else {
 									if fdb.False != nil {
@@ -303,7 +303,7 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 										i = i + 1
 										args = append(args, *fdb.False)
 									} else {
-										values = append(values, col+"=0")
+										values = append(values, col+"='0'")
 									}
 								}
 							}

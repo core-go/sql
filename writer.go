@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"reflect"
 	"strings"
 )
@@ -14,16 +15,26 @@ type Writer struct {
 	versionField   string
 	versionIndex   int
 	versionDBField string
+	ToArray func(interface{}) interface {
+		driver.Valuer
+		sql.Scanner
+	}
 }
 
-func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, options ...Mapper) *Writer {
+func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...Mapper) *Writer {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
-	return NewSqlWriterWithVersion(db, tableName, modelType, versionField, mapper)
+	return NewSqlWriterWithVersion(db, tableName, modelType, versionField, mapper, toArray)
 }
-func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, mapper Mapper, options ...func(i int) string) *Writer {
+func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, mapper Mapper, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) *Writer {
 	var loader *Loader
 	if mapper != nil {
 		loader = NewSqlLoader(db, tableName, modelType, mapper.DbToModel, options...)
@@ -40,17 +51,23 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 			return &Writer{Loader: loader, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
 		}
 	}
-	return &Writer{Loader: loader, Mapper: mapper, versionField: versionField, versionIndex: -1}
+	return &Writer{Loader: loader, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}
 }
-func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, options ...func(i int) string) *Writer {
-	return NewSqlWriterWithVersion(db, tableName, modelType, "", mapper, options...)
+func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) *Writer {
+	return NewSqlWriterWithVersion(db, tableName, modelType, "", mapper, toArray, options...)
 }
-func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) *Writer {
+func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...Mapper) *Writer {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
-	return NewWriterWithVersion(db, tableName, modelType, "", mapper)
+	return NewWriterWithVersion(db, tableName, modelType, "", toArray, mapper)
 }
 
 func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
@@ -79,12 +96,12 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 		if s.versionIndex >= 0 {
 			return UpdateWithVersion(ctx, s.Database, s.table, m2, s.versionIndex, s.BuildParam)
 		}
-		return Update(ctx, s.Database, s.table, m2, s.BuildParam)
+		return Update(ctx, s.Database, s.table, m2, s.ToArray, s.BuildParam)
 	}
 	if s.versionIndex >= 0 {
 		return UpdateWithVersion(ctx, s.Database, s.table, model, s.versionIndex, s.BuildParam)
 	}
-	return Update(ctx, s.Database, s.table, model, s.BuildParam)
+	return Update(ctx, s.Database, s.table, model, s.ToArray, s.BuildParam)
 }
 
 func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64, error) {

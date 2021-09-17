@@ -3,9 +3,9 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
-	"github.com/lib/pq"
 	"log"
 	"reflect"
 	"sort"
@@ -297,14 +297,18 @@ func Exec(ctx context.Context, stmt *sql.Stmt, values ...interface{}) (int64, er
 	return result.RowsAffected()
 }
 
-func Update(ctx context.Context, db *sql.DB, table string, model interface{}, options ...func(i int) string) (int64, error) {
+func Update(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuild(db)
 	}
-	query, values := BuildToUpdate(table, model, buildParam)
+	driver := GetDriver(db)
+	query, values := BuildToUpdate(table, model, buildParam, toArray, driver)
 	r, err0 := db.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -312,14 +316,18 @@ func Update(ctx context.Context, db *sql.DB, table string, model interface{}, op
 	return r.RowsAffected()
 }
 
-func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options ...func(i int) string) (int64, error) {
+func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuild(db)
 	}
-	query, values := BuildToUpdate(table, model, buildParam)
+	driver := GetDriver(db)
+	query, values := BuildToUpdate(table, model, buildParam, toArray, driver)
 	r, err0 := tx.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -444,7 +452,10 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	return -1, jsonName, jsonName
 }
 
-func BuildToUpdate(table string, model interface{}, buildParam func(int) string, options ...string) (string, []interface{}) {
+func BuildToUpdate(table string, model interface{}, buildParam func(int) string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...string) (string, []interface{}) {
 	driver := ""
 	if len(options) > 0 {
 		driver = options[0]
@@ -490,7 +501,7 @@ func BuildToUpdate(table string, model interface{}, buildParam func(int) string,
 									i = i + 1
 									args = append(args, *fdb.True)
 								} else {
-									values = append(values, col+"=1")
+									values = append(values, col+"='1'")
 								}
 							} else {
 								if fdb.False != nil {
@@ -498,16 +509,16 @@ func BuildToUpdate(table string, model interface{}, buildParam func(int) string,
 									i = i + 1
 									args = append(args, *fdb.False)
 								} else {
-									values = append(values, col+"=0")
+									values = append(values, col+"='0'")
 								}
 							}
 						}
 					} else {
-						if driver == DriverPostgres && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+						if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
 							values = append(values, col+"="+buildParam(i))
 							i = i + 1
-							args = append(args, pq.Array(fieldValue))
-						}else{
+							args = append(args, toArray(fieldValue))
+						} else {
 							values = append(values, col+"="+buildParam(i))
 							i = i + 1
 							args = append(args, fieldValue)
