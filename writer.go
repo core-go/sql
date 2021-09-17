@@ -79,12 +79,12 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 		if s.versionIndex >= 0 {
 			return InsertWithVersion(ctx, s.Database, s.table, m2, s.versionIndex, s.BuildParam)
 		}
-		return Insert(ctx, s.Database, s.table, m2, s.BuildParam)
+		return Insert(ctx, s.Database, s.table, m2, s.ToArray, s.BuildParam)
 	}
 	if s.versionIndex >= 0 {
 		return InsertWithVersion(ctx, s.Database, s.table, model, s.versionIndex, s.BuildParam)
 	}
-	return Insert(ctx, s.Database, s.table, model, s.BuildParam)
+	return Insert(ctx, s.Database, s.table, model, s.ToArray, s.BuildParam)
 }
 
 func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {

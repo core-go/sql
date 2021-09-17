@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"reflect"
 )
 
@@ -11,22 +12,32 @@ type BatchUpdater struct {
 	tableName  string
 	BuildParam func(i int) string
 	Map        func(ctx context.Context, model interface{}) (interface{}, error)
+	ToArray    func(interface{}) interface {
+		driver.Valuer
+		sql.Scanner
+	}
 }
-func NewBatchUpdater(db *sql.DB, tableName string, options...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
+func NewBatchUpdater(db *sql.DB, tableName string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
 	}
-	return NewSqlBatchUpdater(db, tableName, mp)
+	return NewSqlBatchUpdater(db, tableName, mp, toArray)
 }
-func NewSqlBatchUpdater(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), options...func(i int) string) *BatchUpdater {
+func NewSqlBatchUpdater(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+},options...func(i int) string) *BatchUpdater {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuild(db)
 	}
-	return &BatchUpdater{db: db, tableName: tableName, Map: mp, BuildParam: buildParam}
+	return &BatchUpdater{db: db, tableName: tableName, Map: mp, BuildParam: buildParam, ToArray: toArray}
 }
 func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
@@ -44,7 +55,7 @@ func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []
 	} else {
 		models2 = models
 	}
-	_, err := UpdateBatch(ctx, w.db, w.tableName, models2, w.BuildParam)
+	_, err := UpdateBatch(ctx, w.db, w.tableName, models2, w.ToArray, w.BuildParam)
 	s := reflect.ValueOf(models)
 	if err == nil {
 		// Return full success

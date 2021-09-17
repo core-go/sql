@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"reflect"
 )
 
@@ -11,22 +12,32 @@ type BatchInserter struct {
 	tableName  string
 	BuildParam func(i int) string
 	Map        func(ctx context.Context, model interface{}) (interface{}, error)
+	ToArray    func(interface{}) interface {
+		driver.Valuer
+		sql.Scanner
+	}
 }
-func NewBatchInserter(db *sql.DB, tableName string, options...func(context.Context, interface{}) (interface{}, error)) *BatchInserter {
+func NewBatchInserter(db *sql.DB, tableName string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...func(context.Context, interface{}) (interface{}, error)) *BatchInserter {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
 	}
-	return NewSqlBatchInserter(db, tableName, mp)
+	return NewSqlBatchInserter(db, tableName, mp, toArray)
 }
-func NewSqlBatchInserter(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), options...func(i int) string) *BatchInserter {
+func NewSqlBatchInserter(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...func(i int) string) *BatchInserter {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuild(db)
 	}
-	return &BatchInserter{db: db, tableName: tableName, BuildParam: buildParam, Map: mp}
+	return &BatchInserter{db: db, tableName: tableName, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
 func (w *BatchInserter) Write(ctx context.Context, models interface{}) ([]int, []int, error) {
@@ -46,7 +57,7 @@ func (w *BatchInserter) Write(ctx context.Context, models interface{}) ([]int, [
 		models2 = models
 	}
 	s := reflect.ValueOf(models2)
-	_, er2 := InsertBatch(ctx, w.db, w.tableName, models2, w.BuildParam)
+	_, er2 := InsertBatch(ctx, w.db, w.tableName, models2, w.ToArray, w.BuildParam)
 
 	if er2 == nil {
 		// Return full success
