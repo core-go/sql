@@ -242,10 +242,11 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 	}
 	return columns, keys, schema
 }
-func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, driver string, toArray func(interface{}) interface {
+func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...string) ([]Statement, error) {
+	driver := ""
 	if len(options) > 0 {
 		driver = options[0]
 	}
@@ -259,11 +260,14 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 	first := s.Index(0).Interface()
 	modelType := reflect.TypeOf(first)
 	cols, keys, schema := MakeSchema(modelType)
+	strt := Schema{Columns: cols, Keys: keys, Fields: schema}
 	slen := s.Len()
 	stmts := make([]Statement, 0)
 	for j := 0; j < slen; j++ {
 		model := s.Index(j).Interface()
-		mv := reflect.ValueOf(model)
+		// mv := reflect.ValueOf(model)
+		query, args := BuildToUpdateWithSchema(table, model, buildParam, toArray, driver, strt)
+		/*
 		values := make([]string, 0)
 		where := make([]string, 0)
 		args := make([]interface{}, 0)
@@ -348,6 +352,7 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 			}
 		}
 		query := fmt.Sprintf("update %v set %v where %v", table, strings.Join(values, ","), strings.Join(where, ","))
+		*/
 		s := Statement{Query: query, Params: args}
 		stmts = append(stmts, s)
 	}
@@ -944,7 +949,7 @@ func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, driver, toArray)
+	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, toArray, driver)
 	if er1 != nil {
 		return 0, er1
 	}
