@@ -206,14 +206,19 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 	return -1
 }
 
-func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, options ...func(i int) string) (int64, error) {
+func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryInsert, values := BuildToInsert(table, model, buildParam)
+
+	driver := GetDriver(db)
+	queryInsert, values := BuildToInsert(table, model, buildParam, toArray, driver)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -241,14 +246,19 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	return 0, err
 }
 
-func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options ...func(i int) string) (int64, error) {
+func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuild(db)
 	}
-	queryInsert, values := BuildToInsert(table, model, buildParam)
+	driver := GetDriver(db)
+	queryInsert, values := BuildToInsert(table, model, buildParam, toArray, driver)
+
 	result, err := tx.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
 		return handleDuplicate(db, err)

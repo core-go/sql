@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"strings"
@@ -340,7 +341,10 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 	}
 	return stmts, nil
 }
-func BuildToInsertBatch(table string, models interface{}, driver string, options ...func(int) string) (string, []interface{}, error) {
+func BuildToInsertBatch(table string, models interface{}, driver string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(int) string) (string, []interface{}, error) {
 	var buildParam func(int) string
 	if len(options) > 0 {
 		buildParam = options[0]
@@ -413,9 +417,15 @@ func BuildToInsertBatch(table string, models interface{}, driver string, options
 								}
 							}
 						} else {
-							values = append(values, buildParam(i))
-							i = i + 1
-							args = append(args, fieldValue)
+							if driver == DriverPostgres && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, toArray(fieldValue))
+							}else{
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, fieldValue)
+							}
 						}
 					}
 				}
@@ -896,9 +906,12 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options..
 	return stmts, nil
 }
 
-func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...func(int) string) (int64, error) {
+func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) (int64, error) {
 	driver := GetDriver(db)
-	query, args, er1 := BuildToInsertBatch(tableName, models, driver, options...)
+	query, args, er1 := BuildToInsertBatch(tableName, models, driver, toArray, options...)
 	if er1 != nil {
 		return 0, er1
 	}
