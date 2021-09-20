@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, toArray func(interface{}) interface {
+func BuildToUpdateBatch(table string, models interface{}, versionIndex int, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...bool) ([]Statement, error) {
@@ -32,7 +32,7 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 	for j := 0; j < slen; j++ {
 		model := s.Index(j).Interface()
 		// mv := reflect.ValueOf(model)
-		query, args := BuildToUpdateWithSchema(table, model, buildParam, toArray, boolSupport, strt)
+		query, args := BuildToUpdateWithSchema(table, model, versionIndex, buildParam, toArray, boolSupport, strt)
 		s := Statement{Query: query, Params: args}
 		stmts = append(stmts, s)
 	}

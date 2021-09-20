@@ -23,6 +23,7 @@ type FieldDB struct {
 	Index  int
 	Key    bool
 	Update bool
+	Insert bool
 	True   *string
 	False  *string
 }
@@ -31,6 +32,7 @@ type Schema struct {
 	Columns []string
 	Fields  map[string]FieldDB
 }
+
 func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB) {
 	numField := modelType.NumField()
 	columns := make([]string, 0)
@@ -41,6 +43,7 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 		tag, _ := field.Tag.Lookup("gorm")
 		if !strings.Contains(tag, IgnoreReadWrite) {
 			update := !strings.Contains(tag, "update:false")
+			insert := !strings.Contains(tag, "insert:false")
 			if has := strings.Contains(tag, "column"); has {
 				json := field.Name
 				col := json
@@ -68,6 +71,7 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 								Index:  idx,
 								Key:    isKey,
 								Update: update,
+								Insert: insert,
 							}
 							tTag, tOk := field.Tag.Lookup("true")
 							if tOk {
@@ -288,6 +292,7 @@ const (
 	l2 = len(t2)
 	l3 = len(t3)
 )
+
 func ToDates(args []interface{}) []int {
 	if args == nil || len(args) == 0 {
 		ag2 := make([]int, 0)

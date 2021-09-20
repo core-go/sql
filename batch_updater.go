@@ -16,6 +16,7 @@ type BatchUpdater struct {
 		driver.Valuer
 		sql.Scanner
 	}
+	versionIndex int
 }
 func NewBatchUpdater(db *sql.DB, tableName string, toArray func(interface{}) interface {
 	driver.Valuer
@@ -25,9 +26,19 @@ func NewBatchUpdater(db *sql.DB, tableName string, toArray func(interface{}) int
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
 	}
-	return NewSqlBatchUpdater(db, tableName, mp, toArray)
+	return NewSqlBatchUpdater(db, tableName, -1, mp, toArray)
 }
-func NewSqlBatchUpdater(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+func NewBatchUpdaterWithVersion(db *sql.DB, tableName string, versionIndex int, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
+	var mp func(context.Context, interface{}) (interface{}, error)
+	if len(options) > 0 && options[0] != nil {
+		mp = options[0]
+	}
+	return NewSqlBatchUpdater(db, tableName, versionIndex, mp, toArray)
+}
+func NewSqlBatchUpdater(db *sql.DB, tableName string, versionIndex int, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 },options...func(i int) string) *BatchUpdater {
@@ -37,7 +48,7 @@ func NewSqlBatchUpdater(db *sql.DB, tableName string, mp func(context.Context, i
 	} else {
 		buildParam = GetBuild(db)
 	}
-	return &BatchUpdater{db: db, tableName: tableName, Map: mp, BuildParam: buildParam, ToArray: toArray}
+	return &BatchUpdater{db: db, tableName: tableName, versionIndex: versionIndex, Map: mp, BuildParam: buildParam, ToArray: toArray}
 }
 func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
@@ -55,7 +66,7 @@ func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []
 	} else {
 		models2 = models
 	}
-	_, err := UpdateBatch(ctx, w.db, w.tableName, models2, w.ToArray, w.BuildParam)
+	_, err := UpdateBatchWithVersion(ctx, w.db, w.tableName, models2, w.versionIndex, w.ToArray, w.BuildParam)
 	s := reflect.ValueOf(models)
 	if err == nil {
 		// Return full success

@@ -185,7 +185,7 @@ func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, to
 
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	queryInsert, values := BuildToInsertWithSchema(table, model, buildParam, toArray, boolSupport)
+	queryInsert, values := BuildToInsertWithSchema(table, model, -1, buildParam, toArray, boolSupport)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -225,7 +225,7 @@ func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	queryInsert, values := BuildToInsertWithSchema(table, model, buildParam, toArray, boolSupport)
+	queryInsert, values := BuildToInsertWithSchema(table, model, -1, buildParam, toArray, boolSupport)
 
 	result, err := tx.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -289,7 +289,7 @@ func Update(ctx context.Context, db *sql.DB, table string, model interface{}, to
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	query, values := BuildToUpdateWithSchema(table, model, buildParam, toArray, boolSupport, options...)
+	query, values := BuildToUpdateWithSchema(table, model, -1, buildParam, toArray, boolSupport, options...)
 	r, err0 := db.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -306,7 +306,7 @@ func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	query, values := BuildToUpdateWithSchema(table, model, buildParam, toArray, boolSupport, options...)
+	query, values := BuildToUpdateWithSchema(table, model, -1, buildParam, toArray, boolSupport, options...)
 	r, err0 := tx.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -314,7 +314,10 @@ func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	return r.RowsAffected()
 }
 
-func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, options ...func(i int) string) (int64, error) {
+func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version's index not found")
 	}
@@ -325,7 +328,9 @@ func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	} else {
 		buildParam = GetBuild(db)
 	}
-	query, values := BuildToUpdateWithVersion(table, model, versionIndex, buildParam)
+	driver := GetDriver(db)
+	boolSupport := driver == DriverPostgres
+	query, values := BuildToUpdateWithVersion(table, model, versionIndex, buildParam, toArray, boolSupport)
 
 	result, err := db.ExecContext(ctx, query, values...)
 
@@ -1052,6 +1057,12 @@ func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 	driver.Valuer
 	sql.Scanner
 }, options ...func(int) string) (int64, error) {
+	return UpdateBatchWithVersion(ctx, db, tableName, models, -1, toArray, options...)
+}
+func UpdateBatchWithVersion(ctx context.Context, db *sql.DB, tableName string, models interface{}, versionIndex int, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(int) string) (int64, error) {
 	var buildParam func(int) string
 	if len(options) > 0 {
 		buildParam = options[0]
@@ -1060,7 +1071,7 @@ func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, toArray, boolSupport)
+	stmts, er1 := BuildToUpdateBatch(tableName, models, versionIndex, buildParam, toArray, boolSupport)
 	if er1 != nil {
 		return 0, er1
 	}

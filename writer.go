@@ -15,10 +15,11 @@ type Writer struct {
 	versionField   string
 	versionIndex   int
 	versionDBField string
-	ToArray func(interface{}) interface {
+	ToArray        func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
+	schema Schema
 }
 
 func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, toArray func(interface{}) interface {
@@ -41,6 +42,8 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 	} else {
 		loader = NewSqlLoader(db, tableName, modelType, nil, options...)
 	}
+	cols, keys, fields := MakeSchema(modelType)
+	schema := Schema{Columns: cols, Keys: keys, Fields: fields}
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
 		if index >= 0 {
@@ -48,10 +51,10 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 			if !exist {
 				dbFieldName = strings.ToLower(versionField)
 			}
-			return &Writer{Loader: loader, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
+			return &Writer{Loader: loader, schema: schema, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
 		}
 	}
-	return &Writer{Loader: loader, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}
+	return &Writer{Loader: loader, schema: schema, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}
 }
 func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, toArray func(interface{}) interface {
 	driver.Valuer
@@ -76,15 +79,9 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		if s.versionIndex >= 0 {
-			return InsertWithVersion(ctx, s.Database, s.table, m2, s.versionIndex, s.ToArray, s.BuildParam)
-		}
-		return Insert(ctx, s.Database, s.table, m2, s.ToArray, s.BuildParam)
+		return InsertWithVersion(ctx, s.Database, s.table, m2, s.versionIndex, s.ToArray, s.BuildParam)
 	}
-	if s.versionIndex >= 0 {
-		return InsertWithVersion(ctx, s.Database, s.table, model, s.versionIndex, s.ToArray, s.BuildParam)
-	}
-	return Insert(ctx, s.Database, s.table, model, s.ToArray, s.BuildParam)
+	return InsertWithVersion(ctx, s.Database, s.table, model, s.versionIndex, s.ToArray, s.BuildParam)
 }
 
 func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
@@ -93,15 +90,9 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		if s.versionIndex >= 0 {
-			return UpdateWithVersion(ctx, s.Database, s.table, m2, s.versionIndex, s.BuildParam)
-		}
-		return Update(ctx, s.Database, s.table, m2, s.ToArray, s.BuildParam)
+		return UpdateWithVersion(ctx, s.Database, s.table, m2, s.versionIndex, s.ToArray, s.BuildParam)
 	}
-	if s.versionIndex >= 0 {
-		return UpdateWithVersion(ctx, s.Database, s.table, model, s.versionIndex, s.BuildParam)
-	}
-	return Update(ctx, s.Database, s.table, model, s.ToArray, s.BuildParam)
+	return UpdateWithVersion(ctx, s.Database, s.table, model, s.versionIndex, s.ToArray, s.BuildParam)
 }
 
 func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64, error) {

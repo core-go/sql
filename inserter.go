@@ -54,11 +54,11 @@ func (w *Inserter) Write(ctx context.Context, model interface{}) error {
 			return er0
 		}
 
-		queryInsert, values := BuildToInsertWithSchema(w.tableName, m2, w.BuildParam, w.ToArray, w.boolSupport)
+		queryInsert, values := BuildToInsertWithSchema(w.tableName, m2, -1, w.BuildParam, w.ToArray, w.boolSupport)
 		_, err := w.db.ExecContext(ctx, queryInsert, values...)
 		return err
 	}
-	queryInsert, values := BuildToInsertWithSchema(w.tableName, model, w.BuildParam, w.ToArray, w.boolSupport)
+	queryInsert, values := BuildToInsertWithSchema(w.tableName, model, -1, w.BuildParam, w.ToArray, w.boolSupport)
 	_, err := w.db.ExecContext(ctx, queryInsert, values...)
 	return err
 }
