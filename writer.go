@@ -19,7 +19,8 @@ type Writer struct {
 		driver.Valuer
 		sql.Scanner
 	}
-	schema Schema
+	schema      Schema
+	BoolSupport bool
 }
 
 func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, toArray func(interface{}) interface {
@@ -42,6 +43,8 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 	} else {
 		loader = NewSqlLoader(db, tableName, modelType, nil, options...)
 	}
+	driver := GetDriver(db)
+	boolSupport := driver == DriverPostgres
 	cols, keys, fields := MakeSchema(modelType)
 	schema := Schema{Columns: cols, Keys: keys, Fields: fields}
 	if len(versionField) > 0 {
@@ -51,10 +54,10 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 			if !exist {
 				dbFieldName = strings.ToLower(versionField)
 			}
-			return &Writer{Loader: loader, schema: schema, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
+			return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
 		}
 	}
-	return &Writer{Loader: loader, schema: schema, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}
+	return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}
 }
 func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, toArray func(interface{}) interface {
 	driver.Valuer
@@ -79,9 +82,19 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		return InsertWithVersion(ctx, s.Database, s.table, m2, s.versionIndex, s.ToArray, s.BuildParam)
+		queryInsert, values := BuildToInsertWithVersion(s.table, m2, s.versionIndex, s.BuildParam, s.ToArray, s.BoolSupport)
+		result, err := s.Database.ExecContext(ctx, queryInsert, values...)
+		if err != nil {
+			return handleDuplicate(s.Database, err)
+		}
+		return result.RowsAffected()
 	}
-	return InsertWithVersion(ctx, s.Database, s.table, model, s.versionIndex, s.ToArray, s.BuildParam)
+	queryInsert, values := BuildToInsertWithVersion(s.table, model, s.versionIndex, s.BuildParam, s.ToArray, s.BoolSupport)
+	result, err := s.Database.ExecContext(ctx, queryInsert, values...)
+	if err != nil {
+		return handleDuplicate(s.Database, err)
+	}
+	return result.RowsAffected()
 }
 
 func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
@@ -90,9 +103,19 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		return UpdateWithVersion(ctx, s.Database, s.table, m2, s.versionIndex, s.ToArray, s.BuildParam)
+		query, values := BuildToUpdateWithVersion(s.table, m2, s.versionIndex, s.BuildParam, s.ToArray, s.BoolSupport)
+		result, err := s.Database.ExecContext(ctx, query, values...)
+		if err != nil {
+			return -1, err
+		}
+		return result.RowsAffected()
 	}
-	return UpdateWithVersion(ctx, s.Database, s.table, model, s.versionIndex, s.ToArray, s.BuildParam)
+	query, values := BuildToUpdateWithVersion(s.table, model, s.versionIndex, s.BuildParam, s.ToArray, s.BoolSupport)
+	result, err := s.Database.ExecContext(ctx, query, values...)
+	if err != nil {
+		return -1, err
+	}
+	return result.RowsAffected()
 }
 
 func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64, error) {
@@ -105,7 +128,6 @@ func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64,
 	}
 	return Save(ctx, s.Database, s.table, model)
 }
-
 func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
 	l := len(s.keys)
 	if l == 1 {
@@ -115,7 +137,6 @@ func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
 		return Delete(ctx, s.Database, s.table, MapToGORM(ids, s.modelType), s.BuildParam)
 	}
 }
-
 func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64, error) {
 	if s.Mapper != nil {
 		_, err := s.Mapper.ModelToDb(ctx, &model)

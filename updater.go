@@ -53,11 +53,11 @@ func (w *Updater) Write(ctx context.Context, model interface{}) error {
 		if er0 != nil {
 			return er0
 		}
-		query0, values0 := BuildToUpdateWithSchema(w.tableName, m2, -1, w.BuildParam, w.ToArray, w.boolSupport, w.schema)
+		query0, values0 := BuildToUpdateWithSchema(w.tableName, m2, -1, w.BuildParam, w.boolSupport, w.ToArray, w.schema)
 		_, er1 := w.db.ExecContext(ctx, query0, values0...)
 		return er1
 	}
-	query, values := BuildToUpdateWithSchema(w.tableName, model, -1, w.BuildParam, w.ToArray, w.boolSupport, w.schema)
+	query, values := BuildToUpdateWithSchema(w.tableName, model, -1, w.BuildParam, w.boolSupport, w.ToArray, w.schema)
 	_, er2 := w.db.ExecContext(ctx, query, values...)
 	return er2
 }

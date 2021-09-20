@@ -17,18 +17,22 @@ func BuildToInsert(table string, model interface{}, buildParam func(int) string,
 	if len(options) > 0 {
 		boolSupport = options[0]
 	}
-	return BuildToInsertWithSchema(table, model, -1, buildParam, toArray, boolSupport)
+	return BuildToInsertWithSchema(table, model, -1, buildParam, boolSupport, toArray)
 }
-func BuildToInsertWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
+func BuildToInsertWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}) (string, []interface{}) {
-	return BuildToInsertWithSchema(table, model, versionIndex, buildParam, toArray, boolSupport)
+}, options...bool) (string, []interface{}) {
+	boolSupport := false
+	if len(options) > 0 {
+		boolSupport = options[0]
+	}
+	return BuildToInsertWithSchema(table, model, versionIndex, buildParam, boolSupport, toArray)
 }
-func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, buildParam func(int) string, toArray func(interface{}) interface {
+func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, boolSupport bool, options...Schema) (string, []interface{}) {
+}, options...Schema) (string, []interface{}) {
 	modelType := reflect.TypeOf(model)
 	var cols []string
 	var schema map[string]FieldDB
@@ -116,7 +120,7 @@ func BuildToUpdate(table string, model interface{}, buildParam func(int) string,
 	if len(options) > 0 {
 		boolSupport = options[0]
 	}
-	return BuildToUpdateWithSchema(table, model, -1, buildParam, toArray, boolSupport)
+	return BuildToUpdateWithSchema(table, model, -1, buildParam, boolSupport, toArray)
 }
 func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
@@ -126,12 +130,12 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 	if len(options) > 0 {
 		boolSupport = options[0]
 	}
-	return BuildToUpdateWithSchema(table, model, versionIndex, buildParam, toArray, boolSupport)
+	return BuildToUpdateWithSchema(table, model, versionIndex, buildParam, boolSupport, toArray)
 }
-func BuildToUpdateWithSchema(table string, model interface{}, versionIndex int, buildParam func(int) string, toArray func(interface{}) interface {
+func BuildToUpdateWithSchema(table string, model interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, boolSupport bool, options...Schema) (string, []interface{}) {
+}, options...Schema) (string, []interface{}) {
 	var cols, keys []string
 	var schema map[string]FieldDB
 	modelType := reflect.TypeOf(model)

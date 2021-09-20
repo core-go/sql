@@ -171,31 +171,6 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 	}
 	return -1
 }
-
-func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
-	}
-
-	driver := GetDriver(db)
-	boolSupport := driver == DriverPostgres
-	queryInsert, values := BuildToInsertWithSchema(table, model, -1, buildParam, toArray, boolSupport)
-
-	result, err := db.ExecContext(ctx, queryInsert, values...)
-	if err != nil {
-		if err != nil {
-			return handleDuplicate(db, err)
-		}
-	}
-	return result.RowsAffected()
-}
-
 func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	x := err.Error()
 	driver := GetDriver(db)
@@ -212,8 +187,13 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	}
 	return 0, err
 }
-
-func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
+func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) (int64, error) {
+	return InsertTxWithVersion(ctx, db, tx, table, model, versionIndex, toArray)
+}
+func InsertTxWithVersion(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(i int) string) (int64, error) {
@@ -225,7 +205,7 @@ func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	queryInsert, values := BuildToInsertWithSchema(table, model, -1, buildParam, toArray, boolSupport)
+	queryInsert, values := BuildToInsertWithSchema(table, model, versionIndex, buildParam, boolSupport, toArray)
 
 	result, err := tx.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -233,14 +213,16 @@ func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	}
 	return result.RowsAffected()
 }
-
+func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) (int64, error) {
+	return InsertWithVersion(ctx, db, table, model, -1, toArray, options...)
+}
 func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(i int) string) (int64, error) {
-	if versionIndex < 0 {
-		return 0, errors.New("version index not found")
-	}
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -249,25 +231,11 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	queryInsert, values := BuildToInsertWithVersion(table, model, versionIndex, buildParam, boolSupport, toArray)
+	queryInsert, values := BuildToInsertWithVersion(table, model, versionIndex, buildParam, toArray, boolSupport)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
-		errstr := err.Error()
-		driver := GetDriver(db)
-		if driver == DriverPostgres && strings.Contains(errstr, "pq: duplicate key value violates unique constraint") {
-			return 0, nil
-		} else if driver == DriverMysql && strings.Contains(errstr, "Error 1062: Duplicate entry") {
-			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driver == DriverOracle && strings.Contains(errstr, "ORA-00001: unique constraint") {
-			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driver == DriverMssql && strings.Contains(errstr, "Violation of PRIMARY KEY constraint") {
-			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-		} else if driver == DriverSqlite3 && strings.Contains(errstr, "UNIQUE constraint failed") {
-			return 0, nil
-		} else {
-			return 0, err
-		}
+		return handleDuplicate(db, err)
 	}
 	return result.RowsAffected()
 }
@@ -289,7 +257,7 @@ func Update(ctx context.Context, db *sql.DB, table string, model interface{}, to
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	query, values := BuildToUpdateWithSchema(table, model, -1, buildParam, toArray, boolSupport, options...)
+	query, values := BuildToUpdateWithSchema(table, model, -1, buildParam, boolSupport, toArray, options...)
 	r, err0 := db.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -306,7 +274,7 @@ func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	query, values := BuildToUpdateWithSchema(table, model, -1, buildParam, toArray, boolSupport, options...)
+	query, values := BuildToUpdateWithSchema(table, model, -1, buildParam, boolSupport, toArray, options...)
 	r, err0 := tx.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -1071,7 +1039,7 @@ func UpdateBatchWithVersion(ctx context.Context, db *sql.DB, tableName string, m
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	stmts, er1 := BuildToUpdateBatch(tableName, models, versionIndex, buildParam, toArray, boolSupport)
+	stmts, er1 := BuildToUpdateBatchWithVersion(tableName, models, versionIndex, buildParam, toArray, boolSupport)
 	if er1 != nil {
 		return 0, er1
 	}
