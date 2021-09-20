@@ -1,7 +1,6 @@
 package sql
 
 import (
-	"context"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -9,164 +8,6 @@ import (
 	"strings"
 )
 
-func ExecuteStatements(ctx context.Context, tx *sql.Tx, commit bool, stmts ...Statement) (int64, error) {
-	if stmts == nil || len(stmts) == 0 {
-		return 0, nil
-	}
-	var count int64
-	count = 0
-	for _, stmt := range stmts {
-		r2, er3 := tx.ExecContext(ctx, stmt.Query, stmt.Params...)
-		if er3 != nil {
-			er4 := tx.Rollback()
-			if er4 != nil {
-				return count, er4
-			}
-			return count, er3
-		}
-		a2, er5 := r2.RowsAffected()
-		if er5 != nil {
-			tx.Rollback()
-			return count, er5
-		}
-		count = count + a2
-	}
-	if commit {
-		er6 := tx.Commit()
-		return count, er6
-	} else {
-		return count, nil
-	}
-}
-func ExecuteAll(ctx context.Context, db *sql.DB, stmts ...Statement) (int64, error) {
-	if stmts == nil || len(stmts) == 0 {
-		return 0, nil
-	}
-	tx, er1 := db.Begin()
-	if er1 != nil {
-		return 0, er1
-	}
-	var count int64
-	count = 0
-	for _, stmt := range stmts {
-		r2, er3 := tx.ExecContext(ctx, stmt.Query, stmt.Params...)
-		if er3 != nil {
-			er4 := tx.Rollback()
-			if er4 != nil {
-				return count, er4
-			}
-			return count, er3
-		}
-		a2, er5 := r2.RowsAffected()
-		if er5 != nil {
-			tx.Rollback()
-			return count, er5
-		}
-		count = count + a2
-	}
-	er6 := tx.Commit()
-	return count, er6
-}
-func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSuccess bool, countAll bool) (int64, error) {
-	if sts == nil || len(sts) == 0 {
-		return 0, nil
-	}
-	driver := GetDriver(db)
-	tx, er0 := db.Begin()
-	if er0 != nil {
-		return 0, er0
-	}
-	result, er1 := tx.ExecContext(ctx, sts[0].Query, sts[0].Params...)
-	if er1 != nil {
-		_ = tx.Rollback()
-		str := er1.Error()
-		if driver == DriverPostgres && strings.Contains(str, "pq: duplicate key value violates unique constraint") {
-			return 0, nil
-		} else if driver == DriverMysql && strings.Contains(str, "Error 1062: Duplicate entry") {
-			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driver == DriverOracle && strings.Contains(str, "ORA-00001: unique constraint") {
-			return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-		} else if driver == DriverMssql && strings.Contains(str, "Violation of PRIMARY KEY constraint") {
-			return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-		} else if driver == DriverSqlite3 && strings.Contains(str, "UNIQUE constraint failed") {
-			return 0, nil
-		} else {
-			return 0, er1
-		}
-	}
-	rowAffected, er2 := result.RowsAffected()
-	if er2 != nil {
-		tx.Rollback()
-		return 0, er2
-	}
-	if firstRowSuccess {
-		if rowAffected == 0 {
-			return 0, nil
-		}
-	}
-	count := rowAffected
-	for i := 1; i < len(sts); i++ {
-		r2, er3 := tx.ExecContext(ctx, sts[i].Query, sts[i].Params...)
-		if er3 != nil {
-			er4 := tx.Rollback()
-			if er4 != nil {
-				return count, er4
-			}
-			return count, er3
-		}
-		a2, er5 := r2.RowsAffected()
-		if er5 != nil {
-			tx.Rollback()
-			return count, er5
-		}
-		count = count + a2
-	}
-	er6 := tx.Commit()
-	if er6 != nil {
-		return count, er6
-	}
-	if countAll {
-		return count, nil
-	}
-	return 1, nil
-}
-
-type Statements interface {
-	Exec(ctx context.Context, db *sql.DB) (int64, error)
-	Add(sql string, args []interface{}) Statements
-	Clear() Statements
-}
-
-func NewDefaultStatements(successFirst bool) *DefaultStatements {
-	stmts := make([]Statement, 0)
-	s := &DefaultStatements{Statements: stmts, SuccessFirst: successFirst}
-	return s
-}
-func NewStatements(successFirst bool) Statements {
-	return NewDefaultStatements(successFirst)
-}
-
-type DefaultStatements struct {
-	Statements   []Statement
-	SuccessFirst bool
-}
-
-func (s *DefaultStatements) Exec(ctx context.Context, db *sql.DB) (int64, error) {
-	if s.SuccessFirst {
-		return ExecuteBatch(ctx, db, s.Statements, true, false)
-	} else {
-		return ExecuteAll(ctx, db, s.Statements...)
-	}
-}
-func (s *DefaultStatements) Add(sql string, args []interface{}) Statements {
-	var stm = Statement{Query: sql, Params: args}
-	s.Statements = append(s.Statements, stm)
-	return s
-}
-func (s *DefaultStatements) Clear() Statements {
-	s.Statements = s.Statements[:0]
-	return s
-}
 func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
@@ -273,7 +114,7 @@ func BuildToInsertBatch(table string, models interface{}, driver string, toArray
 								}
 							}
 						} else {
-							if driver == DriverPostgres && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+							if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
 								values = append(values, buildParam(i))
 								i = i + 1
 								args = append(args, toArray(fieldValue))
@@ -760,48 +601,4 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options .
 		}
 	}
 	return stmts, nil
-}
-
-func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
-	driver := GetDriver(db)
-	query, args, er1 := BuildToInsertBatch(tableName, models, driver, toArray, options...)
-	if er1 != nil {
-		return 0, er1
-	}
-	x, er2 := db.ExecContext(ctx, query, args...)
-	if er2 != nil {
-		return 0, er2
-	}
-	return x.RowsAffected()
-}
-func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(int) string) (int64, error) {
-	var buildParam func(int) string
-	if len(options) > 0 {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
-	}
-	driver := GetDriver(db)
-	boolSupport := driver == DriverPostgres
-	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, toArray, boolSupport)
-	if er1 != nil {
-		return 0, er1
-	}
-	return ExecuteAll(ctx, db, stmts...)
-}
-func SaveBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}) (int64, error) {
-	driver := GetDriver(db)
-	stmts, er1 := BuildToSaveBatch(tableName, models, driver)
-	if er1 != nil {
-		return 0, er1
-	}
-	_, err := ExecuteAll(ctx, db, stmts...)
-	total := int64(len(stmts))
-	return total, err
 }
