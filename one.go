@@ -34,10 +34,10 @@ func Find(slice []string, val string) (int, bool) {
 func BuildToInsert(table string, model interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...string) (string, []interface{}) {
-	driver := ""
+}, options ...bool) (string, []interface{}) {
+	boolSupport := false
 	if len(options) > 0 {
-		driver = options[0]
+		boolSupport = options[0]
 	}
 	modelType := reflect.TypeOf(model)
 	cols, _, schema := MakeSchema(modelType)
@@ -65,7 +65,7 @@ func BuildToInsert(table string, model interface{}, buildParam func(int) string,
 				values = append(values, v)
 			} else {
 				if boolValue, ok := fieldValue.(bool); ok {
-					if driver == DriverPostgres || driver == DriverCassandra {
+					if boolSupport {
 						if boolValue {
 							values = append(values, "true")
 						} else {
@@ -78,7 +78,7 @@ func BuildToInsert(table string, model interface{}, buildParam func(int) string,
 								i = i + 1
 								args = append(args, *fdb.True)
 							} else {
-								values = append(values, "1")
+								values = append(values, "'1'")
 							}
 						} else {
 							if fdb.False != nil {
@@ -86,12 +86,12 @@ func BuildToInsert(table string, model interface{}, buildParam func(int) string,
 								i = i + 1
 								args = append(args, *fdb.False)
 							} else {
-								values = append(values, "0")
+								values = append(values, "'0'")
 							}
 						}
 					}
 				} else {
-					if driver == DriverPostgres && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+					if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
 						values = append(values, buildParam(i))
 						i = i + 1
 						args = append(args, toArray(fieldValue))
@@ -159,7 +159,7 @@ func BuildToInsertWithVersion(table string, model interface{}, versionIndex int,
 								i = i + 1
 								args = append(args, *fdb.True)
 							} else {
-								values = append(values, "1")
+								values = append(values, "'1'")
 							}
 						} else {
 							if fdb.False != nil {
@@ -167,7 +167,7 @@ func BuildToInsertWithVersion(table string, model interface{}, versionIndex int,
 								i = i + 1
 								args = append(args, *fdb.False)
 							} else {
-								values = append(values, "0")
+								values = append(values, "'0'")
 							}
 						}
 					}

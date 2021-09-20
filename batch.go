@@ -245,10 +245,10 @@ func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB)
 func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...string) ([]Statement, error) {
-	driver := ""
+}, options ...bool) ([]Statement, error) {
+	boolSupport := false
 	if len(options) > 0 {
-		driver = options[0]
+		boolSupport = options[0]
 	}
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
@@ -266,93 +266,7 @@ func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) s
 	for j := 0; j < slen; j++ {
 		model := s.Index(j).Interface()
 		// mv := reflect.ValueOf(model)
-		query, args := BuildToUpdateWithSchema(table, model, buildParam, toArray, driver, strt)
-		/*
-		values := make([]string, 0)
-		where := make([]string, 0)
-		args := make([]interface{}, 0)
-		i := 1
-		for _, col := range cols {
-			fdb := schema[col]
-			if !fdb.Key && fdb.Update {
-				f := mv.Field(fdb.Index)
-				fieldValue := f.Interface()
-				isNil := false
-				if f.Kind() == reflect.Ptr {
-					if reflect.ValueOf(fieldValue).IsNil() {
-						isNil = true
-					} else {
-						fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
-					}
-				}
-				if isNil {
-					values = append(values, col+"=null")
-				} else {
-					v, ok := GetDBValue(fieldValue)
-					if ok {
-						values = append(values, col+"="+v)
-					} else {
-						if boolValue, ok := fieldValue.(bool); ok {
-							if driver == DriverPostgres || driver == DriverCassandra {
-								if boolValue {
-									values = append(values, col+"=true")
-								} else {
-									values = append(values, col+"=false")
-								}
-							} else {
-								if boolValue {
-									if fdb.True != nil {
-										values = append(values, col+"="+buildParam(i))
-										i = i + 1
-										args = append(args, *fdb.True)
-									} else {
-										values = append(values, col+"='1'")
-									}
-								} else {
-									if fdb.False != nil {
-										values = append(values, col+"="+buildParam(i))
-										i = i + 1
-										args = append(args, *fdb.False)
-									} else {
-										values = append(values, col+"='0'")
-									}
-								}
-							}
-						} else {
-							if driver == DriverPostgres && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
-								values = append(values, col+"="+buildParam(i))
-								i = i + 1
-								args = append(args, toArray(fieldValue))
-							} else {
-								values = append(values, col+"="+buildParam(i))
-								i = i + 1
-								args = append(args, fieldValue)
-							}
-						}
-					}
-				}
-			}
-		}
-		for _, col := range keys {
-			fdb := schema[col]
-			f := mv.Field(fdb.Index)
-			fieldValue := f.Interface()
-			if f.Kind() == reflect.Ptr {
-				if !reflect.ValueOf(fieldValue).IsNil() {
-					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
-				}
-			}
-			v, ok := GetDBValue(fieldValue)
-			if ok {
-				where = append(where, col+"="+v)
-			} else {
-				where = append(where, col+"="+buildParam(i))
-				i = i + 1
-				args = append(args, fieldValue)
-			}
-		}
-		query := fmt.Sprintf("update %v set %v where %v", table, strings.Join(values, ","), strings.Join(where, ","))
-		*/
+		query, args := BuildToUpdateWithSchema(table, model, buildParam, toArray, boolSupport, strt)
 		s := Statement{Query: query, Params: args}
 		stmts = append(stmts, s)
 	}
@@ -421,7 +335,7 @@ func BuildToInsertBatch(table string, models interface{}, driver string, toArray
 										i = i + 1
 										args = append(args, *fdb.True)
 									} else {
-										values = append(values, "1")
+										values = append(values, "'1'")
 									}
 								} else {
 									if fdb.False != nil {
@@ -429,7 +343,7 @@ func BuildToInsertBatch(table string, models interface{}, driver string, toArray
 										i = i + 1
 										args = append(args, *fdb.False)
 									} else {
-										values = append(values, "0")
+										values = append(values, "'0'")
 									}
 								}
 							}
@@ -576,7 +490,7 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options .
 										i = i + 1
 										args = append(args, *fdb.True)
 									} else {
-										values = append(values, "1")
+										values = append(values, "'1'")
 									}
 								} else {
 									if fdb.False != nil {
@@ -584,7 +498,7 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options .
 										i = i + 1
 										args = append(args, *fdb.False)
 									} else {
-										values = append(values, "0")
+										values = append(values, "'0'")
 									}
 								}
 							}
@@ -630,7 +544,7 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options .
 											i = i + 1
 											args = append(args, *fdb.True)
 										} else {
-											values = append(values, "1")
+											values = append(values, "'1'")
 										}
 									} else {
 										if fdb.False != nil {
@@ -638,7 +552,7 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options .
 											i = i + 1
 											args = append(args, *fdb.False)
 										} else {
-											values = append(values, "0")
+											values = append(values, "'0'")
 										}
 									}
 								}
@@ -723,7 +637,7 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options .
 									i = i + 1
 									args = append(args, *fdb.True)
 								} else {
-									values = append(values, "1")
+									values = append(values, "'1'")
 								}
 							} else {
 								if fdb.False != nil {
@@ -731,7 +645,7 @@ func BuildToSaveBatch(table string, models interface{}, driver string, options .
 									i = i + 1
 									args = append(args, *fdb.False)
 								} else {
-									values = append(values, "0")
+									values = append(values, "'0'")
 								}
 							}
 						} else {
@@ -949,7 +863,8 @@ func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models inter
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, toArray, driver)
+	boolSupport := driver == DriverPostgres
+	stmts, er1 := BuildToUpdateBatch(tableName, models, buildParam, toArray, boolSupport)
 	if er1 != nil {
 		return 0, er1
 	}

@@ -15,7 +15,9 @@ type Inserter struct {
 		driver.Valuer
 		sql.Scanner
 	}
+	boolSupport bool
 }
+
 func NewInserter(db *sql.DB, tableName string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
@@ -36,7 +38,9 @@ func NewSqlInserter(db *sql.DB, tableName string, mp func(context.Context, inter
 	} else {
 		buildParam = GetBuild(db)
 	}
-	return &Inserter{db: db, tableName: tableName, BuildParam: buildParam, Map: mp, ToArray: toArray}
+	driver := GetDriver(db)
+	boolSupport := driver == DriverPostgres
+	return &Inserter{db: db, boolSupport: boolSupport, tableName: tableName, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
 func (w *Inserter) Write(ctx context.Context, model interface{}) error {
@@ -46,11 +50,11 @@ func (w *Inserter) Write(ctx context.Context, model interface{}) error {
 			return er0
 		}
 
-		queryInsert, values := BuildToInsert(w.tableName, m2, w.BuildParam, w.ToArray)
+		queryInsert, values := BuildToInsert(w.tableName, m2, w.BuildParam, w.ToArray, w.boolSupport)
 		_, err := w.db.ExecContext(ctx, queryInsert, values...)
 		return err
 	}
-	queryInsert, values := BuildToInsert(w.tableName, model, w.BuildParam, w.ToArray)
+	queryInsert, values := BuildToInsert(w.tableName, model, w.BuildParam, w.ToArray, w.boolSupport)
 	_, err := w.db.ExecContext(ctx, queryInsert, values...)
 	return err
 }

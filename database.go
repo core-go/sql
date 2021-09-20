@@ -218,7 +218,8 @@ func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, to
 	}
 
 	driver := GetDriver(db)
-	queryInsert, values := BuildToInsert(table, model, buildParam, toArray, driver)
+	boolSupport := driver == DriverPostgres
+	queryInsert, values := BuildToInsert(table, model, buildParam, toArray, boolSupport)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -257,7 +258,8 @@ func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	queryInsert, values := BuildToInsert(table, model, buildParam, toArray, driver)
+	boolSupport := driver == DriverPostgres
+	queryInsert, values := BuildToInsert(table, model, buildParam, toArray, boolSupport)
 
 	result, err := tx.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -315,19 +317,12 @@ func Update(ctx context.Context, db *sql.DB, table string, model interface{}, to
 	driver.Valuer
 	sql.Scanner
 }, buildParam func(i int) string, options...Schema) (int64, error) {
-	/*
-		var buildParam func(i int) string
-		if len(options) > 0 && options[0] != nil {
-			buildParam = options[0]
-		} else {
-			buildParam = GetBuild(db)
-		}
-	*/
 	if buildParam == nil {
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	query, values := BuildToUpdateWithSchema(table, model, buildParam, toArray, driver, options...)
+	boolSupport := driver == DriverPostgres
+	query, values := BuildToUpdateWithSchema(table, model, buildParam, toArray, boolSupport, options...)
 	r, err0 := db.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -339,18 +334,12 @@ func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	driver.Valuer
 	sql.Scanner
 }, buildParam func(i int) string, options...Schema) (int64, error) {
-	/*
-		var buildParam func(i int) string
-		if len(options) > 0 && options[0] != nil {
-			buildParam = options[0]
-		} else {
-			buildParam = GetBuild(db)
-		}*/
 	if buildParam == nil {
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	query, values := BuildToUpdateWithSchema(table, model, buildParam, toArray, driver, options...)
+	boolSupport := driver == DriverPostgres
+	query, values := BuildToUpdateWithSchema(table, model, buildParam, toArray, boolSupport, options...)
 	r, err0 := tx.ExecContext(ctx, query, values...)
 	if err0 != nil {
 		return -1, err0
@@ -477,17 +466,17 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 func BuildToUpdate(table string, model interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...string) (string, []interface{}) {
-	driver := ""
+}, options...bool) (string, []interface{}) {
+	boolSupport := false
 	if len(options) > 0 {
-		driver = options[0]
+		boolSupport = options[0]
 	}
-	return BuildToUpdateWithSchema(table, model, buildParam, toArray, driver)
+	return BuildToUpdateWithSchema(table, model, buildParam, toArray, boolSupport)
 }
 func BuildToUpdateWithSchema(table string, model interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, driver string, options...Schema) (string, []interface{}) {
+}, boolSupport bool, options...Schema) (string, []interface{}) {
 	var cols, keys []string
 	var schema map[string]FieldDB
 	modelType := reflect.TypeOf(model)
@@ -525,7 +514,7 @@ func BuildToUpdateWithSchema(table string, model interface{}, buildParam func(in
 					values = append(values, col+"="+v)
 				} else {
 					if boolValue, ok := fieldValue.(bool); ok {
-						if driver == DriverPostgres || driver == DriverCassandra {
+						if boolSupport {
 							if boolValue {
 								values = append(values, col+"=true")
 							} else {

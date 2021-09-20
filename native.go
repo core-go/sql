@@ -85,7 +85,7 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 									i = i + 1
 									args = append(args, *fdb.True)
 								} else {
-									values = append(values, "1")
+									values = append(values, "'1'")
 								}
 							} else {
 								if fdb.False != nil {
@@ -93,7 +93,7 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 									i = i + 1
 									args = append(args, *fdb.False)
 								} else {
-									values = append(values, "0")
+									values = append(values, "'0'")
 								}
 							}
 						}
@@ -139,7 +139,7 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 										i = i + 1
 										args = append(args, *fdb.True)
 									} else {
-										values = append(values, "1")
+										values = append(values, "'1'")
 									}
 								} else {
 									if fdb.False != nil {
@@ -147,7 +147,7 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 										i = i + 1
 										args = append(args, *fdb.False)
 									} else {
-										values = append(values, "0")
+										values = append(values, "'0'")
 									}
 								}
 							}
@@ -228,7 +228,7 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 								i = i + 1
 								args = append(args, *fdb.True)
 							} else {
-								values = append(values, "1")
+								values = append(values, "'1'")
 							}
 						} else {
 							if fdb.False != nil {
@@ -236,7 +236,7 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 								i = i + 1
 								args = append(args, *fdb.False)
 							} else {
-								values = append(values, "0")
+								values = append(values, "'0'")
 							}
 						}
 					} else {
