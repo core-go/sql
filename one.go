@@ -30,17 +30,29 @@ func Find(slice []string, val string) (int, bool) {
 	}
 	return -1, false
 }
-
 func BuildToInsert(table string, model interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...bool) (string, []interface{}) {
+}, options...bool) (string, []interface{}) {
 	boolSupport := false
 	if len(options) > 0 {
 		boolSupport = options[0]
 	}
+	return BuildToInsertWithSchema(table, model, buildParam, toArray, boolSupport)
+}
+func BuildToInsertWithSchema(table string, model interface{}, buildParam func(int) string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, boolSupport bool, options...Schema) (string, []interface{}) {
 	modelType := reflect.TypeOf(model)
-	cols, _, schema := MakeSchema(modelType)
+	var cols []string
+	var schema map[string]FieldDB
+	if len(options) > 0 {
+		cols = options[0].Columns
+		schema = options[0].Fields
+	} else {
+		cols, _, schema = MakeSchema(modelType)
+	}
 	mv := reflect.ValueOf(model)
 	values := make([]string, 0)
 	args := make([]interface{}, 0)
@@ -107,7 +119,7 @@ func BuildToInsert(table string, model interface{}, buildParam func(int) string,
 	return fmt.Sprintf("insert into %v(%v) values (%v)", table, strings.Join(cols, ","), strings.Join(values, ",")), args
 }
 
-func BuildToInsertWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string, driver string, toArray func(interface{}) interface {
+func BuildToInsertWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }) (string, []interface{}) {
@@ -146,7 +158,7 @@ func BuildToInsertWithVersion(table string, model interface{}, versionIndex int,
 				values = append(values, v)
 			} else {
 				if boolValue, ok := fieldValue.(bool); ok {
-					if driver == DriverPostgres || driver == DriverCassandra {
+					if boolSupport {
 						if boolValue {
 							values = append(values, "true")
 						} else {
@@ -172,7 +184,7 @@ func BuildToInsertWithVersion(table string, model interface{}, versionIndex int,
 						}
 					}
 				} else {
-					if driver == DriverPostgres && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+					if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
 						values = append(values, buildParam(i))
 						i = i + 1
 						args = append(args, toArray(fieldValue))

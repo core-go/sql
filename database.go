@@ -219,7 +219,7 @@ func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, to
 
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	queryInsert, values := BuildToInsert(table, model, buildParam, toArray, boolSupport)
+	queryInsert, values := BuildToInsertWithSchema(table, model, buildParam, toArray, boolSupport)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -259,7 +259,7 @@ func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	queryInsert, values := BuildToInsert(table, model, buildParam, toArray, boolSupport)
+	queryInsert, values := BuildToInsertWithSchema(table, model, buildParam, toArray, boolSupport)
 
 	result, err := tx.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -282,7 +282,8 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	queryInsert, values := BuildToInsertWithVersion(table, model, versionIndex, buildParam, driver, toArray)
+	boolSupport := driver == DriverPostgres
+	queryInsert, values := BuildToInsertWithVersion(table, model, versionIndex, buildParam, boolSupport, toArray)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {

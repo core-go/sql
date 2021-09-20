@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"reflect"
 )
 
 type Updater struct {
@@ -15,9 +16,11 @@ type Updater struct {
 		driver.Valuer
 		sql.Scanner
 	}
+	boolSupport bool
+	schema      Schema
 }
 
-func NewUpdater(db *sql.DB, tableName string, toArray func(interface{}) interface {
+func NewUpdater(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(context.Context, interface{}) (interface{}, error)) *Updater {
@@ -25,9 +28,9 @@ func NewUpdater(db *sql.DB, tableName string, toArray func(interface{}) interfac
 	if len(options) >= 1 {
 		mp = options[0]
 	}
-	return NewSqlUpdater(db, tableName, mp, toArray)
+	return NewSqlUpdater(db, tableName, modelType, mp, toArray)
 }
-func NewSqlUpdater(db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+func NewSqlUpdater(db *sql.DB, tableName string, modelType reflect.Type, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(i int) string) *Updater {
@@ -37,7 +40,11 @@ func NewSqlUpdater(db *sql.DB, tableName string, mp func(context.Context, interf
 	} else {
 		buildParam = GetBuild(db)
 	}
-	return &Updater{db: db, tableName: tableName, BuildParam: buildParam, Map: mp, ToArray: toArray}
+	driver := GetDriver(db)
+	boolSupport := driver == DriverPostgres
+	cols, keys, fields := MakeSchema(modelType)
+	schema := Schema{Columns: cols, Keys: keys, Fields: fields}
+	return &Updater{db: db, tableName: tableName, boolSupport: boolSupport, schema: schema, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
 func (w *Updater) Write(ctx context.Context, model interface{}) error {
@@ -46,9 +53,11 @@ func (w *Updater) Write(ctx context.Context, model interface{}) error {
 		if er0 != nil {
 			return er0
 		}
-		_, err := Update(ctx, w.db, w.tableName, m2, w.ToArray, w.BuildParam)
-		return err
+		query0, values0 := BuildToUpdateWithSchema(w.tableName, m2, w.BuildParam, w.ToArray, w.boolSupport, w.schema)
+		_, er1 := w.db.ExecContext(ctx, query0, values0...)
+		return er1
 	}
-	_, err := Update(ctx, w.db, w.tableName, model, w.ToArray, w.BuildParam)
-	return err
+	query, values := BuildToUpdateWithSchema(w.tableName, model, w.BuildParam, w.ToArray, w.boolSupport, w.schema)
+	_, er2 := w.db.ExecContext(ctx, query, values...)
+	return er2
 }
