@@ -10,12 +10,13 @@ import (
 	"strings"
 	"time"
 )
-
 type Config struct {
 	Insecure       *bool  `mapstructure:"insecure" json:"insecure,omitempty" gorm:"column:insecure" bson:"insecure,omitempty" dynamodbav:"insecure,omitempty" firestore:"insecure,omitempty"`
 	Timeout        int64  `mapstructure:"timeout" json:"timeout,omitempty" gorm:"column:timeout" bson:"timeout,omitempty" dynamodbav:"timeout,omitempty" firestore:"timeout,omitempty"`
 	CertFile       string `mapstructure:"cert_file" json:"certFile,omitempty" gorm:"column:certfile" bson:"certFile,omitempty" dynamodbav:"certFile,omitempty" firestore:"certFile,omitempty"`
 	KeyFile        string `mapstructure:"key_file" json:"keyFile,omitempty" gorm:"column:keyfile" bson:"keyFile,omitempty" dynamodbav:"keyFile,omitempty" firestore:"keyFile,omitempty"`
+}
+type LogConfig struct {
 	Separate       bool   `mapstructure:"separate" json:"separate,omitempty" gorm:"column:separate" bson:"separate,omitempty" dynamodbav:"separate,omitempty" firestore:"separate,omitempty"`
 	Log            bool   `mapstructure:"log" json:"log,omitempty" gorm:"column:log" bson:"log,omitempty" dynamodbav:"log,omitempty" firestore:"log,omitempty"`
 	Duration       string `mapstructure:"duration" json:"duration,omitempty" gorm:"column:duration" bson:"duration,omitempty" dynamodbav:"duration,omitempty" firestore:"duration,omitempty"`
@@ -34,14 +35,13 @@ const (
 	delete = "DELETE"
 )
 
-var conf Config
+var conf LogConfig
 var sClient *http.Client
 
 func SetClient(c *http.Client) {
 	sClient = c
 }
-
-func NewClient(c Config) (*http.Client, error) {
+func InitializeLog(c LogConfig) {
 	conf.Log = c.Log
 	conf.Separate = c.Separate
 	conf.ResponseStatus = c.ResponseStatus
@@ -66,6 +66,8 @@ func NewClient(c Config) (*http.Client, error) {
 	} else {
 		conf.Error = "error"
 	}
+}
+func NewClient(c Config) (*http.Client, error) {
 	if len(c.CertFile) > 0 && len(c.KeyFile) > 0 {
 		return NewTLSClient(c.CertFile, c.KeyFile, time.Duration(c.Timeout)*time.Millisecond)
 	} else {
