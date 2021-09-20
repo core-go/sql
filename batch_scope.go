@@ -13,15 +13,6 @@ import (
 
 var formatDateUpdate = "2006-01-02 15:04:05"
 
-type BatchStatement struct {
-	Query         string
-	Values        []interface{}
-	Keys          []string
-	Columns       []string
-	Attributes    map[string]interface{}
-	AttributeKeys map[string]interface{}
-}
-
 func newStatement(value interface{}, excludeColumns ...string) BatchStatement {
 	attribute, attributeKey, _, _ := ExtractMapValue(value, &excludeColumns, false)
 	attrSize := len(attribute)
@@ -36,13 +27,6 @@ func newStatement(value interface{}, excludeColumns ...string) BatchStatement {
 	statement := BatchStatement{Keys: keys, Columns: dbColumns, Attributes: attribute, AttributeKeys: attributeKey}
 	return statement
 }
-
-func statement() BatchStatement {
-	attributes := make(map[string]interface{})
-	attributeKeys := make(map[string]interface{})
-	return BatchStatement{Keys: []string{}, Columns: []string{}, Attributes: attributes, AttributeKeys: attributeKeys}
-}
-
 func FindDBColumNames(modelType reflect.Type) []string {
 	numField := modelType.NumField()
 	var idFields []string
@@ -61,7 +45,6 @@ func FindDBColumNames(modelType reflect.Type) []string {
 	}
 	return idFields
 }
-
 func findTag(tag string, key string) (string, bool) {
 	if has := strings.Contains(tag, key); has {
 		str1 := strings.Split(tag, ";")
@@ -760,29 +743,6 @@ func BuildSqlParametersByColumns(columns []string, values []interface{}, n int, 
 	return strings.Join(arr, joinStr), nil
 }
 
-func BuildParamWithNull(colName string) string {
-	return QuoteColumnName(colName) + "=null"
-}
-func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int, start int, joinStr string, buildParam func(int) string) (string, []interface{}, error) {
-	arr := make([]string, *n)
-	j := start
-	var valueParams []interface{}
-	for i, _ := range arr {
-		columnName := columns[i]
-		if values[j] == nil {
-			arr[i] = BuildParamWithNull(columnName)
-			copy(values[i:], values[i+1:])
-			values[len(values)-1] = ""
-			values = values[:len(values)-1]
-			*n--
-		} else {
-			arr[i] = fmt.Sprintf("%s = %s", columnName, BuildParametersFrom(j, 1, buildParam))
-			valueParams = append(valueParams, values[j])
-		}
-		j++
-	}
-	return strings.Join(arr, joinStr), valueParams, nil
-}
 func ReplaceParameters(driver string, query string, n int) string {
 	if driver == DriverOracle || driver == DriverPostgres || driver == DriverSqlite3 {
 		var x string

@@ -131,10 +131,6 @@ func ExecuteBatch(ctx context.Context, db *sql.DB, sts []Statement, firstRowSucc
 	return 1, nil
 }
 
-type Statement struct {
-	Query  string        `mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
-	Params []interface{} `mapstructure:"params" json:"params,omitempty" gorm:"column:params" bson:"params,omitempty" dynamodbav:"params,omitempty" firestore:"params,omitempty"`
-}
 type Statements interface {
 	Exec(ctx context.Context, db *sql.DB) (int64, error)
 	Add(sql string, args []interface{}) Statements
@@ -170,77 +166,6 @@ func (s *DefaultStatements) Add(sql string, args []interface{}) Statements {
 func (s *DefaultStatements) Clear() Statements {
 	s.Statements = s.Statements[:0]
 	return s
-}
-
-type FieldDB struct {
-	JSON   string
-	Column string
-	Field  string
-	Index  int
-	Key    bool
-	Update bool
-	True   *string
-	False  *string
-}
-type Schema struct {
-	Keys    []string
-	Columns []string
-	Fields  map[string]FieldDB
-}
-func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB) {
-	numField := modelType.NumField()
-	columns := make([]string, 0)
-	keys := make([]string, 0)
-	schema := make(map[string]FieldDB, 0)
-	for idx := 0; idx < numField; idx++ {
-		field := modelType.Field(idx)
-		tag, _ := field.Tag.Lookup("gorm")
-		if !strings.Contains(tag, IgnoreReadWrite) {
-			update := !strings.Contains(tag, "update:false")
-			if has := strings.Contains(tag, "column"); has {
-				json := field.Name
-				col := json
-				str1 := strings.Split(tag, ";")
-				num := len(str1)
-				for i := 0; i < num; i++ {
-					str2 := strings.Split(str1[i], ":")
-					for j := 0; j < len(str2); j++ {
-						if str2[j] == "column" {
-							isKey := strings.Contains(tag, "primary_key")
-							col = str2[j+1]
-							columns = append(columns, col)
-							if isKey {
-								keys = append(keys, col)
-							}
-
-							jTag, jOk := field.Tag.Lookup("json")
-							if jOk {
-								tagJsons := strings.Split(jTag, ",")
-								json = tagJsons[0]
-							}
-							f := FieldDB{
-								JSON:   json,
-								Column: col,
-								Index:  idx,
-								Key:    isKey,
-								Update: update,
-							}
-							tTag, tOk := field.Tag.Lookup("true")
-							if tOk {
-								f.True = &tTag
-								fTag, fOk := field.Tag.Lookup("false")
-								if fOk {
-									f.False = &fTag
-								}
-							}
-							schema[col] = f
-						}
-					}
-				}
-			}
-		}
-	}
-	return columns, keys, schema
 }
 func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer

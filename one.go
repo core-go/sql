@@ -5,7 +5,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
@@ -22,14 +21,7 @@ func RemoveItem(slice []string, val string) []string {
 	return slice
 }
 
-func Find(slice []string, val string) (int, bool) {
-	for i, item := range slice {
-		if item == val {
-			return i, true
-		}
-	}
-	return -1, false
-}
+
 func BuildToInsert(table string, model interface{}, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
@@ -200,89 +192,6 @@ func BuildToInsertWithVersion(table string, model interface{}, versionIndex int,
 	column := strings.Join(cols, ",")
 	return fmt.Sprintf("insert into %v(%v)values(%v)", table, column, strings.Join(values, ",")), args
 }
-
-func QuoteColumnName(str string) string {
-	//if strings.Contains(str, ".") {
-	//	var newStrs []string
-	//	for _, str := range strings.Split(str, ".") {
-	//		newStrs = append(newStrs, str)
-	//	}
-	//	return strings.Join(newStrs, ".")
-	//}
-	return str
-}
-
-func BuildMapDataAndKeys(model interface{}, update bool) (map[string]interface{}, map[string]interface{}, []string, []string) {
-	var mapData = make(map[string]interface{})
-	var mapKey = make(map[string]interface{})
-	keys := make([]string, 0)
-	columns := make([]string, 0)
-	mv := reflect.Indirect(reflect.ValueOf(model))
-	modelType := mv.Type()
-	numField := modelType.NumField()
-	for i := 0; i < numField; i++ {
-		if colName, isKey, exist := CheckByIndex(modelType, i, update); exist {
-			f := mv.Field(i)
-			fieldValue := f.Interface()
-			isNil := false
-			if f.Kind() == reflect.Ptr {
-				if reflect.ValueOf(fieldValue).IsNil() {
-					isNil = true
-				} else {
-					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
-				}
-			}
-			if isKey {
-				columns = append(columns, colName)
-				if !isNil {
-					mapKey[colName] = fieldValue
-				}
-			} else {
-				keys = append(keys, colName)
-				if !isNil {
-					if boolValue, ok := fieldValue.(bool); ok {
-						valueS, okS := modelType.Field(i).Tag.Lookup(strconv.FormatBool(boolValue))
-						if okS {
-							mapData[colName] = valueS
-						} else {
-							mapData[colName] = boolValue
-						}
-					} else {
-						mapData[colName] = fieldValue
-					}
-				}
-			}
-		}
-	}
-	return mapData, mapKey, keys, columns
-}
-func CheckByIndex(modelType reflect.Type, index int, update bool) (col string, isKey bool, colExist bool) {
-	field := modelType.Field(index)
-	tag, _ := field.Tag.Lookup("gorm")
-	if strings.Contains(tag, IgnoreReadWrite) {
-		return "", false, false
-	}
-	if update {
-		if strings.Contains(tag, "update:false") {
-			return "", false, false
-		}
-	}
-	if has := strings.Contains(tag, "column"); has {
-		str1 := strings.Split(tag, ";")
-		num := len(str1)
-		for i := 0; i < num; i++ {
-			str2 := strings.Split(str1[i], ":")
-			for j := 0; j < len(str2); j++ {
-				if str2[j] == "column" {
-					isKey := strings.Contains(tag, "primary_key")
-					return str2[j+1], isKey, true
-				}
-			}
-		}
-	}
-	return "", false, false
-}
-
 func QuoteByDriver(key, driver string) string {
 	switch driver {
 	case DriverMysql:
@@ -293,7 +202,6 @@ func QuoteByDriver(key, driver string) string {
 		return fmt.Sprintf(`"%s"`, key)
 	}
 }
-
 func BuildResult(result int64, err error) (int64, error) {
 	if err != nil {
 		return result, err

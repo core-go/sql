@@ -161,40 +161,6 @@ func InitSingleResult(modelType reflect.Type) interface{} {
 func InitArrayResults(modelsType reflect.Type) interface{} {
 	return reflect.New(modelsType).Interface()
 }
-
-func setValue(model interface{}, index int, value interface{}) (interface{}, error) {
-	valueObject := reflect.Indirect(reflect.ValueOf(model))
-	switch reflect.ValueOf(model).Kind() {
-	case reflect.Ptr:
-		{
-			valueObject.Field(index).Set(reflect.ValueOf(value))
-			return model, nil
-		}
-	default:
-		if modelWithTypeValue, ok := model.(reflect.Value); ok {
-			_, err := setValueWithTypeValue(modelWithTypeValue, index, value)
-			return modelWithTypeValue.Interface(), err
-		}
-	}
-	return model, nil
-}
-func setValueWithTypeValue(model reflect.Value, index int, value interface{}) (reflect.Value, error) {
-	trueValue := reflect.Indirect(model)
-	switch trueValue.Kind() {
-	case reflect.Struct:
-		{
-			val := reflect.Indirect(reflect.ValueOf(value))
-			if trueValue.Field(index).Kind() == val.Kind() {
-				trueValue.Field(index).Set(reflect.ValueOf(value))
-				return trueValue, nil
-			} else {
-				return trueValue, fmt.Errorf("value's kind must same as field's kind")
-			}
-		}
-	default:
-		return trueValue, nil
-	}
-}
 func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 	numField := modelType.NumField()
 	for i := 0; i < numField; i++ {
@@ -576,24 +542,6 @@ func BuildToUpdateWithSchema(table string, model interface{}, buildParam func(in
 	query := fmt.Sprintf("update %v set %v where %v", table, strings.Join(values, ","), strings.Join(where, ","))
 	return query, args
 }
-func GetDBValue(v interface{}) (string, bool) {
-	switch v.(type) {
-	case string:
-		s0 := v.(string)
-		if len(s0) == 0 {
-			return "''", true
-		}
-		return "", false
-	case int:
-		return strconv.Itoa(v.(int)), true
-	case int64:
-		return strconv.FormatInt(v.(int64), 10), true
-	case int32:
-		return strconv.FormatInt(int64(v.(int32)), 10), true
-	default:
-		return "", false
-	}
-}
 func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version's index not found")
@@ -904,24 +852,6 @@ func GetColumnName(modelType reflect.Type, jsonName string) (col string, colExis
 	return jsonName, false
 }
 
-func GetColumnNameByIndex(ModelType reflect.Type, index int) (col string, colExist bool) {
-	fields := ModelType.Field(index)
-	tag, _ := fields.Tag.Lookup("gorm")
-
-	if has := strings.Contains(tag, "column"); has {
-		str1 := strings.Split(tag, ";")
-		num := len(str1)
-		for i := 0; i < num; i++ {
-			str2 := strings.Split(str1[i], ":")
-			for j := 0; j < len(str2); j++ {
-				if str2[j] == "column" {
-					return str2[j+1], true
-				}
-			}
-		}
-	}
-	return "", false
-}
 
 func GetJsonNameByIndex(ModelType reflect.Type, index int) (string, bool) {
 	field := ModelType.Field(index)
@@ -1101,13 +1031,7 @@ func GetTableName(object interface{}) string {
 	tableName := vo.MethodByName("TableName").Call([]reflect.Value{})
 	return tableName[0].String()
 }
-func BuildParametersFrom(i int, numCol int, buildParam func(int) string) string {
-	var arrValue []string
-	for j := 0; j < numCol; j++ {
-		arrValue = append(arrValue, buildParam(i+j+1))
-	}
-	return strings.Join(arrValue, ",")
-}
+
 func EscapeString(value string) string {
 	//replace := map[string]string{"'": `\'`, "\\0": "\\\\0", "\n": "\\n", "\r": "\\r", `"`: `\"`, "\x1a": "\\Z"}
 	//if strings.Contains(value, `\\`) {
