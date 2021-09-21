@@ -8,27 +8,6 @@ import (
 	"strings"
 )
 
-func GetDriver(db *sql.DB) string {
-	if db == nil {
-		return DriverNotSupport
-	}
-	driver := reflect.TypeOf(db.Driver()).String()
-	switch driver {
-	case "*pq.Driver":
-		return DriverPostgres
-	case "*godror.drv":
-		return DriverOracle
-	case "*mysql.MySQLDriver":
-		return DriverMysql
-	case "*mssql.Driver":
-		return DriverMssql
-	case "*sqlite3.SQLiteDriver":
-		return DriverSqlite3
-	default:
-		return DriverNotSupport
-	}
-}
-
 func Count(ctx context.Context, db *sql.DB, sql string, values ...interface{}) (int64, error) {
 	var total int64
 	row := db.QueryRowContext(ctx, sql, values...)
@@ -451,7 +430,98 @@ func Scans(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int) (
 	}
 	return
 }
+func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, indexIgnore int) (r []interface{}, swapValues map[int]interface{}) {
+	if s != nil {
+		modelType := reflect.TypeOf(s).Elem()
+		swapValues = make(map[int]interface{}, 0)
+		maps := reflect.Indirect(reflect.ValueOf(s))
 
+		if columns == nil {
+			for i := 0; i < maps.NumField(); i++ {
+				tagBool := modelType.Field(i).Tag.Get("true")
+				if tagBool == "" {
+					r = append(r, maps.Field(i).Addr().Interface())
+				} else {
+					var str string
+					swapValues[i] = reflect.New(reflect.TypeOf(str)).Elem().Addr().Interface()
+					r = append(r, swapValues[i])
+				}
+			}
+			return
+		}
+
+		for i, columnsName := range columns {
+			if i == indexIgnore {
+				continue
+			}
+			var index int
+			var ok bool
+			var modelField reflect.StructField
+			var valueField reflect.Value
+			if fieldsIndex == nil {
+				if modelField, ok = modelType.FieldByName(columnsName); !ok {
+					var t interface{}
+					r = append(r, &t)
+					continue
+				}
+				valueField = maps.FieldByName(columnsName)
+			} else {
+				if index, ok = fieldsIndex[columnsName]; !ok {
+					var t interface{}
+					r = append(r, &t)
+					continue
+				}
+				modelField = modelType.Field(index)
+				valueField = maps.Field(index)
+			}
+			x := valueField.Addr().Interface()
+			tagBool := modelField.Tag.Get("true")
+			if tagBool == "" {
+				r = append(r, x)
+			} else {
+				var str string
+				y := reflect.New(reflect.TypeOf(str))
+				swapValues[index] = y.Elem().Addr().Interface()
+				r = append(r, swapValues[index])
+			}
+		}
+	}
+	return
+}
+func SwapValuesToBool(s interface{}, swap *map[int]interface{}) {
+	if s != nil {
+		modelType := reflect.TypeOf(s).Elem()
+		maps := reflect.Indirect(reflect.ValueOf(s))
+		for index, element := range *swap {
+			dbValue2, ok2 := element.(*bool)
+			if ok2 {
+				if maps.Field(index).Kind() == reflect.Ptr {
+					maps.Field(index).Set(reflect.ValueOf(dbValue2))
+				} else {
+					maps.Field(index).SetBool(*dbValue2)
+				}
+			} else {
+				dbValue, ok := element.(*string)
+				if ok {
+					var isBool bool
+					if *dbValue == "true" {
+						isBool = true
+					} else if *dbValue == "false" {
+						isBool = false
+					} else {
+						boolStr := modelType.Field(index).Tag.Get("true")
+						isBool = *dbValue == boolStr
+					}
+					if maps.Field(index).Kind() == reflect.Ptr {
+						maps.Field(index).Set(reflect.ValueOf(&isBool))
+					} else {
+						maps.Field(index).SetBool(isBool)
+					}
+				}
+			}
+		}
+	}
+}
 func ScansAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int) ([]interface{}, int64, error) {
 	var t []interface{}
 	columns, er0 := GetColumns(rows.Columns())
@@ -537,16 +607,25 @@ type Proxy interface {
 	ExecBatchWithTx(ctx context.Context, tx string, commit bool, master bool, stm ...Statement) (int64, error)
 	QueryWithTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error
 
-	Insert(ctx context.Context, table string, model interface{}, driver string, options...func(int) string) (int64, error)
-	Update(ctx context.Context, table string, model interface{}, driver string, options...func(int) string) (int64, error)
-	Save(ctx context.Context, table string, model interface{}, options...string) (int64, error)
-	InsertBatch(ctx context.Context, table string, models interface{}, driver string, options...func(int) string) (int64, error)
-	UpdateBatch(ctx context.Context, table string, models interface{}, driver string, options...func(int) string) (int64, error)
-	SaveBatch(ctx context.Context, table string, models interface{}, options...string) (int64, error)
-	InsertWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, driver string, options...func(int) string) (int64, error)
-	UpdateWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, driver string, options...func(int) string) (int64, error)
-	SaveWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, options...string) (int64, error)
-	InsertBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...func(int) string) (int64, error)
-	UpdateBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...func(int) string) (int64, error)
-	SaveBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, options...string) (int64, error)
+	Insert(ctx context.Context, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error)
+	Update(ctx context.Context, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error)
+	Save(ctx context.Context, table string, model interface{}, driver string, options...Schema) (int64, error)
+	InsertBatch(ctx context.Context, table string, models interface{}, driver string) (int64, error)
+	UpdateBatch(ctx context.Context, table string, models interface{}, buildParam func(int) string, options...bool) (int64, error)
+	SaveBatch(ctx context.Context, table string, models interface{}, driver string) (int64, error)
+
+	InsertWithTx(ctx context.Context, tx string, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error)
+	UpdateWithTx(ctx context.Context, tx string, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error)
+	SaveWithTx(ctx context.Context, tx string, table string, model interface{}, driver string, options...bool) (int64, error)
+	InsertBatchWithTx(ctx context.Context, tx string, table string, models interface{}, driver string, options...bool) (int64, error)
+	UpdateBatchWithTx(ctx context.Context, tx string, table string, models interface{}, buildParam func(int) string, options...bool) (int64, error)
+	SaveBatchWithTx(ctx context.Context, tx string, table string, models interface{}, driver string, options...bool)
+
+	InsertAndCommit(ctx context.Context, tx string, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error)
+	UpdateAndCommit(ctx context.Context, tx string, table string, model interface{}, driver string, buildParam func(int) string, options...bool) (int64, error)
+	SaveAndCommit(ctx context.Context, tx string, table string, model interface{}, driver string) (int64, error)
+	InsertBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, driver string) (int64, error)
+	UpdateBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, buildParam func(int) string, options...bool)
+	SaveBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, driver string) (int64, error)
+
 }

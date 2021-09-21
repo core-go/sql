@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -146,4 +147,22 @@ func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64
 	}
 	MapToDB(&model, s.modelType)
 	return Patch(ctx, s.Database, s.table, model, s.modelType, s.BuildParam)
+}
+func MapToDB(model *map[string]interface{}, modelType reflect.Type) {
+	for colName, value := range *model {
+		if boolValue, boolOk := value.(bool); boolOk {
+			index := GetIndexByTag("json", colName, modelType)
+			if index > -1 {
+				valueS := modelType.Field(index).Tag.Get(strconv.FormatBool(boolValue))
+				valueInt, err := strconv.Atoi(valueS)
+				if err != nil {
+					(*model)[colName] = valueS
+				} else {
+					(*model)[colName] = valueInt
+				}
+				continue
+			}
+		}
+		(*model)[colName] = value
+	}
 }

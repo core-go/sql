@@ -102,63 +102,61 @@ func (c *ProxyClient) QueryWithTx(ctx context.Context, tx string, commit bool, r
 	return err
 }
 
-func (c *ProxyClient) Insert(ctx context.Context, table string, model interface{}, driver string, options...func(int) string) (int64, error) {
-	var buildParam func(int) string
+func (c *ProxyClient) Insert(ctx context.Context, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error) {
+	boolSupport := false
 	if len(options) > 0 {
-		buildParam = options[0]
-	} else {
-		buildParam = sql.GetBuildByDriver(driver)
+		boolSupport = options[0]
 	}
-	boolSupport := driver == sql.DriverPostgres || driver == sql.DriverCassandra
 	s, values := sql.BuildToInsert(table, model, buildParam, nil, boolSupport)
 	return c.Exec(ctx, s, values...)
 }
-func (c *ProxyClient) Update(ctx context.Context, table string, model interface{}, driver string, options...func(int) string) (int64, error) {
-	var buildParam func(int) string
+func (c *ProxyClient) Update(ctx context.Context, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error) {
+	boolSupport := false
 	if len(options) > 0 {
-		buildParam = options[0]
-	} else {
-		buildParam = sql.GetBuildByDriver(driver)
+		boolSupport = options[0]
 	}
-	boolSupport := driver == sql.DriverPostgres || driver == sql.DriverCassandra
 	s, values := sql.BuildToUpdate(table, model, buildParam, nil, boolSupport)
 	return c.Exec(ctx, s, values...)
 }
-func (c *ProxyClient) Save(ctx context.Context, table string, model interface{}, options...string) (int64, error) {
-	driver := sql.DriverPostgres
-	var buildParam func(int) string
-	if len(options) > 0 {
-		driver = options[0]
-	}
-	buildParam = sql.GetBuildByDriver(driver)
-	s, values, err := sql.BuildToSave(table, model, driver, buildParam)
-	if err != nil {
-		return -1, err
-	}
-	return c.Exec(ctx, s, values...)
-}
-func (c *ProxyClient) InsertBatch(ctx context.Context, table string, models interface{}, driver string, options...func(int) string) (int64, error) {
-	var buildParam func(int) string
-	if len(options) > 0 {
-		buildParam = options[0]
+func (c *ProxyClient) Save(ctx context.Context, table string, model interface{}, driver string, options...sql.Schema) (int64, error) {
+	buildParam := sql.GetBuildByDriver(driver)
+	if driver == sql.DriverPostgres || driver == sql.DriverOracle || driver == sql.DriverMysql || driver == sql.DriverMssql || driver == sql.DriverSqlite3 {
+		s, values, err := sql.BuildToSaveWithSchema(table, model, driver, buildParam, nil, options...)
+		if err != nil {
+			return -1, err
+		}
+		return c.Exec(ctx, s, values...)
 	} else {
-		buildParam = sql.GetBuildByDriver(driver)
+		s, values := sql.BuildToInsertWithSchema(table, model, -1, buildParam, true, true, nil, options...)
+		return c.Exec(ctx, s, values...)
 	}
-	// boolSupport := driver == sql.DriverPostgres || driver == sql.DriverCassandra
-	s, values, err := sql.BuildToInsertBatch(table, models, driver, nil, buildParam)
-	if err != nil {
-		return -1, err
-	}
-	return c.Exec(ctx, s, values...)
 }
-func (c *ProxyClient) UpdateBatch(ctx context.Context, table string, models interface{}, driver string, options...func(int) string) (int64, error) {
-	var buildParam func(int) string
-	if len(options) > 0 {
-		buildParam = options[0]
+func (c *ProxyClient) InsertBatch(ctx context.Context, table string, models interface{}, driver string) (int64, error) {
+	buildParam := sql.GetBuildByDriver(driver)
+	if driver == sql.DriverPostgres || driver == sql.DriverOracle || driver == sql.DriverMysql || driver == sql.DriverMssql || driver == sql.DriverSqlite3 {
+		s, values, err := sql.BuildToInsertBatch(table, models, driver, nil, buildParam)
+		if err != nil {
+			return -1, err
+		}
+		return c.Exec(ctx, s, values...)
 	} else {
-		buildParam = sql.GetBuildByDriver(driver)
+		boolSupport := driver == sql.DriverCassandra
+		s, er0 := sql.BuildInsertStatements(table, models, buildParam, nil, boolSupport)
+		if er0 != nil {
+			return -1, er0
+		}
+		if len(s) > 0 {
+			return c.ExecBatch(ctx, false, s...)
+		} else {
+			return 0, nil
+		}
 	}
-	boolSupport := driver == sql.DriverPostgres || driver == sql.DriverCassandra
+}
+func (c *ProxyClient) UpdateBatch(ctx context.Context, table string, models interface{}, buildParam func(int) string, options...bool) (int64, error) {
+	boolSupport := false
+	if len(options) > 0 {
+		boolSupport = options[0]
+	}
 	s, err := sql.BuildToUpdateBatch(table, models, buildParam, nil, boolSupport)
 	if err != nil {
 		return -1, err
@@ -169,80 +167,97 @@ func (c *ProxyClient) UpdateBatch(ctx context.Context, table string, models inte
 		return 0, nil
 	}
 }
-func (c *ProxyClient) SaveBatch(ctx context.Context, table string, models interface{}, options...string) (int64, error) {
-	driver := sql.DriverPostgres
-	var buildParam func(int) string
-	if len(options) > 0 {
-		driver = options[0]
-	}
-	buildParam = sql.GetBuildByDriver(driver)
-	s, err := sql.BuildToSaveBatch(table, models, driver, buildParam)
-	if err != nil {
-		return -1, err
-	}
-	if len(s) > 0 {
-		return c.ExecBatch(ctx, false, s...)
+func (c *ProxyClient) SaveBatch(ctx context.Context, table string, models interface{}, driver string) (int64, error) {
+	if driver == sql.DriverCassandra {
+		s, er0 := sql.BuildInsertStatementsWithVersion(table, models, -1, sql.BuildParam, nil, true, true)
+		if er0 != nil {
+			return -1, er0
+		}
+		if len(s) > 0 {
+			return c.ExecBatch(ctx, false, s...)
+		} else {
+			return 0, nil
+		}
 	} else {
-		return 0, nil
+		s, er1 := sql.BuildToSaveBatch(table, models, driver, nil)
+		if er1 != nil {
+			return -1, er1
+		}
+		if len(s) > 0 {
+			return c.ExecBatch(ctx, false, s...)
+		} else {
+			return 0, nil
+		}
 	}
 }
-func (c *ProxyClient) InsertWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, driver string, options...func(int) string) (int64, error) {
-	var buildParam func(int) string
+func (c *ProxyClient) InsertWithTx(ctx context.Context, tx string, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error) {
+	boolSupport := false
 	if len(options) > 0 {
-		buildParam = options[0]
-	} else {
-		buildParam = sql.GetBuildByDriver(driver)
+		boolSupport = options[0]
 	}
-	boolSupport := driver == sql.DriverPostgres || driver == sql.DriverCassandra
+	commit := true
 	s, values := sql.BuildToInsert(table, model, buildParam, nil, boolSupport)
 	return c.ExecWithTx(ctx, tx, commit, s, values...)
 }
-func (c *ProxyClient) UpdateWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, driver string, options...func(int) string) (int64, error) {
-	var buildParam func(int) string
+func (c *ProxyClient) UpdateWithTx(ctx context.Context, tx string, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error) {
+	boolSupport := false
 	if len(options) > 0 {
-		buildParam = options[0]
-	} else {
-		buildParam = sql.GetBuildByDriver(driver)
+		boolSupport = options[0]
 	}
-	boolSupport := driver == sql.DriverPostgres || driver == sql.DriverCassandra
+	commit := true
 	s, values := sql.BuildToUpdate(table, model, buildParam, nil, boolSupport)
 	return c.ExecWithTx(ctx, tx, commit, s, values...)
 }
-func (c *ProxyClient) SaveWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, options...string) (int64, error) {
-	driver := sql.DriverPostgres
-	var buildParam func(int) string
+func (c *ProxyClient) SaveWithTx(ctx context.Context, tx string, table string, model interface{}, driver string, options...bool) (int64, error) {
+	buildParam := sql.GetBuildByDriver(driver)
+	commit := false
 	if len(options) > 0 {
-		driver = options[0]
+		commit = options[0]
 	}
-	buildParam = sql.GetBuildByDriver(driver)
-	s, values, err := sql.BuildToSave(table, model, driver, buildParam)
-	if err != nil {
-		return -1, err
-	}
-	return c.ExecWithTx(ctx, tx, commit, s, values...)
-}
-func (c *ProxyClient) InsertBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...func(int) string) (int64, error) {
-	var buildParam func(int) string
-	if len(options) > 0 {
-		buildParam = options[0]
+	if driver == sql.DriverCassandra {
+		s, values := sql.BuildToInsertWithSchema(table, model, -1, buildParam, true, true, nil)
+		return c.ExecWithTx(ctx, tx, commit, s, values...)
 	} else {
-		buildParam = sql.GetBuildByDriver(driver)
+		s, values, err := sql.BuildToSaveWithSchema(table, model, driver, buildParam, nil)
+		if err != nil {
+			return -1, err
+		}
+		return c.ExecWithTx(ctx, tx, commit, s, values...)
 	}
-	// boolSupport := driver == sql.DriverPostgres || driver == sql.DriverCassandra
-	s, values, err := sql.BuildToInsertBatch(table, models, driver, nil, buildParam)
-	if err != nil {
-		return -1, err
-	}
-	return c.ExecWithTx(ctx, tx, commit, s, values...)
 }
-func (c *ProxyClient) UpdateBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...func(int) string) (int64, error) {
-	var buildParam func(int) string
+func (c *ProxyClient) InsertBatchWithTx(ctx context.Context, tx string, table string, models interface{}, driver string, options...bool) (int64, error) {
+	buildParam := sql.GetBuildByDriver(driver)
+	commit := false
 	if len(options) > 0 {
-		buildParam = options[0]
-	} else {
-		buildParam = sql.GetBuildByDriver(driver)
+		commit = options[0]
 	}
-	boolSupport := driver == sql.DriverPostgres || driver == sql.DriverCassandra
+	if driver == sql.DriverCassandra {
+		s, er0 := sql.BuildInsertStatements(table, models, buildParam, nil, true)
+		if er0 != nil {
+			return -1, er0
+		}
+		if len(s) > 0 {
+			return c.ExecBatchWithTx(ctx, tx, commit, false, s...)
+		} else {
+			return 0, nil
+		}
+	} else {
+		s, values, err := sql.BuildToInsertBatch(table, models, driver, nil, buildParam)
+		if err != nil {
+			return -1, err
+		}
+		return c.ExecWithTx(ctx, tx, commit, s, values...)
+	}
+}
+func (c *ProxyClient) UpdateBatchWithTx(ctx context.Context, tx string, table string, models interface{}, buildParam func(int) string, options...bool) (int64, error) {
+	boolSupport := false
+	if len(options) > 0 {
+		boolSupport = options[0]
+	}
+	commit := false
+	if len(options) > 1 {
+		commit = options[1]
+	}
 	s, err := sql.BuildToUpdateBatch(table, models, buildParam, nil, boolSupport)
 	if err != nil {
 		return -1, err
@@ -253,20 +268,61 @@ func (c *ProxyClient) UpdateBatchWithTx(ctx context.Context, tx string, commit b
 		return 0, nil
 	}
 }
-func (c *ProxyClient) SaveBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, options...string) (int64, error) {
-	driver := sql.DriverPostgres
-	var buildParam func(int) string
+func (c *ProxyClient) SaveBatchWithTx(ctx context.Context, tx string, table string, models interface{}, driver string, options...bool) (int64, error) {
+	commit := false
 	if len(options) > 0 {
-		driver = options[0]
+		commit = options[0]
 	}
-	buildParam = sql.GetBuildByDriver(driver)
-	s, err := sql.BuildToSaveBatch(table, models, driver, buildParam)
-	if err != nil {
-		return -1, err
-	}
-	if len(s) > 0 {
-		return c.ExecBatchWithTx(ctx, tx,  commit, false, s...)
+	if driver == sql.DriverCassandra {
+		s, er0 := sql.BuildInsertStatementsWithVersion(table, models, -1, sql.BuildParam, nil, true, true)
+		if er0 != nil {
+			return -1, er0
+		}
+		if len(s) > 0 {
+			return c.ExecBatchWithTx(ctx, tx, commit, false, s...)
+		} else {
+			return 0, nil
+		}
 	} else {
-		return 0, nil
+		s, er1 := sql.BuildToSaveBatch(table, models, driver, nil)
+		if er1 != nil {
+			return -1, er1
+		}
+		if len(s) > 0 {
+			return c.ExecBatchWithTx(ctx, tx,  commit, false, s...)
+		} else {
+			return 0, nil
+		}
 	}
+}
+
+func (c *ProxyClient) InsertAndCommit(ctx context.Context, tx string, table string, model interface{}, buildParam func(int) string, options...bool) (int64, error) {
+	boolSupport := false
+	if len(options) > 0 {
+		boolSupport = options[0]
+	}
+	return c.InsertWithTx(ctx, tx, table, model, buildParam, boolSupport, true)
+}
+func (c *ProxyClient) UpdateAndCommit(ctx context.Context, tx string, table string, model interface{}, driver string, buildParam func(int) string, options...bool) (int64, error) {
+	boolSupport := false
+	if len(options) > 0 {
+		boolSupport = options[0]
+	}
+	return c.UpdateWithTx(ctx, tx, table, model, buildParam, boolSupport, true)
+}
+func (c *ProxyClient) SaveAndCommit(ctx context.Context, tx string, table string, model interface{}, driver string) (int64, error) {
+	return c.SaveWithTx(ctx, tx, table, model, driver, true)
+}
+func (c *ProxyClient) InsertBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, driver string) (int64, error) {
+	return c.InsertBatchWithTx(ctx, tx, table, models, driver, true)
+}
+func (c *ProxyClient) UpdateBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, buildParam func(int) string, options...bool) (int64, error) {
+	boolSupport := false
+	if len(options) > 0 {
+		boolSupport = options[0]
+	}
+	return c.UpdateBatchWithTx(ctx, tx, table, models, buildParam, boolSupport, true)
+}
+func (c *ProxyClient) SaveBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, driver string) (int64, error) {
+	return c.SaveBatchWithTx(ctx, tx, table, models, driver, true)
 }

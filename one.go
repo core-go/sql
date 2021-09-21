@@ -17,7 +17,7 @@ func BuildToInsert(table string, model interface{}, buildParam func(int) string,
 	if len(options) > 0 {
 		boolSupport = options[0]
 	}
-	return BuildToInsertWithSchema(table, model, -1, buildParam, boolSupport, toArray)
+	return BuildToInsertWithSchema(table, model, -1, buildParam, boolSupport, false, toArray)
 }
 func BuildToInsertWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
@@ -27,9 +27,9 @@ func BuildToInsertWithVersion(table string, model interface{}, versionIndex int,
 	if len(options) > 0 {
 		boolSupport = options[0]
 	}
-	return BuildToInsertWithSchema(table, model, versionIndex, buildParam, boolSupport, toArray)
+	return BuildToInsertWithSchema(table, model, versionIndex, buildParam, boolSupport, false, toArray)
 }
-func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
+func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, includeNull bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options...Schema) (string, []interface{}) {
@@ -63,47 +63,52 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
 				}
 			}
-			if fdb.Insert && !isNil {
-				icols = append(icols, fdb.Column)
-				v, ok := GetDBValue(fieldValue)
-				if ok {
-					values = append(values, v)
+			if fdb.Insert {
+				if isNil {
+					if includeNull {
+						icols = append(icols, fdb.Column)
+						values = append(values, "null")
+					}
 				} else {
-					if boolValue, ok := fieldValue.(bool); ok {
-						if boolSupport {
-							if boolValue {
-								values = append(values, "true")
-							} else {
-								values = append(values, "false")
-							}
-						} else {
-							if boolValue {
-								if fdb.True != nil {
-									values = append(values, buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.True)
-								} else {
-									values = append(values, "'1'")
-								}
-							} else {
-								if fdb.False != nil {
-									values = append(values, buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.False)
-								} else {
-									values = append(values, "'0'")
-								}
-							}
-						}
+					icols = append(icols, fdb.Column)
+					v, ok := GetDBValue(fieldValue)
+					if ok {
+						values = append(values, v)
 					} else {
-						if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
-							values = append(values, buildParam(i))
-							i = i + 1
-							args = append(args, toArray(fieldValue))
+						if boolValue, ok := fieldValue.(bool); ok {
+							if boolSupport {
+								if boolValue {
+									values = append(values, "true")
+								} else {
+									values = append(values, "false")
+								}
+							} else {
+								if boolValue {
+									if fdb.True != nil {
+										values = append(values, buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.True)
+									} else {
+										values = append(values, "'1'")
+									}
+								} else {
+									if fdb.False != nil {
+										values = append(values, buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.False)
+									} else {
+										values = append(values, "'0'")
+									}
+								}
+							}
 						} else {
 							values = append(values, buildParam(i))
 							i = i + 1
-							args = append(args, fieldValue)
+							if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+								args = append(args, toArray(fieldValue))
+							} else {
+								args = append(args, fieldValue)
+							}
 						}
 					}
 				}
@@ -206,13 +211,11 @@ func BuildToUpdateWithSchema(table string, model interface{}, versionIndex int, 
 							}
 						}
 					} else {
+						values = append(values, col+"="+buildParam(i))
+						i = i + 1
 						if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
-							values = append(values, col+"="+buildParam(i))
-							i = i + 1
 							args = append(args, toArray(fieldValue))
 						} else {
-							values = append(values, col+"="+buildParam(i))
-							i = i + 1
 							args = append(args, fieldValue)
 						}
 					}

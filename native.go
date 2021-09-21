@@ -3,15 +3,27 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"strings"
 )
 
 // raw query
-func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int64, error) {
-	driver := GetDriver(db)
-	queryString, value, err := BuildToSave(table, model, driver)
+func Save(ctx context.Context, db *sql.DB, table string, model interface{}, options...func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}) (int64, error) {
+	var toArray func(interface{}) interface {
+		driver.Valuer
+		sql.Scanner
+	}
+	if len(options) > 0 {
+		toArray = options[0]
+	}
+	drive := GetDriver(db)
+	buildParam := GetBuild(db)
+	queryString, value, err := BuildToSaveWithSchema(table, model, drive, buildParam, toArray)
 	if err != nil {
 		return 0, err
 	}
@@ -22,9 +34,20 @@ func Save(ctx context.Context, db *sql.DB, table string, model interface{}) (int
 	return res.RowsAffected()
 }
 
-func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}) (int64, error) {
-	driver := GetDriver(db)
-	query, values, err0 := BuildToSave(table, model, driver)
+func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}) (int64, error) {
+	var toArray func(interface{}) interface {
+		driver.Valuer
+		sql.Scanner
+	}
+	if len(options) > 0 {
+		toArray = options[0]
+	}
+	drive := GetDriver(db)
+	buildParam := GetBuild(db)
+	query, values, err0 := BuildToSaveWithSchema(table, model, drive, buildParam, toArray)
 	if err0 != nil {
 		return -1, err0
 	}
@@ -34,18 +57,41 @@ func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model int
 	}
 	return r.RowsAffected()
 }
-
-func BuildToSave(table string, model interface{}, driver string, options...func(i int) string) (string, []interface{}, error) {
+func BuildToSave(table string, model interface{}, driver string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...Schema) (string, []interface{}, error) {
+	buildParam := GetBuildByDriver(driver)
+	return BuildToSaveWithSchema(table, model, driver, buildParam, toArray, options...)
+}
+func BuildToSaveWithSchema(table string, model interface{}, driver string, buildParam func(i int) string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...Schema) (string, []interface{}, error) {
 	// driver := GetDriver(db)
+	if buildParam == nil {
+		buildParam = GetBuildByDriver(driver)
+	}
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
+	/*
 	var buildParam func(i int) string
 	if len(options) > 0 {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuildByDriver(driver)
 	}
+	 */
 	mv := reflect.Indirect(reflect.ValueOf(model))
-	cols, keys, schema := MakeSchema(modelType)
+	var cols, keys []string
+	var schema map[string]FieldDB
+	if len(options) > 0 {
+		m := options[0]
+		cols = m.Columns
+		keys = m.Keys
+		schema = m.Fields
+	} else {
+		cols, keys, schema = MakeSchema(modelType)
+	}
 	if driver == DriverPostgres || driver == DriverMysql {
 		iCols := make([]string, 0)
 		values := make([]string, 0)
@@ -99,7 +145,11 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 					} else {
 						values = append(values, buildParam(i))
 						i = i + 1
-						args = append(args, fieldValue)
+						if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+							args = append(args, toArray(fieldValue))
+						} else {
+							args = append(args, fieldValue)
+						}
 					}
 				}
 			}
@@ -153,7 +203,11 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 						} else {
 							setColumns = append(setColumns, col+"="+buildParam(i))
 							i = i + 1
-							args = append(args, fieldValue)
+							if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+								args = append(args, toArray(fieldValue))
+							} else {
+								args = append(args, fieldValue)
+							}
 						}
 					}
 				}
@@ -240,7 +294,11 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 					} else {
 						values = append(values, buildParam(i))
 						i = i + 1
-						args = append(args, fieldValue)
+						if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+							args = append(args, toArray(fieldValue))
+						} else {
+							args = append(args, fieldValue)
+						}
 					}
 				}
 			}
@@ -304,10 +362,14 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 									variables = append(variables,"0 "+tkey)
 								}
 							}
-						}else {
+						} else {
 							variables = append(variables, buildParam(i)+" "+tkey)
-							values = append(values, fieldValue)
 							i++
+							if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+								values = append(values, toArray(fieldValue))
+							} else {
+								values = append(values, fieldValue)
+							}
 						}
 					}
 				}
@@ -354,14 +416,14 @@ func BuildToSave(table string, model interface{}, driver string, options...func(
 									variables = append(variables, "?")
 									values = append(values, *fdb.True)
 								} else {
-									variables = append(variables, "1 "+tkey)
+									variables = append(variables, "'1' "+tkey)
 								}
 							} else {
 								if fdb.False != nil {
 									variables = append(variables, "?")
 									values = append(values, *fdb.False)
 								} else {
-									variables = append(variables, "0 "+tkey)
+									variables = append(variables, "'0' "+tkey)
 								}
 							}
 						} else {

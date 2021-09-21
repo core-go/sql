@@ -121,3 +121,11 @@ func (s *StringService) Delete(ctx context.Context, values []string) (int64, err
 	}
 	return x.RowsAffected()
 }
+func BuildPlaceHolders(n int, buildParam func(int) string) string {
+	ss := make([]string, 0)
+	for i := 1; i <= n; i++ {
+		s := buildParam(i)
+		ss = append(ss, s)
+	}
+	return strings.Join(ss, ",")
+}
