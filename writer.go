@@ -46,8 +46,7 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	cols, keys, fields := MakeSchema(modelType)
-	schema := &Schema{Columns: cols, Keys: keys, Fields: fields}
+	schema := CreateSchema(modelType)
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
 		if index >= 0 {
@@ -66,7 +65,7 @@ func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapp
 }, options ...func(i int) string) *Writer {
 	return NewSqlWriterWithVersion(db, tableName, modelType, "", mapper, toArray, options...)
 }
-func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
+func NewWriterWithArray(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...Mapper) *Writer {
@@ -75,6 +74,13 @@ func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, toArray fun
 		mapper = options[0]
 	}
 	return NewWriterWithVersion(db, tableName, modelType, "", toArray, mapper)
+}
+func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) *Writer {
+	var mapper Mapper
+	if len(options) >= 1 {
+		mapper = options[0]
+	}
+	return NewWriterWithVersion(db, tableName, modelType, "", nil, mapper)
 }
 
 func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {

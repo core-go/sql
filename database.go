@@ -194,8 +194,14 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	}
 	return 0, err
 }
-
-func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
+func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, options ...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return InsertWithVersion(ctx, db, table, model, -1, nil, schema)
+}
+func InsertWithArray(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...*Schema) (int64, error) {
@@ -225,7 +231,14 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	}
 	return result.RowsAffected()
 }
-func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
+func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options ...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return InsertTxWithVersion(ctx, db, tx, table, model, -1, nil, schema)
+}
+func InsertTxWithArray(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...*Schema) (int64, error) {
@@ -256,7 +269,14 @@ func InsertTxWithVersion(ctx context.Context, db *sql.DB, tx *sql.Tx, table stri
 	return result.RowsAffected()
 }
 
-func Update(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
+func Update(ctx context.Context, db *sql.DB, table string, model interface{}, options...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return UpdateWithVersion(ctx, db, table, model, -1, nil, schema)
+}
+func UpdateWithArray(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options...*Schema) (int64, error) {
@@ -290,7 +310,14 @@ func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	}
 	return result.RowsAffected()
 }
-func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
+func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return UpdateTxWithVersion(ctx, db, tx, table, model, -1, nil, schema)
+}
+func UpdateTxWithArray(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options...*Schema) (int64, error) {
@@ -366,7 +393,7 @@ func PatchWithVersion(ctx context.Context, db *sql.DB, table string, model map[s
 		return 0, errors.New("version's column not found")
 	}
 
-	query, value := BuildPatchWithVersion(table, model, columNames, idJsonName, idcolumNames, buildParam, versionIndex, versionJsonName, versionColName)
+	query, value := BuildToPatchWithVersion(table, model, columNames, idJsonName, idcolumNames, buildParam, versionIndex, versionJsonName, versionColName)
 	if query == "" {
 		return 0, errors.New("fail to build query")
 	}
@@ -394,7 +421,15 @@ func Delete(ctx context.Context, db *sql.DB, table string, query map[string]inte
 	return BuildResult(result.RowsAffected())
 }
 
-func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
+func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...*Schema) (int64, error) {
+	buildParam := GetBuild(db)
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return InsertBatchWithSchema(ctx, db, tableName, models, nil, buildParam, schema)
+}
+func InsertBatchWithArray(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...*Schema) (int64, error) {
@@ -423,7 +458,13 @@ func InsertBatchWithSchema(ctx context.Context, db *sql.DB, tableName string, mo
 	}
 	return x.RowsAffected()
 }
-func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
+func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...*Schema) (int64, error) {
+	buildParam := GetBuild(db)
+	driver := GetDriver(db)
+	boolSupport := driver == DriverPostgres
+	return UpdateBatchWithVersion(ctx, db, tableName, models, -1, nil, buildParam, boolSupport, options...)
+}
+func UpdateBatchWithArray(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...*Schema) (int64, error) {
@@ -446,18 +487,8 @@ func UpdateBatchWithVersion(ctx context.Context, db *sql.DB, tableName string, m
 	return ExecuteAll(ctx, db, stmts...)
 }
 
-func Save(ctx context.Context, db *sql.DB, table string, model interface{}, options...func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}) (int64, error) {
-	var toArray func(interface{}) interface {
-		driver.Valuer
-		sql.Scanner
-	}
-	if len(options) > 0 {
-		toArray = options[0]
-	}
-	return SaveWithArray(ctx, db, table, model, toArray)
+func Save(ctx context.Context, db *sql.DB, table string, model interface{}, options...*Schema) (int64, error) {
+	return SaveWithArray(ctx, db, table, model, nil, options...)
 }
 func SaveWithArray(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
@@ -934,7 +965,7 @@ func IsPrimary(field Field) bool {
 	return GetTag(field, PrimaryKey) != ""
 }
 func ReplaceQueryArgs(driver string, query string) string {
-	if driver == DriverOracle || driver == DriverPostgres || driver == DriverSqlite3 {
+	if driver == DriverOracle || driver == DriverPostgres {
 		var x string
 		if driver == DriverOracle {
 			x = ":"

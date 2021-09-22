@@ -32,8 +32,7 @@ func NewSqlWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, m
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	cols, keys, fields := MakeSchema(modelType)
-	schema := &Schema{Columns: cols, Keys: keys, Fields: fields}
+	schema := CreateSchema(modelType)
 	return &SqlWriter{db: db, tableName: tableName, BuildParam: buildParam, Map: mp, BoolSupport: boolSupport, schema: schema, ToArray: toArray}
 }
 

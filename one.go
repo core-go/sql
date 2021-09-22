@@ -8,23 +8,25 @@ import (
 	"strconv"
 	"strings"
 )
-
-func BuildToInsert(table string, model interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
+func BuildToInsert(table string, model interface{}, buildParam func(int) string, boolSupport bool, options ...*Schema) (string, []interface{}) {
+	return BuildToInsertWithSchema(table, model, -1, buildParam, boolSupport, false, nil, options...)
+}
+func BuildToInsertWithArray(table string, model interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (string, []interface{}) {
+}, options ...*Schema) (string, []interface{}) {
 	return BuildToInsertWithSchema(table, model, -1, buildParam, boolSupport, false, toArray, options...)
 }
 func BuildToInsertWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (string, []interface{}) {
+}, options ...*Schema) (string, []interface{}) {
 	return BuildToInsertWithSchema(table, model, versionIndex, buildParam, boolSupport, false, toArray, options...)
 }
 func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, includeNull bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (string, []interface{}) {
+}, options ...*Schema) (string, []interface{}) {
 	modelType := reflect.TypeOf(model)
 	var cols []string
 	var schema map[string]FieldDB
@@ -45,7 +47,12 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 			icols = append(icols, col)
 			values = append(values, "1")
 		} else {
-			f := mv.Field(fdb.Index)
+			var f reflect.Value
+			if mv.Kind() == reflect.Ptr {
+				f = mv.Elem().Field(fdb.Index)
+			} else {
+				f = mv.Field(fdb.Index)
+			}
 			fieldValue := f.Interface()
 			isNil := false
 			if f.Kind() == reflect.Ptr {
@@ -109,16 +116,19 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 	}
 	return fmt.Sprintf("insert into %v(%v) values (%v)", table, strings.Join(icols, ","), strings.Join(values, ",")), args
 }
-func BuildToUpdate(table string, model interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
+func BuildToUpdate(table string, model interface{}, buildParam func(int) string, boolSupport bool, options ...*Schema) (string, []interface{}) {
+	return BuildToUpdateWithVersion(table, model, -1, buildParam, boolSupport, nil, options...)
+}
+func BuildToUpdateWithArray(table string, model interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (string, []interface{}) {
+}, options ...*Schema) (string, []interface{}) {
 	return BuildToUpdateWithVersion(table, model, -1, buildParam, boolSupport, toArray, options...)
 }
 func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (string, []interface{}) {
+}, options ...*Schema) (string, []interface{}) {
 	var cols, keys []string
 	var schema map[string]FieldDB
 	modelType := reflect.TypeOf(model)
@@ -142,7 +152,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 			valueOfModel := reflect.Indirect(reflect.ValueOf(model))
 			currentVersion := reflect.Indirect(valueOfModel.Field(versionIndex)).Int()
 			nv := currentVersion + 1
-			values = append(values, col+"=" + strconv.FormatInt(nv, 10))
+			values = append(values, col+"="+strconv.FormatInt(nv, 10))
 			vw = col + "=" + strconv.FormatInt(currentVersion, 10)
 		} else if !fdb.Key && fdb.Update {
 			f := mv.Field(fdb.Index)
@@ -263,7 +273,7 @@ func BuildToPatch(table string, model map[string]interface{}, mapJsonColum map[s
 	return query, value
 }
 
-func BuildPatchWithVersion(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, buildParam func(int) string, versionIndex int, versionJsonName, versionColName string) (string, []interface{}) {
+func BuildToPatchWithVersion(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, buildParam func(int) string, versionIndex int, versionJsonName, versionColName string) (string, []interface{}) {
 	if versionIndex < 0 {
 		panic("version's index not found")
 	}

@@ -32,14 +32,28 @@ type Schema struct {
 	Columns []string
 	Fields  map[string]FieldDB
 }
-
+func CreateSchema(modelType reflect.Type) *Schema {
+	cols, keys, schema := MakeSchema(modelType)
+	s := &Schema{Columns: cols, Keys: keys, Fields: schema}
+	return s
+}
 func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB) {
-	numField := modelType.NumField()
+	numField := 0
+	if modelType.Kind() == reflect.Ptr {
+		numField = modelType.Elem().NumField()
+	} else {
+		numField = modelType.NumField()
+	}
 	columns := make([]string, 0)
 	keys := make([]string, 0)
 	schema := make(map[string]FieldDB, 0)
 	for idx := 0; idx < numField; idx++ {
-		field := modelType.Field(idx)
+		var field reflect.StructField
+		if modelType.Kind() == reflect.Ptr {
+			field = modelType.Elem().Field(idx)
+		} else {
+			field = modelType.Field(idx)
+		}
 		tag, _ := field.Tag.Lookup("gorm")
 		if !strings.Contains(tag, IgnoreReadWrite) {
 			update := !strings.Contains(tag, "update:false")

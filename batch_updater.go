@@ -59,8 +59,7 @@ func NewSqlBatchUpdater(db *sql.DB, tableName string, modelType reflect.Type, ve
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	cols, keys, fields := MakeSchema(modelType)
-	schema := &Schema{Columns: cols, Keys: keys, Fields: fields}
+	schema := CreateSchema(modelType)
 	return &BatchUpdater{db: db, tableName: tableName, Schema: schema, BoolSupport: boolSupport, VersionIndex: versionIndex, Map: mp, BuildParam: buildParam, ToArray: toArray}
 }
 func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []int, error) {

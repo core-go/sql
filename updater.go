@@ -49,8 +49,7 @@ func NewSqlUpdater(db *sql.DB, tableName string, modelType reflect.Type, mp func
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	cols, keys, fields := MakeSchema(modelType)
-	schema := &Schema{Columns: cols, Keys: keys, Fields: fields}
+	schema := CreateSchema(modelType)
 	return &Updater{db: db, tableName: tableName, VersionIndex: -1, BoolSupport: boolSupport, schema: schema, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 

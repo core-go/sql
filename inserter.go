@@ -50,8 +50,7 @@ func NewSqlInserter(db *sql.DB, tableName string, modelType reflect.Type, mp fun
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	cols, keys, fields := MakeSchema(modelType)
-	schema := &Schema{Columns: cols, Keys: keys, Fields: fields}
+	schema := CreateSchema(modelType)
 	return &Inserter{db: db, BoolSupport: boolSupport, VersionIndex: -1, schema: schema, tableName: tableName, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 

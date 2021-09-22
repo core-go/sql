@@ -25,8 +25,7 @@ func BuildInsertStatementsWithVersion(table string, models interface{}, versionI
 	} else {
 		first := s.Index(0).Interface()
 		modelType := reflect.TypeOf(first)
-		cols, keys, schema := MakeSchema(modelType)
-		strt = &Schema{Columns: cols, Keys: keys, Fields: schema}
+		strt = CreateSchema(modelType)
 	}
 	slen := s.Len()
 	stmts := make([]Statement, 0)
@@ -39,11 +38,14 @@ func BuildInsertStatementsWithVersion(table string, models interface{}, versionI
 	}
 	return stmts, nil
 }
-func BuildInsertStatements(table string, models interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
+func BuildInsertStatementsWithArray(table string, models interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options...*Schema) ([]Statement, error) {
 	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, boolSupport, toArray, false, options...)
+}
+func BuildInsertStatements(table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) ([]Statement, error) {
+	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, boolSupport, nil, false, options...)
 }
 func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
@@ -69,8 +71,7 @@ func BuildToUpdateBatchWithVersion(table string, models interface{}, versionInde
 	} else {
 		first := s.Index(0).Interface()
 		modelType := reflect.TypeOf(first)
-		cols, keys, schema := MakeSchema(modelType)
-		strt = &Schema{Columns: cols, Keys: keys, Fields: schema}
+		strt = CreateSchema(modelType)
 	}
 	stmts := make([]Statement, 0)
 	for j := 0; j < slen; j++ {
@@ -82,7 +83,11 @@ func BuildToUpdateBatchWithVersion(table string, models interface{}, versionInde
 	}
 	return stmts, nil
 }
-func BuildToInsertBatch(table string, models interface{}, driver string, toArray func(interface{}) interface {
+func BuildToInsertBatch(table string, models interface{}, driver string, options ...*Schema) (string, []interface{}, error) {
+	buildParam := GetBuildByDriver(driver)
+	return BuildToInsertBatchWithSchema(table, models, driver, nil, buildParam, options...)
+}
+func BuildToInsertBatchWithArray(table string, models interface{}, driver string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...*Schema) (string, []interface{}, error) {
@@ -265,8 +270,7 @@ func BuildToSaveBatchWithSchema(table string, models interface{}, drive string, 
 	} else {
 		first := s.Index(0).Interface()
 		modelType := reflect.TypeOf(first)
-		cols, keys, schema := MakeSchema(modelType)
-		strt = &Schema{Columns: cols, Keys: keys, Fields: schema}
+		strt = CreateSchema(modelType)
 	}
 	stmts := make([]Statement, 0)
 	for j := 0; j < slen; j++ {

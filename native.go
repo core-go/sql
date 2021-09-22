@@ -7,8 +7,11 @@ import (
 	"reflect"
 	"strings"
 )
-
-func BuildToSave(table string, model interface{}, driver string, toArray func(interface{}) interface {
+func BuildToSave(table string, model interface{}, driver string, options...*Schema) (string, []interface{}, error) {
+	buildParam := GetBuildByDriver(driver)
+	return BuildToSaveWithSchema(table, model, driver, buildParam, nil, options...)
+}
+func BuildToSaveWithArray(table string, model interface{}, driver string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options...*Schema) (string, []interface{}, error) {

@@ -49,8 +49,7 @@ func NewSqlBatchInserter(db *sql.DB, tableName string, modelType reflect.Type, m
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	cols, keys, fields := MakeSchema(modelType)
-	schema := &Schema{Columns: cols, Keys: keys, Fields: fields}
+	schema := CreateSchema(modelType)
 	return &BatchInserter{db: db, tableName: tableName, BuildParam: buildParam, BoolSupport: boolSupport, Schema: schema, Map: mp, ToArray: toArray}
 }
 
