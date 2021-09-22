@@ -7,26 +7,11 @@ import (
 	"reflect"
 	"strings"
 )
-func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, toArray func(interface{}) interface {
+
+func BuildInsertStatementsWithVersion(table string, models interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...bool) ([]Statement, error) {
-	return BuildToUpdateBatchWithVersion(table, models, -1, buildParam, toArray, options...)
-}
-func BuildInsertStatements(table string, models interface{}, buildParam func(int) string, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...bool) ([]Statement, error) {
-	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, toArray, false, options...)
-}
-func BuildInsertStatementsWithVersion(table string, models interface{}, versionIndex int, buildParam func(int) string, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, includeNull bool, options ...bool) ([]Statement, error) {
-	boolSupport := false
-	if len(options) > 0 {
-		boolSupport = options[0]
-	}
+}, includeNull bool, options...*Schema) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models is not a slice")
@@ -34,10 +19,15 @@ func BuildInsertStatementsWithVersion(table string, models interface{}, versionI
 	if s.Len() <= 0 {
 		return nil, nil
 	}
-	first := s.Index(0).Interface()
-	modelType := reflect.TypeOf(first)
-	cols, keys, schema := MakeSchema(modelType)
-	strt := Schema{Columns: cols, Keys: keys, Fields: schema}
+	var strt *Schema
+	if len(options) > 0 {
+		strt = options[0]
+	} else {
+		first := s.Index(0).Interface()
+		modelType := reflect.TypeOf(first)
+		cols, keys, schema := MakeSchema(modelType)
+		strt = &Schema{Columns: cols, Keys: keys, Fields: schema}
+	}
 	slen := s.Len()
 	stmts := make([]Statement, 0)
 	for j := 0; j < slen; j++ {
@@ -49,31 +39,44 @@ func BuildInsertStatementsWithVersion(table string, models interface{}, versionI
 	}
 	return stmts, nil
 }
-func BuildToUpdateBatchWithVersion(table string, models interface{}, versionIndex int, buildParam func(int) string, toArray func(interface{}) interface {
+func BuildInsertStatements(table string, models interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...bool) ([]Statement, error) {
-	boolSupport := false
-	if len(options) > 0 {
-		boolSupport = options[0]
-	}
+}, options...*Schema) ([]Statement, error) {
+	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, boolSupport, toArray, false, options...)
+}
+func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...*Schema) ([]Statement, error) {
+	return BuildToUpdateBatchWithVersion(table, models, -1, buildParam, boolSupport, toArray, options...)
+}
+func BuildToUpdateBatchWithVersion(table string, models interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...*Schema) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models is not a slice")
 	}
-	if s.Len() <= 0 {
+	slen := s.Len()
+	if slen <= 0 {
 		return nil, nil
 	}
-	first := s.Index(0).Interface()
-	modelType := reflect.TypeOf(first)
-	cols, keys, schema := MakeSchema(modelType)
-	strt := Schema{Columns: cols, Keys: keys, Fields: schema}
-	slen := s.Len()
+	var strt *Schema
+	if len(options) > 0 {
+		strt = options[0]
+	} else {
+		first := s.Index(0).Interface()
+		modelType := reflect.TypeOf(first)
+		cols, keys, schema := MakeSchema(modelType)
+		strt = &Schema{Columns: cols, Keys: keys, Fields: schema}
+	}
 	stmts := make([]Statement, 0)
 	for j := 0; j < slen; j++ {
 		model := s.Index(j).Interface()
 		// mv := reflect.ValueOf(model)
-		query, args := BuildToUpdateWithSchema(table, model, versionIndex, buildParam, boolSupport, toArray, strt)
+		query, args := BuildToUpdateWithVersion(table, model, versionIndex, buildParam, boolSupport, toArray, strt)
 		s := Statement{Query: query, Params: args}
 		stmts = append(stmts, s)
 	}
@@ -82,27 +85,37 @@ func BuildToUpdateBatchWithVersion(table string, models interface{}, versionInde
 func BuildToInsertBatch(table string, models interface{}, driver string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(int) string) (string, []interface{}, error) {
-	var buildParam func(int) string
-	if len(options) > 0 {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuildByDriver(driver)
-	}
-
+}, options ...*Schema) (string, []interface{}, error) {
+	buildParam := GetBuildByDriver(driver)
+	return BuildToInsertBatchWithSchema(table, models, driver, toArray, buildParam, options...)
+}
+func BuildToInsertBatchWithSchema(table string, models interface{}, driver string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, buildParam func(int) string, options ...*Schema) (string, []interface{}, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return "", nil, fmt.Errorf("models must be a slice")
 	}
-	if s.Len() == 0 {
+	slen := s.Len()
+	if slen <= 0 {
 		return "", nil, nil
+	}
+	if buildParam == nil {
+		buildParam = GetBuildByDriver(driver)
+	}
+	var cols []string
+	var schema map[string]FieldDB
+	if len(options) > 0 {
+		cols = options[0].Columns
+		schema = options[0].Fields
+	} else {
+		first := s.Index(0).Interface()
+		modelType := reflect.TypeOf(first)
+		cols, _, schema = MakeSchema(modelType)
 	}
 	placeholders := make([]string, 0)
 	args := make([]interface{}, 0)
-	first := s.Index(0).Interface()
-	modelType := reflect.TypeOf(first)
-	cols, _, schema := MakeSchema(modelType)
-	slen := s.Len()
 	if driver != DriverOracle {
 		i := 1
 		for j := 0; j < slen; j++ {
@@ -155,13 +168,11 @@ func BuildToInsertBatch(table string, models interface{}, driver string, toArray
 								}
 							}
 						} else {
+							values = append(values, buildParam(i))
+							i = i + 1
 							if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
-								values = append(values, buildParam(i))
-								i = i + 1
 								args = append(args, toArray(fieldValue))
 							} else {
-								values = append(values, buildParam(i))
-								i = i + 1
 								args = append(args, fieldValue)
 							}
 						}
@@ -178,12 +189,12 @@ func BuildToInsertBatch(table string, models interface{}, driver string, toArray
 		))
 		return query, args, nil
 	} else {
+		i := 1
 		for j := 0; j < slen; j++ {
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
 			iCols := make([]string, 0)
 			values := make([]string, 0)
-			i := 1
 			for _, col := range cols {
 				fdb := schema[col]
 				f := mv.Field(fdb.Index)
@@ -235,30 +246,28 @@ func BuildToInsertBatch(table string, models interface{}, driver string, toArray
 		return query, args, nil
 	}
 }
-func BuildToSaveBatch(table string, models interface{}, drive string, options ...func(interface{}) interface {
+func BuildToSaveBatchWithSchema(table string, models interface{}, drive string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}) ([]Statement, error) {
+}, options ...*Schema) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models must be a slice")
 	}
-	if s.Len() == 0 {
+	slen := s.Len()
+	if slen <= 0 {
 		return nil, nil
 	}
-	var toArray func(interface{}) interface {
-		driver.Valuer
-		sql.Scanner
-	}
-	if len(options) > 0 {
-		toArray = options[0]
-	}
 	buildParam := GetBuildByDriver(drive)
-	first := s.Index(0).Interface()
-	modelType := reflect.TypeOf(first)
-	cols, keys, schema := MakeSchema(modelType)
-	strt := Schema{Columns: cols, Keys: keys, Fields: schema}
-	slen := s.Len()
+	var strt *Schema
+	if len(options) > 0 {
+		strt = options[0]
+	} else {
+		first := s.Index(0).Interface()
+		modelType := reflect.TypeOf(first)
+		cols, keys, schema := MakeSchema(modelType)
+		strt = &Schema{Columns: cols, Keys: keys, Fields: schema}
+	}
 	stmts := make([]Statement, 0)
 	for j := 0; j < slen; j++ {
 		model := s.Index(j).Interface()

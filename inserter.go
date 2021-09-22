@@ -8,19 +8,27 @@ import (
 )
 
 type Inserter struct {
-	db         *sql.DB
-	tableName  string
-	BuildParam func(i int) string
-	Map        func(ctx context.Context, model interface{}) (interface{}, error)
-	ToArray    func(interface{}) interface {
+	db           *sql.DB
+	tableName    string
+	BuildParam   func(i int) string
+	Map          func(ctx context.Context, model interface{}) (interface{}, error)
+	BoolSupport  bool
+	VersionIndex int
+	schema       *Schema
+	ToArray      func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
-	boolSupport bool
-	schema      Schema
 }
 
-func NewInserter(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
+func NewInserter(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) *Inserter {
+	var mp func(context.Context, interface{}) (interface{}, error)
+	if len(options) >= 1 {
+		mp = options[0]
+	}
+	return NewSqlInserter(db, tableName, modelType, mp, nil)
+}
+func NewInserterWithArray(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(context.Context, interface{}) (interface{}, error)) *Inserter {
@@ -43,8 +51,8 @@ func NewSqlInserter(db *sql.DB, tableName string, modelType reflect.Type, mp fun
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
 	cols, keys, fields := MakeSchema(modelType)
-	schema := Schema{Columns: cols, Keys: keys, Fields: fields}
-	return &Inserter{db: db, boolSupport: boolSupport, schema: schema, tableName: tableName, BuildParam: buildParam, Map: mp, ToArray: toArray}
+	schema := &Schema{Columns: cols, Keys: keys, Fields: fields}
+	return &Inserter{db: db, BoolSupport: boolSupport, VersionIndex: -1, schema: schema, tableName: tableName, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
 func (w *Inserter) Write(ctx context.Context, model interface{}) error {
@@ -54,11 +62,11 @@ func (w *Inserter) Write(ctx context.Context, model interface{}) error {
 			return er0
 		}
 
-		queryInsert, values := BuildToInsertWithSchema(w.tableName, m2, -1, w.BuildParam, w.boolSupport, false, w.ToArray)
+		queryInsert, values := BuildToInsertWithSchema(w.tableName, m2, w.VersionIndex, w.BuildParam, w.BoolSupport, false, w.ToArray, w.schema)
 		_, err := w.db.ExecContext(ctx, queryInsert, values...)
 		return err
 	}
-	queryInsert, values := BuildToInsertWithSchema(w.tableName, model, -1, w.BuildParam, w.boolSupport, false, w.ToArray)
+	queryInsert, values := BuildToInsertWithSchema(w.tableName, model, w.VersionIndex, w.BuildParam, w.BoolSupport, false, w.ToArray, w.schema)
 	_, err := w.db.ExecContext(ctx, queryInsert, values...)
 	return err
 }

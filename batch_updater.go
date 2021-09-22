@@ -8,47 +8,60 @@ import (
 )
 
 type BatchUpdater struct {
-	db         *sql.DB
-	tableName  string
-	BuildParam func(i int) string
-	Map        func(ctx context.Context, model interface{}) (interface{}, error)
-	ToArray    func(interface{}) interface {
+	db           *sql.DB
+	tableName    string
+	BuildParam   func(i int) string
+	Map          func(ctx context.Context, model interface{}) (interface{}, error)
+	BoolSupport  bool
+	VersionIndex int
+	Schema       *Schema
+	ToArray      func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
-	versionIndex int
 }
-func NewBatchUpdater(db *sql.DB, tableName string, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
+func NewBatchUpdater(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
 	}
-	return NewSqlBatchUpdater(db, tableName, -1, mp, toArray)
+	return NewSqlBatchUpdater(db, tableName, modelType, -1, mp, nil)
 }
-func NewBatchUpdaterWithVersion(db *sql.DB, tableName string, versionIndex int, toArray func(interface{}) interface {
+func NewBatchUpdaterWithArray(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
+}, options ...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
 	}
-	return NewSqlBatchUpdater(db, tableName, versionIndex, mp, toArray)
+	return NewSqlBatchUpdater(db, tableName, modelType, -1, mp, toArray)
 }
-func NewSqlBatchUpdater(db *sql.DB, tableName string, versionIndex int, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+func NewBatchUpdaterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionIndex int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-},options...func(i int) string) *BatchUpdater {
+}, options ...func(context.Context, interface{}) (interface{}, error)) *BatchUpdater {
+	var mp func(context.Context, interface{}) (interface{}, error)
+	if len(options) > 0 && options[0] != nil {
+		mp = options[0]
+	}
+	return NewSqlBatchUpdater(db, tableName, modelType, versionIndex, mp, toArray)
+}
+func NewSqlBatchUpdater(db *sql.DB, tableName string, modelType reflect.Type, versionIndex int, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(i int) string) *BatchUpdater {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuild(db)
 	}
-	return &BatchUpdater{db: db, tableName: tableName, versionIndex: versionIndex, Map: mp, BuildParam: buildParam, ToArray: toArray}
+	driver := GetDriver(db)
+	boolSupport := driver == DriverPostgres
+	cols, keys, fields := MakeSchema(modelType)
+	schema := &Schema{Columns: cols, Keys: keys, Fields: fields}
+	return &BatchUpdater{db: db, tableName: tableName, Schema: schema, BoolSupport: boolSupport, VersionIndex: versionIndex, Map: mp, BuildParam: buildParam, ToArray: toArray}
 }
 func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
@@ -66,7 +79,7 @@ func (w *BatchUpdater) Write(ctx context.Context, models interface{}) ([]int, []
 	} else {
 		models2 = models
 	}
-	_, err := UpdateBatchWithVersion(ctx, w.db, w.tableName, models2, w.versionIndex, w.ToArray, w.BuildParam)
+	_, err := UpdateBatchWithVersion(ctx, w.db, w.tableName, models2, w.VersionIndex, w.ToArray, w.BuildParam, w.BoolSupport, w.Schema)
 	s := reflect.ValueOf(models)
 	if err == nil {
 		// Return full success

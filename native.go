@@ -1,7 +1,6 @@
 package sql
 
 import (
-	"context"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -9,78 +8,22 @@ import (
 	"strings"
 )
 
-// raw query
-func Save(ctx context.Context, db *sql.DB, table string, model interface{}, options...func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}) (int64, error) {
-	var toArray func(interface{}) interface {
-		driver.Valuer
-		sql.Scanner
-	}
-	if len(options) > 0 {
-		toArray = options[0]
-	}
-	drive := GetDriver(db)
-	buildParam := GetBuild(db)
-	queryString, value, err := BuildToSaveWithSchema(table, model, drive, buildParam, toArray)
-	if err != nil {
-		return 0, err
-	}
-	res, err := db.ExecContext(ctx, queryString, value...)
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected()
-}
-
-func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}) (int64, error) {
-	var toArray func(interface{}) interface {
-		driver.Valuer
-		sql.Scanner
-	}
-	if len(options) > 0 {
-		toArray = options[0]
-	}
-	drive := GetDriver(db)
-	buildParam := GetBuild(db)
-	query, values, err0 := BuildToSaveWithSchema(table, model, drive, buildParam, toArray)
-	if err0 != nil {
-		return -1, err0
-	}
-	r, err1 := tx.ExecContext(ctx, query, values...)
-	if err1 != nil {
-		return -1, err1
-	}
-	return r.RowsAffected()
-}
 func BuildToSave(table string, model interface{}, driver string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...Schema) (string, []interface{}, error) {
+}, options...*Schema) (string, []interface{}, error) {
 	buildParam := GetBuildByDriver(driver)
 	return BuildToSaveWithSchema(table, model, driver, buildParam, toArray, options...)
 }
 func BuildToSaveWithSchema(table string, model interface{}, driver string, buildParam func(i int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...Schema) (string, []interface{}, error) {
+}, options...*Schema) (string, []interface{}, error) {
 	// driver := GetDriver(db)
 	if buildParam == nil {
 		buildParam = GetBuildByDriver(driver)
 	}
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
-	/*
-	var buildParam func(i int) string
-	if len(options) > 0 {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuildByDriver(driver)
-	}
-	 */
 	mv := reflect.Indirect(reflect.ValueOf(model))
 	var cols, keys []string
 	var schema map[string]FieldDB

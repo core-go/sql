@@ -17,10 +17,10 @@ type BatchPatcher struct {
 	modelsTypes reflect.Type
 }
 
-func NewBatchPatcher(db *sql.DB, tableName string, modelType reflect.Type, options...func(i int) string) *BatchPatcher {
+func NewBatchPatcher(db *sql.DB, tableName string, modelType reflect.Type, options ...func(i int) string) *BatchPatcher {
 	return NewBatchPatcherWithIds(db, tableName, modelType, nil, options...)
 }
-func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type, fieldName []string, options...func(i int) string) *BatchPatcher {
+func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type, fieldName []string, options ...func(i int) string) *BatchPatcher {
 	modelsTypes := reflect.Zero(reflect.SliceOf(modelType)).Type()
 	idJsonName := make([]string, 0)
 	if fieldName == nil || len(fieldName) == 0 {

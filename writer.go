@@ -20,7 +20,7 @@ type Writer struct {
 		driver.Valuer
 		sql.Scanner
 	}
-	schema      Schema
+	schema      *Schema
 	BoolSupport bool
 }
 
@@ -47,7 +47,7 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
 	cols, keys, fields := MakeSchema(modelType)
-	schema := Schema{Columns: cols, Keys: keys, Fields: fields}
+	schema := &Schema{Columns: cols, Keys: keys, Fields: fields}
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
 		if index >= 0 {
@@ -83,14 +83,14 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		queryInsert, values := BuildToInsertWithVersion(s.table, m2, s.versionIndex, s.BuildParam, s.ToArray, s.BoolSupport)
+		queryInsert, values := BuildToInsertWithVersion(s.table, m2, s.versionIndex, s.BuildParam, s.BoolSupport, s.ToArray, s.schema)
 		result, err := s.Database.ExecContext(ctx, queryInsert, values...)
 		if err != nil {
 			return handleDuplicate(s.Database, err)
 		}
 		return result.RowsAffected()
 	}
-	queryInsert, values := BuildToInsertWithVersion(s.table, model, s.versionIndex, s.BuildParam, s.ToArray, s.BoolSupport)
+	queryInsert, values := BuildToInsertWithVersion(s.table, model, s.versionIndex, s.BuildParam, s.BoolSupport, s.ToArray, s.schema)
 	result, err := s.Database.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
 		return handleDuplicate(s.Database, err)
@@ -104,14 +104,14 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		query, values := BuildToUpdateWithVersion(s.table, m2, s.versionIndex, s.BuildParam, s.ToArray, s.BoolSupport)
+		query, values := BuildToUpdateWithVersion(s.table, m2, s.versionIndex, s.BuildParam, s.BoolSupport, s.ToArray, s.schema)
 		result, err := s.Database.ExecContext(ctx, query, values...)
 		if err != nil {
 			return -1, err
 		}
 		return result.RowsAffected()
 	}
-	query, values := BuildToUpdateWithVersion(s.table, model, s.versionIndex, s.BuildParam, s.ToArray, s.BoolSupport)
+	query, values := BuildToUpdateWithVersion(s.table, model, s.versionIndex, s.BuildParam, s.BoolSupport, s.ToArray, s.schema)
 	result, err := s.Database.ExecContext(ctx, query, values...)
 	if err != nil {
 		return -1, err
@@ -125,9 +125,9 @@ func (s *Writer) Save(ctx context.Context, model map[string]interface{}) (int64,
 		if err != nil {
 			return 0, err
 		}
-		return Save(ctx, s.Database, s.table, m2)
+		return SaveWithArray(ctx, s.Database, s.table, m2, s.ToArray, s.schema)
 	}
-	return Save(ctx, s.Database, s.table, model)
+	return SaveWithArray(ctx, s.Database, s.table, model, s.ToArray, s.schema)
 }
 func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
 	l := len(s.keys)

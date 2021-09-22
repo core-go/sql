@@ -119,7 +119,6 @@ func BuildDataSourceName(c Config) string {
 }
 
 // for Loader
-
 func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string, options ...func(i int) string) (string, []interface{}) {
 	var where = ""
 	var values []interface{}
@@ -171,6 +170,14 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 	}
 	return -1
 }
+func Exec(ctx context.Context, stmt *sql.Stmt, values ...interface{}) (int64, error) {
+	result, err := stmt.ExecContext(ctx, values...)
+	if err != nil {
+		return -1, err
+	}
+	return result.RowsAffected()
+}
+
 func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	x := err.Error()
 	driver := GetDriver(db)
@@ -187,42 +194,21 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	}
 	return 0, err
 }
-func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
-	return InsertTxWithVersion(ctx, db, tx, table, model, versionIndex, toArray)
-}
-func InsertTxWithVersion(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
-	}
-	driver := GetDriver(db)
-	boolSupport := driver == DriverPostgres
-	queryInsert, values := BuildToInsertWithSchema(table, model, versionIndex, buildParam, boolSupport, false, toArray)
 
-	result, err := tx.ExecContext(ctx, queryInsert, values...)
-	if err != nil {
-		return handleDuplicate(db, err)
-	}
-	return result.RowsAffected()
-}
 func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
-	return InsertWithVersion(ctx, db, table, model, -1, toArray, options...)
+}, options ...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return InsertWithVersion(ctx, db, table, model, -1, toArray, schema)
 }
 func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
+}, schema *Schema, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -231,7 +217,7 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	queryInsert, values := BuildToInsertWithVersion(table, model, versionIndex, buildParam, toArray, boolSupport)
+	queryInsert, values := BuildToInsertWithVersion(table, model, versionIndex, buildParam, boolSupport, toArray, schema)
 
 	result, err := db.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
@@ -239,57 +225,20 @@ func InsertWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	}
 	return result.RowsAffected()
 }
-
-func Exec(ctx context.Context, stmt *sql.Stmt, values ...interface{}) (int64, error) {
-	result, err := stmt.ExecContext(ctx, values...)
-	if err != nil {
-		return -1, err
-	}
-	return result.RowsAffected()
-}
-
-func Update(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
+func InsertTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, buildParam func(i int) string, options...Schema) (int64, error) {
-	if buildParam == nil {
-		buildParam = GetBuild(db)
+}, options ...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
 	}
-	driver := GetDriver(db)
-	boolSupport := driver == DriverPostgres
-	query, values := BuildToUpdateWithSchema(table, model, -1, buildParam, boolSupport, toArray, options...)
-	r, err0 := db.ExecContext(ctx, query, values...)
-	if err0 != nil {
-		return -1, err0
-	}
-	return r.RowsAffected()
+	return InsertTxWithVersion(ctx, db, tx, table, model, -1, toArray, schema)
 }
-
-func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
+func InsertTxWithVersion(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, buildParam func(i int) string, options...Schema) (int64, error) {
-	if buildParam == nil {
-		buildParam = GetBuild(db)
-	}
-	driver := GetDriver(db)
-	boolSupport := driver == DriverPostgres
-	query, values := BuildToUpdateWithSchema(table, model, -1, buildParam, boolSupport, toArray, options...)
-	r, err0 := tx.ExecContext(ctx, query, values...)
-	if err0 != nil {
-		return -1, err0
-	}
-	return r.RowsAffected()
-}
-
-func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
-	if versionIndex < 0 {
-		return 0, errors.New("version's index not found")
-	}
-
+}, schema *Schema, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -298,9 +247,77 @@ func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
-	query, values := BuildToUpdateWithVersion(table, model, versionIndex, buildParam, toArray, boolSupport)
+	queryInsert, values := BuildToInsertWithSchema(table, model, versionIndex, buildParam, boolSupport, false, toArray, schema)
+
+	result, err := tx.ExecContext(ctx, queryInsert, values...)
+	if err != nil {
+		return handleDuplicate(db, err)
+	}
+	return result.RowsAffected()
+}
+
+func Update(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return UpdateWithVersion(ctx, db, table, model, -1, toArray, schema)
+}
+func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, schema *Schema, options ...func(i int) string) (int64, error) {
+	if versionIndex < 0 {
+		return 0, errors.New("version's index not found")
+	}
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
+	driver := GetDriver(db)
+	boolSupport := driver == DriverPostgres
+	query, values := BuildToUpdateWithVersion(table, model, versionIndex, buildParam, boolSupport, toArray, schema)
 
 	result, err := db.ExecContext(ctx, query, values...)
+
+	if err != nil {
+		return -1, err
+	}
+	return result.RowsAffected()
+}
+func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return UpdateTxWithVersion(ctx, db, tx, table, model, -1, toArray, schema)
+}
+func UpdateTxWithVersion(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, versionIndex int, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, schema *Schema, options ...func(i int) string) (int64, error) {
+	if versionIndex < 0 {
+		return 0, errors.New("version's index not found")
+	}
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
+	driver := GetDriver(db)
+	boolSupport := driver == DriverPostgres
+	query, values := BuildToUpdateWithVersion(table, model, versionIndex, buildParam, boolSupport, toArray, schema)
+
+	result, err := tx.ExecContext(ctx, query, values...)
 
 	if err != nil {
 		return -1, err
@@ -327,7 +344,6 @@ func Patch(ctx context.Context, db *sql.DB, table string, model map[string]inter
 	}
 	return result.RowsAffected()
 }
-
 func PatchWithVersion(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, versionIndex int, options ...func(i int) string) (int64, error) {
 	if versionIndex < 0 {
 		return 0, errors.New("version's index not found")
@@ -376,6 +392,131 @@ func Delete(ctx context.Context, db *sql.DB, table string, query map[string]inte
 		return -1, err
 	}
 	return BuildResult(result.RowsAffected())
+}
+
+func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...*Schema) (int64, error) {
+	buildParam := GetBuild(db)
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return InsertBatchWithSchema(ctx, db, tableName, models, toArray, buildParam, schema)
+}
+func InsertBatchWithSchema(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, buildParam func(i int) string, options ...*Schema) (int64, error) {
+	if buildParam == nil {
+		buildParam = GetBuild(db)
+	}
+	driver := GetDriver(db)
+	query, args, er1 := BuildToInsertBatchWithSchema(tableName, models, driver, toArray, buildParam, options...)
+	if er1 != nil {
+		return 0, er1
+	}
+	x, er2 := db.ExecContext(ctx, query, args...)
+	if er2 != nil {
+		return 0, er2
+	}
+	return x.RowsAffected()
+}
+func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...*Schema) (int64, error) {
+	buildParam := GetBuild(db)
+	driver := GetDriver(db)
+	boolSupport := driver == DriverPostgres
+	return UpdateBatchWithVersion(ctx, db, tableName, models, -1, toArray, buildParam, boolSupport, options...)
+}
+func UpdateBatchWithVersion(ctx context.Context, db *sql.DB, tableName string, models interface{}, versionIndex int, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, buildParam func(int) string, boolSupport bool, options ...*Schema) (int64, error) {
+	if buildParam == nil {
+		buildParam = GetBuild(db)
+	}
+	stmts, er1 := BuildToUpdateBatchWithVersion(tableName, models, versionIndex, buildParam, boolSupport, toArray, options...)
+	if er1 != nil {
+		return 0, er1
+	}
+	return ExecuteAll(ctx, db, stmts...)
+}
+
+func Save(ctx context.Context, db *sql.DB, table string, model interface{}, options...func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}) (int64, error) {
+	var toArray func(interface{}) interface {
+		driver.Valuer
+		sql.Scanner
+	}
+	if len(options) > 0 {
+		toArray = options[0]
+	}
+	return SaveWithArray(ctx, db, table, model, toArray)
+}
+func SaveWithArray(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...*Schema) (int64, error) {
+	drive := GetDriver(db)
+	buildParam := GetBuild(db)
+	queryString, value, err := BuildToSaveWithSchema(table, model, drive, buildParam, toArray, options...)
+	if err != nil {
+		return 0, err
+	}
+	res, err := db.ExecContext(ctx, queryString, value...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return SaveTxWithArray(ctx, db, tx, table, model, nil, schema)
+}
+func SaveTxWithArray(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...*Schema) (int64, error) {
+	drive := GetDriver(db)
+	buildParam := GetBuild(db)
+	queryString, value, err := BuildToSaveWithSchema(table, model, drive, buildParam, toArray, options...)
+	if err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, queryString, value...)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+func SaveBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...*Schema) (int64, error) {
+	var schema *Schema
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	return SaveBatchWithArray(ctx, db, tableName, models, nil, schema)
+}
+func SaveBatchWithArray(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...*Schema) (int64, error) {
+	driver := GetDriver(db)
+	stmts, er1 := BuildToSaveBatchWithSchema(tableName, models, driver, toArray, options...)
+	if er1 != nil {
+		return 0, er1
+	}
+	_, err := ExecuteAll(ctx, db, stmts...)
+	total := int64(len(stmts))
+	return total, err
 }
 
 func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, string) {
@@ -555,7 +696,6 @@ func GetColumnName(modelType reflect.Type, jsonName string) (col string, colExis
 	}
 	return jsonName, false
 }
-
 
 func GetJsonNameByIndex(ModelType reflect.Type, index int) (string, bool) {
 	field := ModelType.Field(index)
@@ -848,54 +988,4 @@ func MapModels(ctx context.Context, models interface{}, mp func(context.Context,
 		}
 	}
 	return models, nil
-}
-
-func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(i int) string) (int64, error) {
-	driver := GetDriver(db)
-	query, args, er1 := BuildToInsertBatch(tableName, models, driver, toArray, options...)
-	if er1 != nil {
-		return 0, er1
-	}
-	x, er2 := db.ExecContext(ctx, query, args...)
-	if er2 != nil {
-		return 0, er2
-	}
-	return x.RowsAffected()
-}
-func UpdateBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(int) string) (int64, error) {
-	return UpdateBatchWithVersion(ctx, db, tableName, models, -1, toArray, options...)
-}
-func UpdateBatchWithVersion(ctx context.Context, db *sql.DB, tableName string, models interface{}, versionIndex int, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(int) string) (int64, error) {
-	var buildParam func(int) string
-	if len(options) > 0 {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
-	}
-	driver := GetDriver(db)
-	boolSupport := driver == DriverPostgres
-	stmts, er1 := BuildToUpdateBatchWithVersion(tableName, models, versionIndex, buildParam, toArray, boolSupport)
-	if er1 != nil {
-		return 0, er1
-	}
-	return ExecuteAll(ctx, db, stmts...)
-}
-func SaveBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}) (int64, error) {
-	driver := GetDriver(db)
-	stmts, er1 := BuildToSaveBatch(tableName, models, driver)
-	if er1 != nil {
-		return 0, er1
-	}
-	_, err := ExecuteAll(ctx, db, stmts...)
-	total := int64(len(stmts))
-	return total, err
 }
