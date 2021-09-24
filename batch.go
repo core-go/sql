@@ -251,7 +251,10 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 		return query, args, nil
 	}
 }
-func BuildToSaveBatchWithSchema(table string, models interface{}, drive string, toArray func(interface{}) interface {
+func BuildToSaveBatch(table string, models interface{}, drive string, options ...*Schema) ([]Statement, error) {
+	return BuildToSaveBatchWithArray(table, models, drive, nil, options...)
+}
+func BuildToSaveBatchWithArray(table string, models interface{}, drive string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...*Schema) ([]Statement, error) {

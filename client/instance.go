@@ -167,7 +167,7 @@ func (c *ProxyClient) SaveBatch(ctx context.Context, table string, models interf
 			return 0, nil
 		}
 	} else {
-		s, er1 := sql.BuildToSaveBatchWithSchema(table, models, driver, nil, options...)
+		s, er1 := sql.BuildToSaveBatchWithArray(table, models, driver, nil, options...)
 		if er1 != nil {
 			return -1, er1
 		}
@@ -243,7 +243,7 @@ func (c *ProxyClient) SaveBatchWithTx(ctx context.Context, tx string, commit boo
 			return 0, nil
 		}
 	} else {
-		s, er1 := sql.BuildToSaveBatchWithSchema(table, models, driver, nil, options...)
+		s, er1 := sql.BuildToSaveBatchWithArray(table, models, driver, nil, options...)
 		if er1 != nil {
 			return -1, er1
 		}

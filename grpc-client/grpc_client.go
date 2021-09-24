@@ -271,7 +271,7 @@ func (c *GRPCClient) SaveBatch(ctx context.Context, table string, models interfa
 			return 0, nil
 		}
 	} else {
-		s, er1 := sql.BuildToSaveBatchWithSchema(table, models, driver, nil, options...)
+		s, er1 := sql.BuildToSaveBatchWithArray(table, models, driver, nil, options...)
 		if er1 != nil {
 			return -1, er1
 		}
@@ -347,7 +347,7 @@ func (c *GRPCClient) SaveBatchWithTx(ctx context.Context, tx string, commit bool
 			return 0, nil
 		}
 	} else {
-		s, er1 := sql.BuildToSaveBatchWithSchema(table, models, driver, nil, options...)
+		s, er1 := sql.BuildToSaveBatchWithArray(table, models, driver, nil, options...)
 		if er1 != nil {
 			return -1, er1
 		}

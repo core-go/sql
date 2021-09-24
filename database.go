@@ -512,7 +512,7 @@ func SaveBatchWithArray(ctx context.Context, db *sql.DB, tableName string, model
 	sql.Scanner
 }, options ...*Schema) (int64, error) {
 	driver := GetDriver(db)
-	stmts, er1 := BuildToSaveBatchWithSchema(tableName, models, driver, toArray, options...)
+	stmts, er1 := BuildToSaveBatchWithArray(tableName, models, driver, toArray, options...)
 	if er1 != nil {
 		return 0, er1
 	}

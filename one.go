@@ -397,14 +397,13 @@ func JSONToColumns(model map[string]interface{}, m map[string]string) map[string
 }
 
 func BuildToDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
-	var values []interface{}
-	var queryArr []string
+	var args []interface{}
+	var where []string
 	i := 1
-	for key, value := range ids {
-		queryArr = append(queryArr, fmt.Sprintf("%v = %v", QuoteColumnName(key), buildParam(i)))
-		values = append(values, value)
+	for col, value := range ids {
+		where = append(where, col+"="+buildParam(i))
+		args = append(args, value)
 		i++
 	}
-	q := strings.Join(queryArr, " and ")
-	return fmt.Sprintf("delete from %v where %v", table, q), values
+	return fmt.Sprintf("delete from %v where %v", table, strings.Join(where, " and ")), args
 }
