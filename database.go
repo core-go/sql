@@ -119,6 +119,30 @@ func BuildDataSourceName(c Config) string {
 }
 
 // for Loader
+func FindPrimaryKeys(modelType reflect.Type) ([]string, []string) {
+	numField := modelType.NumField()
+	var idColumnFields []string
+	var idJsons []string
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		ormTag := field.Tag.Get("gorm")
+		tags := strings.Split(ormTag, ";")
+		for _, tag := range tags {
+			if strings.Compare(strings.TrimSpace(tag), "primary_key") == 0 {
+				k, ok := findTag(ormTag, "column")
+				if ok {
+					idColumnFields = append(idColumnFields, k)
+					tag1, ok1 := field.Tag.Lookup("json")
+					tagJsons := strings.Split(tag1, ",")
+					if ok1 && len(tagJsons) > 0 {
+						idJsons = append(idJsons, tagJsons[0])
+					}
+				}
+			}
+		}
+	}
+	return idColumnFields, idJsons
+}
 func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string, options ...func(i int) string) (string, []interface{}) {
 	var where = ""
 	var values []interface{}
@@ -351,59 +375,6 @@ func UpdateTxWithVersion(ctx context.Context, db *sql.DB, tx *sql.Tx, table stri
 	}
 	return result.RowsAffected()
 }
-
-func Patch(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, options ...func(i int) string) (int64, error) {
-	idcolumNames, idJsonName := FindPrimaryKeys(modelType)
-	columNames := FindJsonName(modelType)
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
-	}
-	query, value := BuildToPatch(table, model, columNames, idJsonName, idcolumNames, buildParam)
-	if query == "" {
-		return 0, errors.New("fail to build query")
-	}
-	result, err := db.ExecContext(ctx, query, value...)
-	if err != nil {
-		return -1, err
-	}
-	return result.RowsAffected()
-}
-func PatchWithVersion(ctx context.Context, db *sql.DB, table string, model map[string]interface{}, modelType reflect.Type, versionIndex int, options ...func(i int) string) (int64, error) {
-	if versionIndex < 0 {
-		return 0, errors.New("version's index not found")
-	}
-
-	idcolumNames, idJsonName := FindPrimaryKeys(modelType)
-	columNames := FindJsonName(modelType)
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
-	}
-	versionJsonName, ok := GetJsonNameByIndex(modelType, versionIndex)
-	if !ok {
-		return 0, errors.New("version's json not found")
-	}
-	versionColName, ok := GetColumnNameByIndex(modelType, versionIndex)
-	if !ok {
-		return 0, errors.New("version's column not found")
-	}
-
-	query, value := BuildToPatchWithVersion(table, model, columNames, idJsonName, idcolumNames, buildParam, versionIndex, versionJsonName, versionColName)
-	if query == "" {
-		return 0, errors.New("fail to build query")
-	}
-	result, err := db.ExecContext(ctx, query, value...)
-	if err != nil {
-		return -1, err
-	}
-	return result.RowsAffected()
-}
-
 func Delete(ctx context.Context, db *sql.DB, table string, query map[string]interface{}, options ...func(i int) string) (int64, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {

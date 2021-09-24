@@ -155,7 +155,13 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 			values = append(values, col+"="+strconv.FormatInt(nv, 10))
 			vw = col + "=" + strconv.FormatInt(currentVersion, 10)
 		} else if !fdb.Key && fdb.Update {
-			f := mv.Field(fdb.Index)
+			//f := reflect.Indirect(reflect.ValueOf(model))
+			var f reflect.Value
+			if mv.Kind() == reflect.Ptr {
+				f = mv.Elem().Field(fdb.Index)
+			} else {
+				f = mv.Field(fdb.Index)
+			}
 			fieldValue := f.Interface()
 			isNil := false
 			if f.Kind() == reflect.Ptr {
@@ -213,7 +219,12 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 	}
 	for _, col := range keys {
 		fdb := schema[col]
-		f := mv.Field(fdb.Index)
+		var f reflect.Value
+		if mv.Kind() == reflect.Ptr {
+			f = mv.Elem().Field(fdb.Index)
+		} else {
+			f = mv.Field(fdb.Index)
+		}
 		fieldValue := f.Interface()
 		if f.Kind() == reflect.Ptr {
 			if !reflect.ValueOf(fieldValue).IsNil() {
@@ -235,93 +246,154 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 	query := fmt.Sprintf("update %v set %v where %v", table, strings.Join(values, ","), strings.Join(where, " and "))
 	return query, args
 }
-func BuildToPatch(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, buildParam func(int) string) (string, []interface{}) {
-	scope := statement()
-	// Append variables set column
-	for key, _ := range model {
-		if _, ok := Find(idTagJsonNames, key); !ok {
-			if colName, ok2 := mapJsonColum[key]; ok2 {
-				scope.Columns = append(scope.Columns, colName)
-				scope.Values = append(scope.Values, model[key])
+func BuildToPatch(table string, model map[string]interface{}, keyColumns []string, buildParam func(int) string, options ...map[string]FieldDB) (string, []interface{}) {
+	return BuildToPatchWithVersion(table, model, keyColumns, buildParam, nil, "", options...)
+}
+func BuildToPatchWithArray(table string, model map[string]interface{}, keyColumns []string, buildParam func(int) string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...map[string]FieldDB) (string, []interface{}) {
+	return BuildToPatchWithVersion(table, model, keyColumns, buildParam, toArray, "", options...)
+}
+// BuildToPatchWithVersion3 model with db column name
+func BuildToPatchWithVersion(table string, model map[string]interface{}, keyColumns []string, buildParam func(int) string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, version string, options ...map[string]FieldDB) (string, []interface{}) { //version column name db
+	var schema map[string]FieldDB
+	if len(options) > 0 {
+		schema = options[0]
+	}
+	values := make([]string, 0)
+	where := make([]string, 0)
+	args := make([]interface{}, 0)
+	i := 1
+	for col, v := range model {
+		if !Contains(keyColumns, col) && col != version {
+			if v == nil {
+				values = append(values, col+"=null")
+			} else {
+				v2, ok2 := GetDBValue(v)
+				if ok2 {
+					values = append(values, col+"="+v2)
+				} else {
+					if boolValue, ok3 := v.(bool); ok3 {
+						handled := false
+						if schema != nil {
+							fdb, ok4 := schema[col]
+							if ok4 {
+								if boolValue {
+									if fdb.True != nil {
+										values = append(values, col+"="+buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.True)
+									} else {
+										values = append(values, col+"='1'")
+									}
+								} else {
+									if fdb.False != nil {
+										values = append(values, col+"="+buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.False)
+									} else {
+										values = append(values, col+"='0'")
+									}
+								}
+								handled = true
+							}
+						}
+						if handled == false {
+							if boolValue {
+								values = append(values, col+"='1'")
+							} else {
+								values = append(values, col+"='0'")
+							}
+						}
+					} else {
+						values = append(values, col+"="+buildParam(i))
+						i = i + 1
+						if toArray != nil && reflect.TypeOf(v).Kind() == reflect.Slice {
+							args = append(args, toArray(v))
+						} else {
+							args = append(args, v)
+						}
+					}
+				}
 			}
 		}
 	}
-	// Append variables where
-	for i, key := range idTagJsonNames {
-		scope.Values = append(scope.Values, model[key])
-		scope.Keys = append(scope.Keys, idColumNames[i])
+	for _, col := range keyColumns {
+		v0, ok0 := model[col]
+		if ok0 {
+			v, ok1 := GetDBValue(v0)
+			if ok1 {
+				where = append(where, col+"="+v)
+			} else {
+				where = append(where, col+"="+buildParam(i))
+				i = i + 1
+				args = append(args, v0)
+			}
+		}
 	}
-	var value []interface{}
+	if len(version) > 0 {
+		v0, ok0 := model[version]
+		if ok0 {
+			switch v4 := v0.(type) {
+			case int:
+				values = append(values, version+"="+strconv.Itoa(v4+1))
+				where = append(where, version+"="+strconv.Itoa(v4))
+			case int32:
+				v5 := int64(v4)
+				values = append(values, version+"="+strconv.FormatInt(v5+1, 10))
+				where = append(where, version+"="+strconv.FormatInt(v5, 10))
+			case int64:
+				values = append(values, version+"="+strconv.FormatInt(v4+1, 10))
+				where = append(where, version+"="+strconv.FormatInt(v4, 10))
+			}
+		}
+	}
+	query := fmt.Sprintf("update %v set %v where %v", table, strings.Join(values, ","), strings.Join(where, " and "))
+	return query, args
+}
+func Contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
 
-	n := len(scope.Columns)
-	sets, val1, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
-	if err1 != nil {
-		return "", nil
-	}
-	value = append(value, val1...)
-	columnsKeys := len(scope.Keys)
-	where, val2, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &columnsKeys, n, " and ", buildParam)
-	if err2 != nil {
-		return "", nil
-	}
-	value = append(value, val2...)
-	query := fmt.Sprintf("update %s set %s where %s",
-		table,
-		sets,
-		where,
-	)
-	return query, value
+	return false
 }
 
-func BuildToPatchWithVersion(table string, model map[string]interface{}, mapJsonColum map[string]string, idTagJsonNames []string, idColumNames []string, buildParam func(int) string, versionIndex int, versionJsonName, versionColName string) (string, []interface{}) {
-	if versionIndex < 0 {
-		panic("version's index not found")
-	}
-
-	currentVersion, ok := model[versionJsonName]
-	if !ok {
-		panic("version field not found")
-	}
-	nextVersion := currentVersion.(int64) + 1
-	model[versionJsonName] = nextVersion
-
-	scope := statement()
-	var value []interface{}
-	// Append variables set column
-	for key, _ := range model {
-		if _, ok := Find(idTagJsonNames, key); !ok {
-			if columName, ok2 := mapJsonColum[key]; ok2 {
-				scope.Columns = append(scope.Columns, columName)
-				scope.Values = append(scope.Values, model[key])
+func MakeJsonColumnMap(modelType reflect.Type) map[string]string {
+	numField := modelType.NumField()
+	mapJsonColumn := make(map[string]string)
+	for i := 0; i < numField; i++ {
+		field := modelType.Field(i)
+		ormTag := field.Tag.Get("gorm")
+		column, ok := findTag(ormTag, "column")
+		if ok {
+			tag1, ok1 := field.Tag.Lookup("json")
+			tagJsons := strings.Split(tag1, ",")
+			if ok1 && len(tagJsons) > 0 {
+				mapJsonColumn[tagJsons[0]] = column
 			}
 		}
 	}
-	// Append variables where
-	for i, key := range idTagJsonNames {
-		scope.Values = append(scope.Values, model[key])
-		scope.Keys = append(scope.Keys, idColumNames[i])
+	return mapJsonColumn
+}
+func JSONToColumns(model map[string]interface{}, m map[string]string) map[string]interface{} {
+	if model == nil || m == nil {
+		return model
 	}
-	scope.Values = append(scope.Values, currentVersion)
-	scope.Keys = append(scope.Keys, versionColName)
-
-	n := len(scope.Columns)
-	sets, setVal, err1 := BuildSqlParametersAndValues(scope.Columns, scope.Values, &n, 0, ", ", buildParam)
-	if err1 != nil {
-		return "", nil
+	r := make(map[string]interface{})
+	for k, v := range model {
+		col, ok := m[k]
+		if ok {
+			r[col] = v
+		}
 	}
-	value = append(value, setVal...)
-	numKeys := len(scope.Keys)
-	where, whereVal, err2 := BuildSqlParametersAndValues(scope.Keys, scope.Values, &numKeys, n, " and ", buildParam)
-	if err2 != nil {
-		return "", nil
-	}
-	value = append(value, whereVal...)
-	query := fmt.Sprintf("update %s set %s where %s",
-		table,
-		sets,
-		where,
-	)
-	return query, value
+	return r
 }
 
 func BuildToDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {

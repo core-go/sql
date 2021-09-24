@@ -11,17 +11,17 @@ import (
 
 type Writer struct {
 	*Loader
-	maps           map[string]string
+	jsonColumnMap  map[string]string
 	Mapper         Mapper
 	versionField   string
 	versionIndex   int
 	versionDBField string
+	schema         *Schema
+	BoolSupport    bool
 	ToArray        func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
-	schema      *Schema
-	BoolSupport bool
 }
 
 func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, toArray func(interface{}) interface {
@@ -47,14 +47,15 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
 	schema := CreateSchema(modelType)
+	jsonColumnMap := MakeJsonColumnMap(modelType)
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
 		if index >= 0 {
-			dbFieldName, exist := GetColumnNameByIndex(modelType, index)
+			_, dbFieldName, exist := GetFieldByIndex(modelType, index)
 			if !exist {
 				dbFieldName = strings.ToLower(versionField)
 			}
-			return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}
+			return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, versionField: versionField, versionIndex: index, versionDBField: dbFieldName, jsonColumnMap: jsonColumnMap}
 		}
 	}
 	return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}
@@ -152,7 +153,13 @@ func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64
 		}
 	}
 	MapToDB(&model, s.modelType)
-	return Patch(ctx, s.Database, s.table, model, s.modelType, s.BuildParam)
+	dbColumnMap := JSONToColumns(model, s.jsonColumnMap)
+	query, values := BuildToPatchWithVersion(s.table, dbColumnMap, s.schema.Keys, s.BuildParam, s.ToArray, s.versionDBField, s.schema.Fields)
+	result, err := s.Database.ExecContext(ctx, query, values...)
+	if err != nil {
+		return -1, err
+	}
+	return result.RowsAffected()
 }
 func MapToDB(model *map[string]interface{}, modelType reflect.Type) {
 	for colName, value := range *model {

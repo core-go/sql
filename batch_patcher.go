@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"reflect"
-	"strings"
 )
 
 type BatchPatcher struct {
@@ -56,47 +55,4 @@ func toArrayMapIndex(models []map[string]interface{}, indices []int) []int {
 		indices = append(indices, i)
 	}
 	return indices
-}
-
-func FindPrimaryKeys(modelType reflect.Type) ([]string, []string) {
-	numField := modelType.NumField()
-	var idColumnFields []string
-	var idJsons []string
-	for i := 0; i < numField; i++ {
-		field := modelType.Field(i)
-		ormTag := field.Tag.Get("gorm")
-		tags := strings.Split(ormTag, ";")
-		for _, tag := range tags {
-			if strings.Compare(strings.TrimSpace(tag), "primary_key") == 0 {
-				k, ok := findTag(ormTag, "column")
-				if ok {
-					idColumnFields = append(idColumnFields, k)
-					tag1, ok1 := field.Tag.Lookup("json")
-					tagJsons := strings.Split(tag1, ",")
-					if ok1 && len(tagJsons) > 0 {
-						idJsons = append(idJsons, tagJsons[0])
-					}
-				}
-			}
-		}
-	}
-	return idColumnFields, idJsons
-}
-
-func FindJsonName(modelType reflect.Type) map[string]string {
-	numField := modelType.NumField()
-	mapJsonColumn := make(map[string]string)
-	for i := 0; i < numField; i++ {
-		field := modelType.Field(i)
-		ormTag := field.Tag.Get("gorm")
-		column, ok := findTag(ormTag, "column")
-		if ok {
-			tag1, ok1 := field.Tag.Lookup("json")
-			tagJsons := strings.Split(tag1, ",")
-			if ok1 && len(tagJsons) > 0 {
-				mapJsonColumn[tagJsons[0]] = column
-			}
-		}
-	}
-	return mapJsonColumn
 }

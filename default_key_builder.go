@@ -41,7 +41,7 @@ func (b *DefaultKeyBuilder) BuildKey(object interface{}) string {
 	positions := b.getPositionPrimaryKeys(objectValue.Type())
 	var values []string
 	for _, position := range positions {
-		if colName, ok := GetColumnNameByIndex(objectValue.Type(), position); ok {
+		if _, colName, ok := GetFieldByIndex(objectValue.Type(), position); ok {
 			ids[colName] = fmt.Sprint(objectValue.Field(position).Interface())
 			values = append(values, fmt.Sprint(objectValue.Field(position).Interface()))
 		}
