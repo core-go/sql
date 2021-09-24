@@ -603,9 +603,9 @@ type Proxy interface {
 	Exec(ctx context.Context, query string, values ...interface{}) (int64, error)
 	ExecBatch(ctx context.Context, master bool, stm ...Statement) (int64, error)
 	Query(ctx context.Context, result interface{}, query string, values ...interface{}) error
-	ExecWithTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error)
-	ExecBatchWithTx(ctx context.Context, tx string, commit bool, master bool, stm ...Statement) (int64, error)
-	QueryWithTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error
+	ExecTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error)
+	ExecBatchTx(ctx context.Context, tx string, commit bool, master bool, stm ...Statement) (int64, error)
+	QueryTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error
 
 	Insert(ctx context.Context, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
 	Update(ctx context.Context, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
@@ -613,17 +613,18 @@ type Proxy interface {
 	InsertBatch(ctx context.Context, table string, models interface{}, driver string, options...*Schema) (int64, error)
 	UpdateBatch(ctx context.Context, table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
 	SaveBatch(ctx context.Context, table string, models interface{}, driver string, options...*Schema) (int64, error)
-	InsertWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
-	UpdateWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
-	SaveWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, driver string, options...*Schema) (int64, error)
-	InsertBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...*Schema) (int64, error)
-	UpdateBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
-	SaveBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...*Schema) (int64, error)
+
+	InsertTx(ctx context.Context, tx string, commit bool, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
+	UpdateTx(ctx context.Context, tx string, commit bool, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
+	SaveTx(ctx context.Context, tx string, commit bool, table string, model interface{}, driver string, options...*Schema) (int64, error)
+	InsertBatchTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...*Schema) (int64, error)
+	UpdateBatchTx(ctx context.Context, tx string, commit bool, table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
+	SaveBatchTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...*Schema) (int64, error)
 
 	InsertAndCommit(ctx context.Context, tx string, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
 	UpdateAndCommit(ctx context.Context, tx string, table string, model interface{}, driver string, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
 	SaveAndCommit(ctx context.Context, tx string, table string, model interface{}, driver string, options...*Schema) (int64, error)
 	InsertBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, driver string, options...*Schema) (int64, error)
-	UpdateBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*Schema)
+	UpdateBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
 	SaveBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, driver string, options...*Schema) (int64, error)
 }

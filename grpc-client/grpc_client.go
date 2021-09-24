@@ -118,7 +118,7 @@ func (c *GRPCClient) Query(ctx context.Context, result interface{}, query string
 	return er3
 }
 
-func (c *GRPCClient) ExecWithTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error) {
+func (c *GRPCClient) ExecTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error) {
 	stm := sql.BuildStatement(query, values...)
 	argsData := new(bytes.Buffer)
 	er1 := json.NewEncoder(argsData).Encode(&stm.Params)
@@ -142,7 +142,7 @@ func (c *GRPCClient) ExecWithTx(ctx context.Context, tx string, commit bool, que
 	}
 	return rs.Result, er2
 }
-func (c *GRPCClient) ExecBatchWithTx(ctx context.Context, tx string, commit bool, master bool, stm...sql.Statement) (int64, error) {
+func (c *GRPCClient) ExecBatchTx(ctx context.Context, tx string, commit bool, master bool, stm...sql.Statement) (int64, error) {
 	stmts := sql.BuildJStatements(stm...)
 	if len(stmts) == 0 {
 		return 0, nil
@@ -179,7 +179,7 @@ func (c *GRPCClient) ExecBatchWithTx(ctx context.Context, tx string, commit bool
 	}
 	return rs.Result, err
 }
-func (c *GRPCClient) QueryWithTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error {
+func (c *GRPCClient) QueryTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error {
 	stm := sql.BuildStatement(query, values...)
 	argsData := new(bytes.Buffer)
 	er1 := json.NewEncoder(argsData).Encode(&stm.Params)
@@ -282,35 +282,35 @@ func (c *GRPCClient) SaveBatch(ctx context.Context, table string, models interfa
 		}
 	}
 }
-func (c *GRPCClient) InsertWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*sql.Schema) (int64, error) {
+func (c *GRPCClient) InsertTx(ctx context.Context, tx string, commit bool, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*sql.Schema) (int64, error) {
 	s, values := sql.BuildToInsertWithVersion(table, model, -1, buildParam, boolSupport, nil, options...)
-	return c.ExecWithTx(ctx, tx, commit, s, values...)
+	return c.ExecTx(ctx, tx, commit, s, values...)
 }
-func (c *GRPCClient) UpdateWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*sql.Schema) (int64, error) {
+func (c *GRPCClient) UpdateTx(ctx context.Context, tx string, commit bool, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*sql.Schema) (int64, error) {
 	s, values := sql.BuildToUpdateWithVersion(table, model, -1, buildParam, boolSupport, nil, options...)
-	return c.ExecWithTx(ctx, tx, commit, s, values...)
+	return c.ExecTx(ctx, tx, commit, s, values...)
 }
-func (c *GRPCClient) SaveWithTx(ctx context.Context, tx string, commit bool, table string, model interface{}, driver string, options...*sql.Schema) (int64, error) {
+func (c *GRPCClient) SaveTx(ctx context.Context, tx string, commit bool, table string, model interface{}, driver string, options...*sql.Schema) (int64, error) {
 	buildParam := sql.GetBuildByDriver(driver)
 	if driver == sql.DriverCassandra {
 		s, values := sql.BuildToInsertWithSchema(table, model, -1, buildParam, true, true, nil, options...)
-		return c.ExecWithTx(ctx, tx, commit, s, values...)
+		return c.ExecTx(ctx, tx, commit, s, values...)
 	} else {
 		s, values, err := sql.BuildToSaveWithSchema(table, model, driver, buildParam, nil, options...)
 		if err != nil {
 			return -1, err
 		}
-		return c.ExecWithTx(ctx, tx, commit, s, values...)
+		return c.ExecTx(ctx, tx, commit, s, values...)
 	}
 }
-func (c *GRPCClient) InsertBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...*sql.Schema) (int64, error) {
+func (c *GRPCClient) InsertBatchTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...*sql.Schema) (int64, error) {
 	buildParam := sql.GetBuildByDriver(driver)
 	if driver == sql.DriverPostgres || driver == sql.DriverOracle || driver == sql.DriverMysql || driver == sql.DriverMssql || driver == sql.DriverSqlite3 {
 		s, values, err := sql.BuildToInsertBatchWithSchema(table, models, driver, nil, buildParam, options...)
 		if err != nil {
 			return -1, err
 		}
-		return c.ExecWithTx(ctx, tx, commit, s, values...)
+		return c.ExecTx(ctx, tx, commit, s, values...)
 	} else {
 		boolSupport := driver == sql.DriverCassandra
 		s, er0 := sql.BuildInsertStatementsWithVersion(table, models, -1, buildParam, boolSupport, nil, true, options...)
@@ -318,31 +318,31 @@ func (c *GRPCClient) InsertBatchWithTx(ctx context.Context, tx string, commit bo
 			return -1, er0
 		}
 		if len(s) > 0 {
-			return c.ExecBatchWithTx(ctx, tx, commit, false, s...)
+			return c.ExecBatchTx(ctx, tx, commit, false, s...)
 		} else {
 			return 0, nil
 		}
 	}
 }
-func (c *GRPCClient) UpdateBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*sql.Schema) (int64, error) {
+func (c *GRPCClient) UpdateBatchTx(ctx context.Context, tx string, commit bool, table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*sql.Schema) (int64, error) {
 	s, err := sql.BuildToUpdateBatchWithVersion(table, models, -1, buildParam, boolSupport, nil, options...)
 	if err != nil {
 		return -1, err
 	}
 	if len(s) > 0 {
-		return c.ExecBatchWithTx(ctx, tx, commit, false, s...)
+		return c.ExecBatchTx(ctx, tx, commit, false, s...)
 	} else {
 		return 0, nil
 	}
 }
-func (c *GRPCClient) SaveBatchWithTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...*sql.Schema) (int64, error) {
+func (c *GRPCClient) SaveBatchTx(ctx context.Context, tx string, commit bool, table string, models interface{}, driver string, options...*sql.Schema) (int64, error) {
 	if driver == sql.DriverCassandra {
 		s, er0 := sql.BuildInsertStatementsWithVersion(table, models, -1, sql.BuildParam, true, nil, true, options...)
 		if er0 != nil {
 			return -1, er0
 		}
 		if len(s) > 0 {
-			return c.ExecBatchWithTx(ctx, tx, commit, false, s...)
+			return c.ExecBatchTx(ctx, tx, commit, false, s...)
 		} else {
 			return 0, nil
 		}
@@ -352,7 +352,7 @@ func (c *GRPCClient) SaveBatchWithTx(ctx context.Context, tx string, commit bool
 			return -1, er1
 		}
 		if len(s) > 0 {
-			return c.ExecBatchWithTx(ctx, tx, commit, false, s...)
+			return c.ExecBatchTx(ctx, tx, commit, false, s...)
 		} else {
 			return 0, nil
 		}
@@ -360,20 +360,20 @@ func (c *GRPCClient) SaveBatchWithTx(ctx context.Context, tx string, commit bool
 }
 
 func (c *GRPCClient) InsertAndCommit(ctx context.Context, tx string, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*sql.Schema) (int64, error) {
-	return c.InsertWithTx(ctx, tx, true, table, model, buildParam, boolSupport, options...)
+	return c.InsertTx(ctx, tx, true, table, model, buildParam, boolSupport, options...)
 }
 func (c *GRPCClient) UpdateAndCommit(ctx context.Context, tx string, table string, model interface{}, driver string, buildParam func(int) string, boolSupport bool, options...*sql.Schema) (int64, error) {
-	return c.UpdateWithTx(ctx, tx, true, table, model, buildParam, boolSupport, options...)
+	return c.UpdateTx(ctx, tx, true, table, model, buildParam, boolSupport, options...)
 }
 func (c *GRPCClient) SaveAndCommit(ctx context.Context, tx string, table string, model interface{}, driver string, options...*sql.Schema) (int64, error) {
-	return c.SaveWithTx(ctx, tx, true, table, model, driver, options...)
+	return c.SaveTx(ctx, tx, true, table, model, driver, options...)
 }
 func (c *GRPCClient) InsertBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, driver string, options...*sql.Schema) (int64, error) {
-	return c.InsertBatchWithTx(ctx, tx, true, table, models, driver, options...)
+	return c.InsertBatchTx(ctx, tx, true, table, models, driver, options...)
 }
 func (c *GRPCClient) UpdateBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*sql.Schema) (int64, error) {
-	return c.UpdateBatchWithTx(ctx, tx, true, table, models, buildParam, boolSupport, options...)
+	return c.UpdateBatchTx(ctx, tx, true, table, models, buildParam, boolSupport, options...)
 }
 func (c *GRPCClient) SaveBatchAndCommit(ctx context.Context, tx string, table string, models interface{}, driver string, options...*sql.Schema) (int64, error) {
-	return c.SaveBatchWithTx(ctx, tx, true, table, models, driver, options...)
+	return c.SaveBatchTx(ctx, tx, true, table, models, driver, options...)
 }
