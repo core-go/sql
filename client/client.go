@@ -75,22 +75,22 @@ func NewClient(c Config) (*http.Client, error) {
 			if c.Timeout > 0 {
 				transport := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: *c.Insecure}}
 				client0 := &http.Client{Transport: transport, Timeout: time.Duration(c.Timeout) * time.Millisecond}
-				sClient = client0
+				// sClient = client0
 				return client0, nil
 			} else {
 				transport := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: *c.Insecure}}
 				client0 := &http.Client{Transport: transport}
-				sClient = client0
+				// sClient = client0
 				return client0, nil
 			}
 		} else {
 			if c.Timeout > 0 {
 				client0 := &http.Client{Timeout: time.Duration(c.Timeout) * time.Millisecond}
-				sClient = client0
+				// sClient = client0
 				return client0, nil
 			} else {
 				client0 := &http.Client{}
-				sClient = client0
+				// sClient = client0
 				return client0, nil
 			}
 		}
@@ -112,7 +112,7 @@ func NewTLSClient(certFile, keyFile string, timeout time.Duration) (*http.Client
 				},
 			},
 		}
-		sClient = client0
+		// sClient = client0
 		return client0, nil
 	} else {
 		client0 := &http.Client{
@@ -126,7 +126,7 @@ func NewTLSClient(certFile, keyFile string, timeout time.Duration) (*http.Client
 			},
 			Timeout: timeout * time.Second,
 		}
-		sClient = client0
+		// sClient = client0
 		return client0, nil
 	}
 }
@@ -180,93 +180,85 @@ func DoPut(ctx context.Context, client *http.Client, url string, body []byte, he
 func DoPatch(ctx context.Context, client *http.Client, url string, body []byte, headers map[string]string) (*http.Response, error) {
 	return DoJSON(ctx, client, url, patch, body, headers)
 }
-func Get(ctx context.Context, url string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, get, url, nil, nil, options...)
+func Get(ctx context.Context, client *http.Client, url string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, get, url, nil, nil, options...)
 }
-func GetWithHeader(ctx context.Context, url string, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, get, url, nil, headers, options...)
+func GetWithHeader(ctx context.Context, client *http.Client, url string, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, get, url, nil, headers, options...)
 }
-func GetAndDecode(ctx context.Context, url string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	return GetWithHeaderAndDecode(ctx, url, nil, nil, result, options...)
+func GetAndDecode(ctx context.Context, client *http.Client, url string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	return GetWithHeaderAndDecode(ctx, client, url, nil, nil, result, options...)
 }
-func GetWithHeaderAndDecode(ctx context.Context, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	decoder, er1 := DoWithClient(ctx, sClient, get, url, obj, headers, options...)
+func GetWithHeaderAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	decoder, er1 := DoWithClient(ctx, client, get, url, obj, headers, options...)
 	if er1 != nil {
 		return er1
 	}
 	er2 := decoder.Decode(result)
 	return er2
 }
-func Delete(ctx context.Context, url string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, delete, url, nil, nil, options...)
+func Delete(ctx context.Context, client *http.Client, url string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, delete, url, nil, nil, options...)
 }
-func DeleteWithHeader(ctx context.Context, url string, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, delete, url, nil, headers, options...)
+func DeleteWithHeader(ctx context.Context, client *http.Client, url string, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, delete, url, nil, headers, options...)
 }
-func DeleteAndDecode(ctx context.Context, url string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	return DeleteWithHeaderAndDecode(ctx, url, nil, nil, result, options...)
+func DeleteAndDecode(ctx context.Context, client *http.Client, url string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	return DeleteWithHeaderAndDecode(ctx, client, url, nil, nil, result, options...)
 }
-func DeleteWithHeaderAndDecode(ctx context.Context, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	decoder, er1 := DoWithClient(ctx, sClient, delete, url, obj, headers, options...)
+func DeleteWithHeaderAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	decoder, er1 := DoWithClient(ctx, client, delete, url, obj, headers, options...)
 	if er1 != nil {
 		return er1
 	}
 	er2 := decoder.Decode(result)
 	return er2
 }
-func Post(ctx context.Context, url string, obj interface{}, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, post, url, obj, nil, options...)
+func Post(ctx context.Context, client *http.Client, url string, obj interface{}, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, post, url, obj, nil, options...)
 }
-func PostWithHeader(ctx context.Context, url string, obj interface{}, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, post, url, obj, headers, options...)
+func PostWithHeader(ctx context.Context, client *http.Client, url string, obj interface{}, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, post, url, obj, headers, options...)
 }
-func PostAndDecode(ctx context.Context, url string, obj interface{}, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	return PostWithHeaderAndDecode(ctx, url, obj, nil, result, options...)
+func PostAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	return PostWithHeaderAndDecode(ctx, client, url, obj, nil, result, options...)
 }
-func PostWithClientAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	decoder, er1 := DoWithClient(ctx, client, post, url, obj, nil, options...)
+func PostWithHeaderAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	decoder, er1 := DoWithClient(ctx, client, post, url, obj, headers, options...)
 	if er1 != nil {
 		return er1
 	}
 	er2 := decoder.Decode(result)
 	return er2
 }
-func PostWithHeaderAndDecode(ctx context.Context, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	decoder, er1 := DoWithClient(ctx, sClient, post, url, obj, headers, options...)
+func Put(ctx context.Context, client *http.Client, url string, obj interface{}, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, put, url, obj, nil, options...)
+}
+func PutWithHeader(ctx context.Context, client *http.Client, url string, obj interface{}, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, put, url, obj, headers, options...)
+}
+func PutAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	return PutWithHeaderAndDecode(ctx, client, url, obj, nil, result, options...)
+}
+func PutWithHeaderAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	decoder, er1 := DoWithClient(ctx, client, put, url, obj, headers, options...)
 	if er1 != nil {
 		return er1
 	}
 	er2 := decoder.Decode(result)
 	return er2
 }
-func Put(ctx context.Context, url string, obj interface{}, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, put, url, obj, nil, options...)
+func Patch(ctx context.Context, client *http.Client, url string, obj interface{}, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, patch, url, obj, nil, options...)
 }
-func PutWithHeader(ctx context.Context, url string, obj interface{}, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, put, url, obj, headers, options...)
+func PatchWithHeader(ctx context.Context, client *http.Client, url string, obj interface{}, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	return DoWithClient(ctx, client, patch, url, obj, headers, options...)
 }
-func PutAndDecode(ctx context.Context, url string, obj interface{}, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	return PutWithHeaderAndDecode(ctx, url, obj, nil, result, options...)
+func PatchAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	return PatchWithHeaderAndDecode(ctx, client, url, obj, nil, result, options...)
 }
-func PutWithHeaderAndDecode(ctx context.Context, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	decoder, er1 := DoWithClient(ctx, sClient, put, url, obj, headers, options...)
-	if er1 != nil {
-		return er1
-	}
-	er2 := decoder.Decode(result)
-	return er2
-}
-func Patch(ctx context.Context, url string, obj interface{}, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, patch, url, obj, nil, options...)
-}
-func PatchWithHeader(ctx context.Context, url string, obj interface{}, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
-	return DoWithClient(ctx, sClient, patch, url, obj, headers, options...)
-}
-func PatchAndDecode(ctx context.Context, url string, obj interface{}, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	return PatchWithHeaderAndDecode(ctx, url, obj, nil, result, options...)
-}
-func PatchWithHeaderAndDecode(ctx context.Context, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
-	decoder, er1 := DoWithClient(ctx, sClient, patch, url, obj, headers, options...)
+func PatchWithHeaderAndDecode(ctx context.Context, client *http.Client, url string, obj interface{}, headers map[string]string, result interface{}, options ...func(context.Context, string, map[string]interface{})) error {
+	decoder, er1 := DoWithClient(ctx, client, patch, url, obj, headers, options...)
 	if er1 != nil {
 		return er1
 	}
@@ -290,6 +282,9 @@ func Marshal(obj interface{}) ([]byte, error) {
 	return v, nil
 }
 func DoWithClient(ctx context.Context, client *http.Client, method string, url string, obj interface{}, headers map[string]string, options ...func(context.Context, string, map[string]interface{})) (*json.Decoder, error) {
+	if client == nil {
+		client = sClient
+	}
 	rq, err := Marshal(obj)
 	if err != nil {
 		return nil, err

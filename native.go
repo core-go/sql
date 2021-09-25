@@ -43,6 +43,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 		values := make([]string, 0)
 		setColumns := make([]string, 0)
 		args := make([]interface{}, 0)
+		boolSupport := driver == DriverPostgres
 		i := 1
 		for _, col := range cols {
 			fdb := schema[col]
@@ -58,34 +59,26 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 			}
 			if !isNil {
 				iCols = append(iCols, col)
-				v, ok := GetDBValue(fieldValue)
+				v, ok := GetDBValue(fieldValue, boolSupport)
 				if ok {
 					values = append(values, v)
 				} else {
 					if boolValue, ok := fieldValue.(bool); ok {
-						if driver == DriverPostgres || driver == DriverCassandra {
-							if boolValue {
-								values = append(values, "true")
+						if boolValue {
+							if fdb.True != nil {
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.True)
 							} else {
-								values = append(values, "false")
+								values = append(values, "'1'")
 							}
 						} else {
-							if boolValue {
-								if fdb.True != nil {
-									values = append(values, buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.True)
-								} else {
-									values = append(values, "'1'")
-								}
+							if fdb.False != nil {
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.False)
 							} else {
-								if fdb.False != nil {
-									values = append(values, buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.False)
-								} else {
-									values = append(values, "'0'")
-								}
+								values = append(values, "'0'")
 							}
 						}
 					} else {
@@ -116,7 +109,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 				if isNil {
 					setColumns = append(setColumns, col+"=null")
 				} else {
-					v, ok := GetDBValue(fieldValue)
+					v, ok := GetDBValue(fieldValue, boolSupport)
 					if ok {
 						setColumns = append(setColumns, col+"="+v)
 					} else {
@@ -215,7 +208,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 			if isNil {
 				values = append(values, "null")
 			} else {
-				v, ok := GetDBValue(fieldValue)
+				v, ok := GetDBValue(fieldValue, false)
 				if ok {
 					values = append(values, v)
 				} else {
@@ -285,8 +278,8 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 				}
 				if isNil {
 					variables = append(variables,"null "+tkey)
-				}else {
-					v, ok := GetDBValue(fieldValue)
+				} else {
+					v, ok := GetDBValue(fieldValue, false)
 					if ok {
 						variables = append(variables, v+" "+tkey)
 					} else {
@@ -352,7 +345,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 				if isNil {
 					variables = append(variables, "null")
 				} else {
-					v, ok := GetDBValue(fieldValue)
+					v, ok := GetDBValue(fieldValue, false)
 					if ok {
 						variables = append(variables, v)
 					} else {

@@ -122,7 +122,7 @@ func QuoteColumnName(str string) string {
 	//}
 	return str
 }
-func GetDBValue(v interface{}) (string, bool) {
+func GetDBValue(v interface{}, boolSupport bool) (string, bool) {
 	switch v.(type) {
 	case string:
 		s0 := v.(string)
@@ -136,6 +136,16 @@ func GetDBValue(v interface{}) (string, bool) {
 		return strconv.FormatInt(v.(int64), 10), true
 	case int32:
 		return strconv.FormatInt(int64(v.(int32)), 10), true
+	case bool:
+		if !boolSupport {
+			return "", false
+		}
+		b0 := v.(bool)
+		if b0 {
+			return "true", true
+		} else {
+			return "false", true
+		}
 	default:
 		return "", false
 	}

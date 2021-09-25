@@ -44,10 +44,19 @@ func BuildInsertStatementsWithArray(table string, models interface{}, buildParam
 }, options...*Schema) ([]Statement, error) {
 	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, boolSupport, toArray, false, options...)
 }
-func BuildInsertStatements(table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) ([]Statement, error) {
+func BuildInsertStatementsWithBool(table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) ([]Statement, error) {
 	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, boolSupport, nil, false, options...)
 }
-func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
+func BuildInsertStatements(table string, models interface{}, buildParam func(int) string, options...*Schema) ([]Statement, error) {
+	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, false, nil, false, options...)
+}
+func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, options ...*Schema) ([]Statement, error) {
+	return BuildToUpdateBatchWithVersion(table, models, -1, buildParam, false, nil, options...)
+}
+func BuildToUpdateBatchWithBool(table string, models interface{}, buildParam func(int) string, boolSupport bool, options ...*Schema) ([]Statement, error) {
+	return BuildToUpdateBatchWithVersion(table, models, -1, buildParam, boolSupport, nil, options...)
+}
+func BuildToUpdateBatchWithArray(table string, models interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...*Schema) ([]Statement, error) {
@@ -123,6 +132,7 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 	args := make([]interface{}, 0)
 	if driver != DriverOracle {
 		i := 1
+		boolSupport := driver == DriverPostgres
 		for j := 0; j < slen; j++ {
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
@@ -142,7 +152,7 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 				if isNil {
 					values = append(values, "null")
 				} else {
-					v, ok := GetDBValue(fieldValue)
+					v, ok := GetDBValue(fieldValue, boolSupport)
 					if ok {
 						values = append(values, v)
 					} else {
@@ -214,7 +224,7 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 				}
 				if !isNil {
 					iCols = append(iCols, col)
-					v, ok := GetDBValue(fieldValue)
+					v, ok := GetDBValue(fieldValue, false)
 					if ok {
 						values = append(values, v)
 					} else {

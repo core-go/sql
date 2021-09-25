@@ -8,7 +8,10 @@ import (
 	"strconv"
 	"strings"
 )
-func BuildToInsert(table string, model interface{}, buildParam func(int) string, boolSupport bool, options ...*Schema) (string, []interface{}) {
+func BuildToInsert(table string, model interface{}, buildParam func(int) string, options ...*Schema) (string, []interface{}) {
+	return BuildToInsertWithSchema(table, model, -1, buildParam, false, false, nil, options...)
+}
+func BuildToInsertWithBool(table string, model interface{}, buildParam func(int) string, boolSupport bool, options ...*Schema) (string, []interface{}) {
 	return BuildToInsertWithSchema(table, model, -1, buildParam, boolSupport, false, nil, options...)
 }
 func BuildToInsertWithArray(table string, model interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
@@ -70,34 +73,26 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 					}
 				} else {
 					icols = append(icols, fdb.Column)
-					v, ok := GetDBValue(fieldValue)
+					v, ok := GetDBValue(fieldValue, boolSupport)
 					if ok {
 						values = append(values, v)
 					} else {
 						if boolValue, ok := fieldValue.(bool); ok {
-							if boolSupport {
-								if boolValue {
-									values = append(values, "true")
+							if boolValue {
+								if fdb.True != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.True)
 								} else {
-									values = append(values, "false")
+									values = append(values, "'1'")
 								}
 							} else {
-								if boolValue {
-									if fdb.True != nil {
-										values = append(values, buildParam(i))
-										i = i + 1
-										args = append(args, *fdb.True)
-									} else {
-										values = append(values, "'1'")
-									}
+								if fdb.False != nil {
+									values = append(values, buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.False)
 								} else {
-									if fdb.False != nil {
-										values = append(values, buildParam(i))
-										i = i + 1
-										args = append(args, *fdb.False)
-									} else {
-										values = append(values, "'0'")
-									}
+									values = append(values, "'0'")
 								}
 							}
 						} else {
@@ -116,7 +111,10 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 	}
 	return fmt.Sprintf("insert into %v(%v) values (%v)", table, strings.Join(icols, ","), strings.Join(values, ",")), args
 }
-func BuildToUpdate(table string, model interface{}, buildParam func(int) string, boolSupport bool, options ...*Schema) (string, []interface{}) {
+func BuildToUpdate(table string, model interface{}, buildParam func(int) string, options ...*Schema) (string, []interface{}) {
+	return BuildToUpdateWithVersion(table, model, -1, buildParam, false, nil, options...)
+}
+func BuildToUpdateWithBool(table string, model interface{}, buildParam func(int) string, boolSupport bool, options ...*Schema) (string, []interface{}) {
 	return BuildToUpdateWithVersion(table, model, -1, buildParam, boolSupport, nil, options...)
 }
 func BuildToUpdateWithArray(table string, model interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
@@ -174,34 +172,26 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 			if isNil {
 				values = append(values, col+"=null")
 			} else {
-				v, ok := GetDBValue(fieldValue)
+				v, ok := GetDBValue(fieldValue, boolSupport)
 				if ok {
 					values = append(values, col+"="+v)
 				} else {
 					if boolValue, ok := fieldValue.(bool); ok {
-						if boolSupport {
-							if boolValue {
-								values = append(values, col+"=true")
+						if boolValue {
+							if fdb.True != nil {
+								values = append(values, col+"="+buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.True)
 							} else {
-								values = append(values, col+"=false")
+								values = append(values, col+"='1'")
 							}
 						} else {
-							if boolValue {
-								if fdb.True != nil {
-									values = append(values, col+"="+buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.True)
-								} else {
-									values = append(values, col+"='1'")
-								}
+							if fdb.False != nil {
+								values = append(values, col+"="+buildParam(i))
+								i = i + 1
+								args = append(args, *fdb.False)
 							} else {
-								if fdb.False != nil {
-									values = append(values, col+"="+buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.False)
-								} else {
-									values = append(values, col+"='0'")
-								}
+								values = append(values, col+"='0'")
 							}
 						}
 					} else {
@@ -231,7 +221,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 				fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
 			}
 		}
-		v, ok := GetDBValue(fieldValue)
+		v, ok := GetDBValue(fieldValue, boolSupport)
 		if ok {
 			where = append(where, col+"="+v)
 		} else {
@@ -273,7 +263,7 @@ func BuildToPatchWithVersion(table string, model map[string]interface{}, keyColu
 			if v == nil {
 				values = append(values, col+"=null")
 			} else {
-				v2, ok2 := GetDBValue(v)
+				v2, ok2 := GetDBValue(v, false)
 				if ok2 {
 					values = append(values, col+"="+v2)
 				} else {
@@ -325,7 +315,7 @@ func BuildToPatchWithVersion(table string, model map[string]interface{}, keyColu
 	for _, col := range keyColumns {
 		v0, ok0 := model[col]
 		if ok0 {
-			v, ok1 := GetDBValue(v0)
+			v, ok1 := GetDBValue(v0, false)
 			if ok1 {
 				where = append(where, col+"="+v)
 			} else {
