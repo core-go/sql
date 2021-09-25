@@ -14,7 +14,7 @@ func BuildInsertStatementsWithVersion(table string, models interface{}, versionI
 }, includeNull bool, options...*Schema) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("models is not a slice")
+		return nil, fmt.Errorf("models must be a slice")
 	}
 	if s.Len() <= 0 {
 		return nil, nil
@@ -68,7 +68,7 @@ func BuildToUpdateBatchWithVersion(table string, models interface{}, versionInde
 }, options ...*Schema) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("models is not a slice")
+		return nil, fmt.Errorf("models must be a slice")
 	}
 	slen := s.Len()
 	if slen <= 0 {
@@ -133,37 +133,38 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 	if driver != DriverOracle {
 		i := 1
 		boolSupport := driver == DriverPostgres
+		icols := make([]string, 0)
+		for _, col := range cols {
+			fdb := schema[col]
+			if fdb.Insert {
+				icols = append(icols, col)
+			}
+		}
 		for j := 0; j < slen; j++ {
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
 			values := make([]string, 0)
 			for _, col := range cols {
 				fdb := schema[col]
-				f := mv.Field(fdb.Index)
-				fieldValue := f.Interface()
-				isNil := false
-				if f.Kind() == reflect.Ptr {
-					if reflect.ValueOf(fieldValue).IsNil() {
-						isNil = true
-					} else {
-						fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+				if fdb.Insert {
+					f := mv.Field(fdb.Index)
+					fieldValue := f.Interface()
+					isNil := false
+					if f.Kind() == reflect.Ptr {
+						if reflect.ValueOf(fieldValue).IsNil() {
+							isNil = true
+						} else {
+							fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+						}
 					}
-				}
-				if isNil {
-					values = append(values, "null")
-				} else {
-					v, ok := GetDBValue(fieldValue, boolSupport)
-					if ok {
-						values = append(values, v)
+					if isNil {
+						values = append(values, "null")
 					} else {
-						if boolValue, ok := fieldValue.(bool); ok {
-							if driver == DriverPostgres {
-								if boolValue {
-									values = append(values, "true")
-								} else {
-									values = append(values, "false")
-								}
-							} else {
+						v, ok := GetDBValue(fieldValue, boolSupport)
+						if ok {
+							values = append(values, v)
+						} else {
+							if boolValue, ok := fieldValue.(bool); ok {
 								if boolValue {
 									if fdb.True != nil {
 										values = append(values, buildParam(i))
@@ -181,14 +182,14 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 										values = append(values, "'0'")
 									}
 								}
-							}
-						} else {
-							values = append(values, buildParam(i))
-							i = i + 1
-							if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
-								args = append(args, toArray(fieldValue))
 							} else {
-								args = append(args, fieldValue)
+								values = append(values, buildParam(i))
+								i = i + 1
+								if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
+									args = append(args, toArray(fieldValue))
+								} else {
+									args = append(args, fieldValue)
+								}
 							}
 						}
 					}
@@ -199,7 +200,7 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 		}
 		query := fmt.Sprintf(fmt.Sprintf("insert into %s (%s) values %s",
 			table,
-			strings.Join(cols, ","),
+			strings.Join(icols, ","),
 			strings.Join(placeholders, ","),
 		))
 		return query, args, nil
@@ -212,44 +213,46 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 			values := make([]string, 0)
 			for _, col := range cols {
 				fdb := schema[col]
-				f := mv.Field(fdb.Index)
-				fieldValue := f.Interface()
-				isNil := false
-				if f.Kind() == reflect.Ptr {
-					if reflect.ValueOf(fieldValue).IsNil() {
-						isNil = true
-					} else {
-						fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+				if fdb.Insert {
+					f := mv.Field(fdb.Index)
+					fieldValue := f.Interface()
+					isNil := false
+					if f.Kind() == reflect.Ptr {
+						if reflect.ValueOf(fieldValue).IsNil() {
+							isNil = true
+						} else {
+							fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
+						}
 					}
-				}
-				if !isNil {
-					iCols = append(iCols, col)
-					v, ok := GetDBValue(fieldValue, false)
-					if ok {
-						values = append(values, v)
-					} else {
-						if boolValue, ok := fieldValue.(bool); ok {
-							if boolValue {
-								if fdb.True != nil {
-									values = append(values, buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.True)
+					if !isNil {
+						iCols = append(iCols, col)
+						v, ok := GetDBValue(fieldValue, false)
+						if ok {
+							values = append(values, v)
+						} else {
+							if boolValue, ok := fieldValue.(bool); ok {
+								if boolValue {
+									if fdb.True != nil {
+										values = append(values, buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.True)
+									} else {
+										values = append(values, "'1'")
+									}
 								} else {
-									values = append(values, "'1'")
+									if fdb.False != nil {
+										values = append(values, buildParam(i))
+										i = i + 1
+										args = append(args, *fdb.False)
+									} else {
+										values = append(values, "'0'")
+									}
 								}
 							} else {
-								if fdb.False != nil {
-									values = append(values, buildParam(i))
-									i = i + 1
-									args = append(args, *fdb.False)
-								} else {
-									values = append(values, "'0'")
-								}
+								values = append(values, buildParam(i))
+								i = i + 1
+								args = append(args, fieldValue)
 							}
-						} else {
-							values = append(values, buildParam(i))
-							i = i + 1
-							args = append(args, fieldValue)
 						}
 					}
 				}
