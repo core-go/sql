@@ -27,7 +27,10 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 		buildParam = GetBuildByDriver(driver)
 	}
 	modelType := reflect.Indirect(reflect.ValueOf(model)).Type()
-	mv := reflect.Indirect(reflect.ValueOf(model))
+	mv := reflect.ValueOf(model)
+	if mv.Kind() == reflect.Ptr {
+		mv = mv.Elem()
+	}
 	var cols, keys []string
 	var schema map[string]FieldDB
 	if len(options) > 0 {
@@ -114,29 +117,21 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 						setColumns = append(setColumns, col+"="+v)
 					} else {
 						if boolValue, ok := fieldValue.(bool); ok {
-							if driver == DriverPostgres || driver == DriverCassandra {
-								if boolValue {
-									setColumns = append(setColumns, col+"=true")
+							if boolValue {
+								if fdb.True != nil {
+									setColumns = append(setColumns, col+"="+buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.True)
 								} else {
-									setColumns = append(setColumns, col+"=false")
+									values = append(values, "'1'")
 								}
 							} else {
-								if boolValue {
-									if fdb.True != nil {
-										setColumns = append(setColumns, col+"="+buildParam(i))
-										i = i + 1
-										args = append(args, *fdb.True)
-									} else {
-										values = append(values, "'1'")
-									}
+								if fdb.False != nil {
+									setColumns = append(setColumns, col+"="+buildParam(i))
+									i = i + 1
+									args = append(args, *fdb.False)
 								} else {
-									if fdb.False != nil {
-										setColumns = append(setColumns, col+"="+buildParam(i))
-										i = i + 1
-										args = append(args, *fdb.False)
-									} else {
-										values = append(values, "'0'")
-									}
+									values = append(values, "'0'")
 								}
 							}
 						} else {

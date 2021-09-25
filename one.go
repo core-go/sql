@@ -40,6 +40,9 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 		cols, _, schema = MakeSchema(modelType)
 	}
 	mv := reflect.ValueOf(model)
+	if mv.Kind() == reflect.Ptr {
+		mv = mv.Elem()
+	}
 	values := make([]string, 0)
 	args := make([]interface{}, 0)
 	icols := make([]string, 0)
@@ -51,11 +54,7 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 			values = append(values, "1")
 		} else {
 			var f reflect.Value
-			if mv.Kind() == reflect.Ptr {
-				f = mv.Elem().Field(fdb.Index)
-			} else {
-				f = mv.Field(fdb.Index)
-			}
+			f = mv.Field(fdb.Index)
 			fieldValue := f.Interface()
 			isNil := false
 			if f.Kind() == reflect.Ptr {
@@ -139,6 +138,9 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 		cols, keys, schema = MakeSchema(modelType)
 	}
 	mv := reflect.ValueOf(model)
+	if mv.Kind() == reflect.Ptr {
+		mv = mv.Elem()
+	}
 	values := make([]string, 0)
 	where := make([]string, 0)
 	args := make([]interface{}, 0)
@@ -154,12 +156,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 			vw = col + "=" + strconv.FormatInt(currentVersion, 10)
 		} else if !fdb.Key && fdb.Update {
 			//f := reflect.Indirect(reflect.ValueOf(model))
-			var f reflect.Value
-			if mv.Kind() == reflect.Ptr {
-				f = mv.Elem().Field(fdb.Index)
-			} else {
-				f = mv.Field(fdb.Index)
-			}
+			f := mv.Field(fdb.Index)
 			fieldValue := f.Interface()
 			isNil := false
 			if f.Kind() == reflect.Ptr {
@@ -209,12 +206,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 	}
 	for _, col := range keys {
 		fdb := schema[col]
-		var f reflect.Value
-		if mv.Kind() == reflect.Ptr {
-			f = mv.Elem().Field(fdb.Index)
-		} else {
-			f = mv.Field(fdb.Index)
-		}
+		f := mv.Field(fdb.Index)
 		fieldValue := f.Interface()
 		if f.Kind() == reflect.Ptr {
 			if !reflect.ValueOf(fieldValue).IsNil() {
