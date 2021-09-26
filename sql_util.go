@@ -271,6 +271,12 @@ func QueryRow(ctx context.Context, db *sql.DB, modelType reflect.Type, fieldsInd
 	if er1 != nil {
 		return nil, er1
 	}
+	if fieldsIndex == nil {
+		fieldsIndex, er1 = GetColumnIndexes(modelType)
+		if er1 != nil {
+			return nil, er1
+		}
+	}
 	tb, er2 := Scan(rows, modelType, fieldsIndex)
 	if er2 != nil {
 		return nil, er2
@@ -289,6 +295,12 @@ func QueryRowTx(ctx context.Context, tx *sql.Tx, modelType reflect.Type, fieldsI
 	rows, er1 := tx.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return nil, er1
+	}
+	if fieldsIndex == nil {
+		fieldsIndex, er1 = GetColumnIndexes(modelType)
+		if er1 != nil {
+			return nil, er1
+		}
 	}
 	tb, er2 := Scan(rows, modelType, fieldsIndex)
 	if er2 != nil {
@@ -309,6 +321,12 @@ func QueryRowByStatement(ctx context.Context, stm *sql.Stmt, modelType reflect.T
 	// rows, er1 := db.Query(s, values...)
 	if er1 != nil {
 		return nil, er1
+	}
+	if fieldsIndex == nil {
+		fieldsIndex, er1 = GetColumnIndexes(modelType)
+		if er1 != nil {
+			return nil, er1
+		}
 	}
 	tb, er2 := Scan(rows, modelType, fieldsIndex)
 	if er2 != nil {
@@ -544,6 +562,12 @@ func ScansAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[strin
 	if er0 != nil {
 		return nil, 0, er0
 	}
+	if fieldsIndex == nil {
+		fieldsIndex, er0 = GetColumnIndexes(modelType)
+		if er0 != nil {
+			return nil, 0, er0
+		}
+	}
 	var count int64
 	for rows.Next() {
 		initModel := reflect.New(modelType).Interface()
@@ -568,7 +592,6 @@ func ScanByModelType(rows *sql.Rows, modelType reflect.Type) (t []interface{}, e
 			t = append(t, gTb)
 		}
 	}
-
 	return
 }
 
@@ -577,6 +600,13 @@ func Scan(rows *sql.Rows, structType reflect.Type, fieldsIndex map[string]int) (
 	err = er0
 	if err != nil {
 		return
+	}
+	if fieldsIndex == nil {
+		fieldsIndex, er0 = GetColumnIndexes(structType)
+		if er0 != nil {
+			err = er0
+			return
+		}
 	}
 	for rows.Next() {
 		gTb := reflect.New(structType).Interface()
