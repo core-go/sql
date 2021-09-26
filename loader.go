@@ -20,14 +20,14 @@ type Loader struct {
 	fieldsIndex       map[string]int
 	table             string
 }
-func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) *Loader {
+func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) (*Loader, error) {
 	var mp func(ctx context.Context, model interface{}) (interface{}, error)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
 	return NewSqlLoader(db, tableName, modelType, mp)
 }
-func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(context.Context, interface{}) (interface{}, error), options...func(i int) string) *Loader {
+func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(context.Context, interface{}) (interface{}, error), options...func(i int) string) (*Loader, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -40,9 +40,9 @@ func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(
 
 	fieldsIndex, er0 := GetColumnIndexes(modelType)
 	if er0 != nil {
-		panic(er0)
+		return nil, er0
 	}
-	return &Loader{Database: db, BuildParam: buildParam, Map: mp, modelType: modelType, modelsType: modelsType, keys: idNames, mapJsonColumnKeys: mapJsonColumnKeys, fieldsIndex: fieldsIndex, table: tableName}
+	return &Loader{Database: db, BuildParam: buildParam, Map: mp, modelType: modelType, modelsType: modelsType, keys: idNames, mapJsonColumnKeys: mapJsonColumnKeys, fieldsIndex: fieldsIndex, table: tableName}, nil
 }
 
 func (s *Loader) Keys() []string {
@@ -52,7 +52,7 @@ func (s *Loader) Keys() []string {
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	query := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
-	err := Query(ctx, s.Database, result, query)
+	err := QueryWithMap(ctx, s.Database, s.fieldsIndex, result, query)
 	if err == nil {
 		if s.Map != nil {
 			return MapModels(ctx, result, s.Map)

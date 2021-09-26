@@ -123,19 +123,19 @@ func QueryMap(ctx context.Context, db *sql.DB, transform func(s string) string, 
 	}
 	return res, nil
 }
-func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, values ...interface{}) error {
+func QueryWithMap(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
 	rows, er1 := db.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return er1
 	}
 	defer rows.Close()
 	modelType := reflect.TypeOf(results).Elem().Elem()
-
-	fieldsIndex, er2 := GetColumnIndexes(modelType)
-	if er2 != nil {
-		return er2
+	if fieldsIndex == nil {
+		fieldsIndex, er1 = GetColumnIndexes(modelType)
+		if er1 != nil {
+			return er1
+		}
 	}
-
 	tb, er3 := Scans(rows, modelType, fieldsIndex)
 	if er3 != nil {
 		return er3
@@ -153,7 +153,17 @@ func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, val
 	}
 	return nil
 }
-func QueryTx(ctx context.Context, tx *sql.Tx, results interface{}, sql string, values ...interface{}) error {
+func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, values []interface{}, options...map[string]int) error {
+	var fieldsIndex map[string]int
+	if len(options) > 0 && options[0] != nil {
+		fieldsIndex = options[0]
+	}
+	return QueryWithMap(ctx, db, fieldsIndex, results, sql, values...)
+}
+func Select(ctx context.Context, db *sql.DB, results interface{}, sql string, values ...interface{}) error {
+	return QueryWithMap(ctx, db, nil, results, sql, values...)
+}
+func QueryTx(ctx context.Context, tx *sql.Tx, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
 	rows, er1 := tx.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return er1
@@ -161,9 +171,11 @@ func QueryTx(ctx context.Context, tx *sql.Tx, results interface{}, sql string, v
 	defer rows.Close()
 
 	modelType := reflect.TypeOf(results).Elem().Elem()
-	fieldsIndex, er2 := GetColumnIndexes(modelType)
-	if er2 != nil {
-		return er2
+	if fieldsIndex == nil {
+		fieldsIndex, er1 = GetColumnIndexes(modelType)
+		if er1 != nil {
+			return er1
+		}
 	}
 
 	tb, er3 := Scans(rows, modelType, fieldsIndex)
@@ -183,7 +195,7 @@ func QueryTx(ctx context.Context, tx *sql.Tx, results interface{}, sql string, v
 	}
 	return nil
 }
-func QueryByStatement(ctx context.Context, stm *sql.Stmt, results interface{}, values ...interface{}) error {
+func QueryByStatement(ctx context.Context, stm *sql.Stmt, fieldsIndex map[string]int, results interface{}, values ...interface{}) error {
 	rows, er1 := stm.QueryContext(ctx, values...)
 	if er1 != nil {
 		return er1
@@ -191,9 +203,11 @@ func QueryByStatement(ctx context.Context, stm *sql.Stmt, results interface{}, v
 	defer rows.Close()
 
 	modelType := reflect.TypeOf(results).Elem().Elem()
-	fieldsIndex, er2 := GetColumnIndexes(modelType)
-	if er2 != nil {
-		return er2
+	if fieldsIndex == nil {
+		fieldsIndex, er1 = GetColumnIndexes(modelType)
+		if er1 != nil {
+			return er1
+		}
 	}
 
 	tb, er3 := Scans(rows, modelType, fieldsIndex)
@@ -213,7 +227,7 @@ func QueryByStatement(ctx context.Context, stm *sql.Stmt, results interface{}, v
 	}
 	return nil
 }
-func QueryAndCount(ctx context.Context, db *sql.DB, results interface{}, count *int64, sql string, values ...interface{}) error {
+func QueryAndCount(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, count *int64, sql string, values ...interface{}) error {
 	rows, er1 := db.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return er1
@@ -221,9 +235,11 @@ func QueryAndCount(ctx context.Context, db *sql.DB, results interface{}, count *
 	defer rows.Close()
 	modelType := reflect.TypeOf(results).Elem().Elem()
 
-	fieldsIndex, er2 := GetColumnIndexes(modelType)
-	if er2 != nil {
-		return er2
+	if fieldsIndex == nil {
+		fieldsIndex, er1 = GetColumnIndexes(modelType)
+		if er1 != nil {
+			return er1
+		}
 	}
 
 	tb, c, er3 := ScansAndCount(rows, modelType, fieldsIndex)

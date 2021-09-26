@@ -27,7 +27,7 @@ type Writer struct {
 func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...Mapper) *Writer {
+}, options ...Mapper) (*Writer, error) {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
@@ -37,12 +37,16 @@ func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, 
 func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, mapper Mapper, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(i int) string) *Writer {
+}, options ...func(i int) string) (*Writer, error) {
 	var loader *Loader
+	var err error
 	if mapper != nil {
-		loader = NewSqlLoader(db, tableName, modelType, mapper.DbToModel, options...)
+		loader, err = NewSqlLoader(db, tableName, modelType, mapper.DbToModel, options...)
 	} else {
-		loader = NewSqlLoader(db, tableName, modelType, nil, options...)
+		loader, err = NewSqlLoader(db, tableName, modelType, nil, options...)
+	}
+	if err != nil {
+		return nil, err
 	}
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
@@ -55,28 +59,28 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 			if !exist {
 				dbFieldName = strings.ToLower(versionField)
 			}
-			return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, versionField: versionField, versionIndex: index, versionDBField: dbFieldName, jsonColumnMap: jsonColumnMap}
+			return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, versionField: versionField, versionIndex: index, versionDBField: dbFieldName, jsonColumnMap: jsonColumnMap}, nil
 		}
 	}
-	return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}
+	return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}, nil
 }
 func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(i int) string) *Writer {
+}, options ...func(i int) string) (*Writer, error) {
 	return NewSqlWriterWithVersion(db, tableName, modelType, "", mapper, toArray, options...)
 }
 func NewWriterWithArray(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...Mapper) *Writer {
+}, options ...Mapper) (*Writer, error) {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
 	return NewWriterWithVersion(db, tableName, modelType, "", toArray, mapper)
 }
-func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) *Writer {
+func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) (*Writer, error) {
 	var mapper Mapper
 	if len(options) >= 1 {
 		mapper = options[0]

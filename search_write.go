@@ -9,21 +9,27 @@ import (
 func NewSearchWriterWithVersionAndMap(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), versionField string, mapper Mapper, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(i int) string) (*Searcher, *Writer) {
+}, options ...func(i int) string) (*Searcher, *Writer, error) {
 	if mapper == nil {
-		searcher := NewSearcherWithQuery(db, modelType, buildQuery)
-		writer := NewSqlWriterWithVersion(db, tableName, modelType, versionField, mapper, toArray, options...)
-		return searcher, writer
+		searcher, er0 := NewSearcherWithQuery(db, modelType, buildQuery)
+		if er0 != nil {
+			return searcher, nil, er0
+		}
+		writer, er1 := NewSqlWriterWithVersion(db, tableName, modelType, versionField, mapper, toArray, options...)
+		return searcher, writer, er1
 	} else {
-		searcher := NewSearcherWithQuery(db, modelType, buildQuery, mapper.DbToModel)
-		writer := NewSqlWriterWithVersion(db, tableName, modelType, versionField, mapper, toArray, options...)
-		return searcher, writer
+		searcher, er0 := NewSearcherWithQuery(db, modelType, buildQuery, mapper.DbToModel)
+		if er0 != nil {
+			return searcher, nil, er0
+		}
+		writer, er1 := NewSqlWriterWithVersion(db, tableName, modelType, versionField, mapper, toArray, options...)
+		return searcher, writer, er1
 	}
 }
 func NewSearchWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), versionField string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...Mapper) (*Searcher, *Writer) {
+}, options...Mapper) (*Searcher, *Writer, error) {
 	var mapper Mapper
 	if len(options) > 0 {
 		mapper = options[0]
@@ -33,7 +39,7 @@ func NewSearchWriterWithVersion(db *sql.DB, tableName string, modelType reflect.
 func NewSearchWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), mapper Mapper, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...string) (*Searcher, *Writer) {
+}, options...string) (*Searcher, *Writer, error) {
 	var versionField string
 	if len(options) > 0 {
 		versionField = options[0]
@@ -43,7 +49,7 @@ func NewSearchWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type
 func NewSearchWriter(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...Mapper) (*Searcher, *Writer) {
+}, options...Mapper) (*Searcher, *Writer, error) {
 	build := GetBuild(db)
 	var mapper Mapper
 	if len(options) > 0 {

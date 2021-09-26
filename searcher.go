@@ -18,7 +18,10 @@ func (s *Searcher) Search(ctx context.Context, m interface{}, results interface{
 	return s.search(ctx, m, results, limit, options...)
 }
 
-func NewSearcherWithQuery(db *sql.DB, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), options ...func(context.Context, interface{}) (interface{}, error)) *Searcher {
-	builder := NewSearchBuilder(db, modelType, buildQuery, options...)
-	return NewSearcher(builder.Search)
+func NewSearcherWithQuery(db *sql.DB, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), options ...func(context.Context, interface{}) (interface{}, error)) (*Searcher, error) {
+	builder, err := NewSearchBuilder(db, modelType, buildQuery, options...)
+	if err != nil {
+		return nil, err
+	}
+	return NewSearcher(builder.Search), nil
 }

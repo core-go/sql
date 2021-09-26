@@ -16,7 +16,7 @@ const (
 	asc                 = "asc"
 )
 
-func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query string, params []interface{}, limit int64, offset int64, options...func(context.Context, interface{}) (interface{}, error)) (int64, error) {
+func BuildFromQuery(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, models interface{}, query string, params []interface{}, limit int64, offset int64, options...func(context.Context, interface{}) (interface{}, error)) (int64, error) {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
@@ -24,7 +24,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query s
 	var total int64
 	driver := GetDriver(db)
 	if limit <= 0 {
-		er1 := Query(ctx, db, models, query, params...)
+		er1 := Select(ctx, db, models, query, params...)
 		if er1 != nil {
 			return -1, er1
 		}
@@ -38,7 +38,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query s
 	} else {
 		if driver == DriverOracle {
 			queryPaging := BuildPagingQueryByDriver(query, limit, offset, driver)
-			er1 := QueryAndCount(ctx, db, models, &total, queryPaging, params...)
+			er1 := QueryAndCount(ctx, db, fieldsIndex, models, &total, queryPaging, params...)
 			if er1 != nil {
 				return -1, er1
 			}
@@ -47,7 +47,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, models interface{}, query s
 		} else {
 			queryPaging := BuildPagingQuery(query, limit, offset, driver)
 			queryCount, paramsCount := BuildCountQuery(query, params)
-			er1 := Query(ctx, db, models, queryPaging, params...)
+			er1 := Select(ctx, db, models, queryPaging, params...)
 			if er1 != nil {
 				return -1, er1
 			}
