@@ -38,22 +38,16 @@ func CreateSchema(modelType reflect.Type) *Schema {
 	return s
 }
 func MakeSchema(modelType reflect.Type) ([]string, []string, map[string]FieldDB) {
-	numField := 0
-	if modelType.Kind() == reflect.Ptr {
-		numField = modelType.Elem().NumField()
-	} else {
-		numField = modelType.NumField()
+	m := modelType
+	if m.Kind() == reflect.Ptr {
+		m = m.Elem()
 	}
+	numField := m.NumField()
 	columns := make([]string, 0)
 	keys := make([]string, 0)
 	schema := make(map[string]FieldDB, 0)
 	for idx := 0; idx < numField; idx++ {
-		var field reflect.StructField
-		if modelType.Kind() == reflect.Ptr {
-			field = modelType.Elem().Field(idx)
-		} else {
-			field = modelType.Field(idx)
-		}
+		field := m.Field(idx)
 		tag, _ := field.Tag.Lookup("gorm")
 		if !strings.Contains(tag, IgnoreReadWrite) {
 			update := !strings.Contains(tag, "update:false")
