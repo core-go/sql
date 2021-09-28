@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"reflect"
 )
 
@@ -27,12 +28,15 @@ func NewSearchBuilder(db *sql.DB, modelType reflect.Type, buildQuery func(interf
 	return builder, nil
 }
 
-func (b *SearchBuilder) Search(ctx context.Context, m interface{}, results interface{}, limit int64, options ...int64) (int64, string, error) {
+func (b *SearchBuilder) Search(ctx context.Context, m interface{}, results interface{}, limit int64, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...int64) (int64, string, error) {
 	sql, params := b.BuildQuery(m)
 	var offset int64 = 0
 	if len(options) > 0 && options[0] > 0 {
 		offset = options[0]
 	}
-	total, err := BuildFromQuery(ctx, b.Database, b.fieldsIndex, results, sql, params, limit, offset, b.Map)
+	total, err := BuildFromQuery(ctx, b.Database, b.fieldsIndex, results, sql, params, limit, offset, toArray, b.Map)
 	return total, "", err
 }

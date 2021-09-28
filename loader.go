@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -19,15 +20,25 @@ type Loader struct {
 	mapJsonColumnKeys map[string]string
 	fieldsIndex       map[string]int
 	table             string
+	toArray func(interface{}) interface {
+		driver.Valuer
+		sql.Scanner
+	}
 }
-func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) (*Loader, error) {
+func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(context.Context, interface{}) (interface{}, error)) (*Loader, error) {
 	var mp func(ctx context.Context, model interface{}) (interface{}, error)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
-	return NewSqlLoader(db, tableName, modelType, mp)
+	return NewSqlLoader(db, tableName, modelType, mp, toArray)
 }
-func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(context.Context, interface{}) (interface{}, error), options...func(i int) string) (*Loader, error) {
+func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+},options...func(i int) string) (*Loader, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -42,7 +53,7 @@ func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(
 	if er0 != nil {
 		return nil, er0
 	}
-	return &Loader{Database: db, BuildParam: buildParam, Map: mp, modelType: modelType, modelsType: modelsType, keys: idNames, mapJsonColumnKeys: mapJsonColumnKeys, fieldsIndex: fieldsIndex, table: tableName}, nil
+	return &Loader{Database: db, BuildParam: buildParam, Map: mp, modelType: modelType, modelsType: modelsType, keys: idNames, mapJsonColumnKeys: mapJsonColumnKeys, fieldsIndex: fieldsIndex, table: tableName, toArray: toArray}, nil
 }
 
 func (s *Loader) Keys() []string {
@@ -52,7 +63,7 @@ func (s *Loader) Keys() []string {
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	query := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
-	err := QueryWithMap(ctx, s.Database, s.fieldsIndex, result, query)
+	err := QueryWithMap(ctx, s.Database, s.fieldsIndex, result, query, s.toArray)
 	if err == nil {
 		if s.Map != nil {
 			return MapModels(ctx, result, s.Map)
@@ -64,7 +75,7 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 
 func (s *Loader) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys, s.BuildParam)
-	r, err := QueryRow(ctx, s.Database, s.modelType, s.fieldsIndex, queryFindById, values...)
+	r, err := QueryRow(ctx, s.Database, s.modelType, s.fieldsIndex, queryFindById, s.toArray, values...)
 	if s.Map != nil {
 		_, er2 := s.Map(ctx, &r)
 		if er2 != nil {
@@ -109,7 +120,7 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
 	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
-	rowData, err1 := QueryRow(ctx, s.Database, s.modelType, s.fieldsIndex, sql, values...)
+	rowData, err1 := QueryRow(ctx, s.Database, s.modelType, s.fieldsIndex, sql, s.toArray, values...)
 	if err1 != nil || rowData == nil {
 		return false, err1
 	}

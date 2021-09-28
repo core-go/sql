@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -16,7 +17,10 @@ const (
 	asc                 = "asc"
 )
 
-func BuildFromQuery(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, models interface{}, query string, params []interface{}, limit int64, offset int64, options...func(context.Context, interface{}) (interface{}, error)) (int64, error) {
+func BuildFromQuery(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, models interface{}, query string, params []interface{}, limit int64, offset int64, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options...func(context.Context, interface{}) (interface{}, error)) (int64, error) {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
@@ -24,7 +28,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, fieldsIndex map[string]int,
 	var total int64
 	driver := GetDriver(db)
 	if limit <= 0 {
-		er1 := Select(ctx, db, models, query, params...)
+		er1 := Select(ctx, db, models, query, toArray, params...)
 		if er1 != nil {
 			return -1, er1
 		}
@@ -38,7 +42,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, fieldsIndex map[string]int,
 	} else {
 		if driver == DriverOracle {
 			queryPaging := BuildPagingQueryByDriver(query, limit, offset, driver)
-			er1 := QueryAndCount(ctx, db, fieldsIndex, models, &total, queryPaging, params...)
+			er1 := QueryAndCount(ctx, db, fieldsIndex, models, &total, queryPaging, toArray, params...)
 			if er1 != nil {
 				return -1, er1
 			}
@@ -47,7 +51,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, fieldsIndex map[string]int,
 		} else {
 			queryPaging := BuildPagingQuery(query, limit, offset, driver)
 			queryCount, paramsCount := BuildCountQuery(query, params)
-			er1 := Select(ctx, db, models, queryPaging, params...)
+			er1 := Select(ctx, db, models, queryPaging, toArray, params...)
 			if er1 != nil {
 				return -1, er1
 			}

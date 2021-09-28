@@ -41,9 +41,9 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 	var loader *Loader
 	var err error
 	if mapper != nil {
-		loader, err = NewSqlLoader(db, tableName, modelType, mapper.DbToModel, options...)
+		loader, err = NewSqlLoader(db, tableName, modelType, mapper.DbToModel, toArray, options...)
 	} else {
-		loader, err = NewSqlLoader(db, tableName, modelType, nil, options...)
+		loader, err = NewSqlLoader(db, tableName, modelType, nil, toArray, options...)
 	}
 	if err != nil {
 		return nil, err
