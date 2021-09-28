@@ -124,10 +124,13 @@ func QueryMap(ctx context.Context, db *sql.DB, transform func(s string) string, 
 	}
 	return res, nil
 }
-func QueryWithMap(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, sql string, toArray func(interface{}) interface {
+func QueryWithMap(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
+	return QueryWithMapAndArray(ctx, db, fieldsIndex, results, nil, sql, values...)
+}
+func QueryWithMapAndArray(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-},values ...interface{}) error {
+}, sql string, values ...interface{}) error {
 	rows, er1 := db.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return er1
@@ -140,7 +143,7 @@ func QueryWithMap(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, r
 			return er1
 		}
 	}
-	tb, er3 := Scans(rows, modelType, fieldsIndex, toArray)
+	tb, er3 := Scan(rows, modelType, fieldsIndex, toArray)
 	if er3 != nil {
 		return er3
 	}
@@ -157,26 +160,38 @@ func QueryWithMap(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, r
 	}
 	return nil
 }
-func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, values []interface{}, toArray func(interface{}) interface {
+func Query(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...map[string]int) error {
+}, sql string, values []interface{}, options...map[string]int) error {
+	return Query(ctx, db, results, nil, sql, values, options...)
+}
+func QueryWithArray(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, sql string, values []interface{}, options...map[string]int) error {
 	var fieldsIndex map[string]int
 	if len(options) > 0 && options[0] != nil {
 		fieldsIndex = options[0]
 	}
-	return QueryWithMap(ctx, db, fieldsIndex, results, sql, toArray, values...)
+	return QueryWithMapAndArray(ctx, db, fieldsIndex, results, toArray, sql, values...)
 }
-func Select(ctx context.Context, db *sql.DB, results interface{}, sql string, toArray func(interface{}) interface {
+func Select(ctx context.Context, db *sql.DB, results interface{}, sql string, values ...interface{}) error {
+	return SelectWithArray(ctx, db, results, nil, sql, values...)
+}
+func SelectWithArray(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, values ...interface{}) error {
-	return QueryWithMap(ctx, db, nil, results, sql, toArray, values...)
+}, sql string, values ...interface{}) error {
+	return QueryWithMapAndArray(ctx, db, nil, results, toArray, sql, values...)
 }
-func QueryTx(ctx context.Context, tx *sql.Tx, fieldsIndex map[string]int, results interface{}, sql string, toArray func(interface{}) interface {
+func QueryTx(ctx context.Context, tx *sql.Tx, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
+	return QueryTxWithArray(ctx, tx, fieldsIndex, results, nil, sql, values...)
+}
+func QueryTxWithArray(ctx context.Context, tx *sql.Tx, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, values ...interface{}) error {
+}, sql string, values ...interface{}) error {
 	rows, er1 := tx.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return er1
@@ -191,7 +206,7 @@ func QueryTx(ctx context.Context, tx *sql.Tx, fieldsIndex map[string]int, result
 		}
 	}
 
-	tb, er3 := Scans(rows, modelType, fieldsIndex, toArray)
+	tb, er3 := Scan(rows, modelType, fieldsIndex, toArray)
 	if er3 != nil {
 		return er3
 	}
@@ -226,7 +241,7 @@ func QueryByStatement(ctx context.Context, stm *sql.Stmt, fieldsIndex map[string
 		}
 	}
 
-	tb, er3 := Scans(rows, modelType, fieldsIndex, toArray)
+	tb, er3 := Scan(rows, modelType, fieldsIndex, toArray)
 	if er3 != nil {
 		return er3
 	}
@@ -243,10 +258,10 @@ func QueryByStatement(ctx context.Context, stm *sql.Stmt, fieldsIndex map[string
 	}
 	return nil
 }
-func QueryAndCount(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, count *int64, sql string, toArray func(interface{}) interface {
+func QueryAndCount(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, values ...interface{}) error {
+}, count *int64, sql string, values ...interface{}) error {
 	rows, er1 := db.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return er1
@@ -261,7 +276,7 @@ func QueryAndCount(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, 
 		}
 	}
 
-	tb, c, er3 := ScansAndCount(rows, modelType, fieldsIndex, toArray)
+	tb, c, er3 := ScanAndCount(rows, modelType, fieldsIndex, toArray)
 	*count = c
 	if er3 != nil {
 		return er3
@@ -279,10 +294,13 @@ func QueryAndCount(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, 
 	}
 	return nil
 }
-func QueryRow(ctx context.Context, db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, toArray func(interface{}) interface {
+func QueryRow(ctx context.Context, db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
+	return QueryRowWithArray(ctx, db, modelType, fieldsIndex, nil, sql, values...)
+}
+func QueryRowWithArray(ctx context.Context, db *sql.DB, modelType reflect.Type, fieldsIndex map[string]int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-},values ...interface{}) (interface{}, error) {
+}, sql string, values ...interface{}) (interface{}, error) {
 	strSQL := "limit 1"
 	driver := GetDriver(db)
 	if driver == DriverOracle {
@@ -313,10 +331,13 @@ func QueryRow(ctx context.Context, db *sql.DB, modelType reflect.Type, fieldsInd
 	}
 	return tb, nil
 }
-func QueryRowTx(ctx context.Context, tx *sql.Tx, modelType reflect.Type, fieldsIndex map[string]int, sql string, toArray func(interface{}) interface {
+func QueryRowTx(ctx context.Context, tx *sql.Tx, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
+	return QueryRowTxWithArray(ctx, tx, modelType, fieldsIndex, nil, sql, values...)
+}
+func QueryRowTxWithArray(ctx context.Context, tx *sql.Tx, modelType reflect.Type, fieldsIndex map[string]int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, values ...interface{}) (interface{}, error) {
+}, sql string, values ...interface{}) (interface{}, error) {
 	rows, er1 := tx.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return nil, er1
@@ -477,17 +498,24 @@ func GetColumns(cols []string, err error) ([]string, error) {
 	}
 	return c2, nil
 }
-func Scans(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int, toArray func(interface{}) interface {
+func Scan(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int, options... func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }) (t []interface{}, err error) {
+	var toArray func(interface{}) interface {
+		driver.Valuer
+		sql.Scanner
+	}
+	if len(options) > 0 {
+		toArray = options[0]
+	}
 	columns, er0 := GetColumns(rows.Columns())
 	if er0 != nil {
 		return nil, er0
 	}
 	for rows.Next() {
 		initModel := reflect.New(modelType).Interface()
-		r, swapValues := StructScan(initModel, columns, fieldsIndex, -1, toArray)
+		r, swapValues := StructScan(initModel, columns, fieldsIndex, toArray)
 		if err = rows.Scan(r...); err == nil {
 			SwapValuesToBool(initModel, &swapValues)
 			t = append(t, initModel)
@@ -495,10 +523,23 @@ func Scans(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int, t
 	}
 	return
 }
-func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, indexIgnore int, toArray func(interface{}) interface {
+func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, options...func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }) (r []interface{}, swapValues map[int]interface{}) {
+	var toArray func(interface{}) interface {
+		driver.Valuer
+		sql.Scanner
+	}
+	if len(options) > 0 {
+		toArray = options[0]
+	}
+	return StructScanAndIgnore(s, columns, fieldsIndex, toArray, -1)
+}
+func StructScanAndIgnore(s interface{}, columns []string, fieldsIndex map[string]int, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, indexIgnore int) (r []interface{}, swapValues map[int]interface{}) {
 	if s != nil {
 		modelType := reflect.TypeOf(s).Elem()
 		swapValues = make(map[int]interface{}, 0)
@@ -593,7 +634,7 @@ func SwapValuesToBool(s interface{}, swap *map[int]interface{}) {
 		}
 	}
 }
-func ScansAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int, toArray func(interface{}) interface {
+func ScanAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }) ([]interface{}, int64, error) {
@@ -613,7 +654,7 @@ func ScansAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[strin
 		initModel := reflect.New(modelType).Interface()
 		var c []interface{}
 		c = append(c, &count)
-		r, swapValues := StructScan(initModel, columns, fieldsIndex, 0,toArray)
+		r, swapValues := StructScanAndIgnore(initModel, columns, fieldsIndex, toArray, 0)
 		c = append(c, r...)
 		if err := rows.Scan(c...); err == nil {
 			SwapValuesToBool(initModel, &swapValues)
@@ -623,22 +664,7 @@ func ScansAndCount(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[strin
 	return t, count, nil
 }
 
-func ScanByModelType(rows *sql.Rows, modelType reflect.Type, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}) (t []interface{}, err error) {
-	for rows.Next() {
-		gTb := reflect.New(modelType).Interface()
-		r, swapValues := StructScan(gTb, nil, nil, -1, toArray)
-		if err = rows.Scan(r...); err == nil {
-			SwapValuesToBool(gTb, &swapValues)
-			t = append(t, gTb)
-		}
-	}
-	return
-}
-
-func Scan(rows *sql.Rows, structType reflect.Type, fieldsIndex map[string]int, toArray func(interface{}) interface {
+func ScanRowsWithArray(rows *sql.Rows, structType reflect.Type, fieldsIndex map[string]int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }) (t interface{}, err error) {
@@ -656,7 +682,7 @@ func Scan(rows *sql.Rows, structType reflect.Type, fieldsIndex map[string]int, t
 	}
 	for rows.Next() {
 		gTb := reflect.New(structType).Interface()
-		r, swapValues := StructScan(gTb, columns, fieldsIndex, -1, toArray)
+		r, swapValues := StructScanAndIgnore(gTb, columns, fieldsIndex, toArray, -1)
 		if err = rows.Scan(r...); err == nil {
 			SwapValuesToBool(gTb, &swapValues)
 			t = gTb
@@ -667,12 +693,12 @@ func Scan(rows *sql.Rows, structType reflect.Type, fieldsIndex map[string]int, t
 }
 
 //Row
-func ScanRow(row *sql.Row, structType reflect.Type, toArray func(interface{}) interface {
+func ScanRowWithArray(row *sql.Row, structType reflect.Type, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }) (t interface{}, err error) {
 	t = reflect.New(structType).Interface()
-	r, swapValues := StructScan(t, nil, nil, -1, toArray)
+	r, swapValues := StructScan(t, nil, nil, toArray)
 	err = row.Scan(r...)
 	SwapValuesToBool(t, &swapValues)
 	return

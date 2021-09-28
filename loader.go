@@ -20,12 +20,16 @@ type Loader struct {
 	mapJsonColumnKeys map[string]string
 	fieldsIndex       map[string]int
 	table             string
-	toArray func(interface{}) interface {
+	toArray           func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
 }
-func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
+
+func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) (*Loader, error) {
+	return NewLoaderWithArray(db, tableName, modelType, nil, options...)
+}
+func NewLoaderWithArray(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(context.Context, interface{}) (interface{}, error)) (*Loader, error) {
@@ -38,7 +42,7 @@ func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, toArray fun
 func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-},options...func(i int) string) (*Loader, error) {
+}, options ...func(i int) string) (*Loader, error) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -63,7 +67,7 @@ func (s *Loader) Keys() []string {
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	query := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
-	err := QueryWithMap(ctx, s.Database, s.fieldsIndex, result, query, s.toArray)
+	err := QueryWithMapAndArray(ctx, s.Database, s.fieldsIndex, result, s.toArray, query)
 	if err == nil {
 		if s.Map != nil {
 			return MapModels(ctx, result, s.Map)
@@ -75,7 +79,7 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 
 func (s *Loader) Load(ctx context.Context, ids interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys, s.BuildParam)
-	r, err := QueryRow(ctx, s.Database, s.modelType, s.fieldsIndex, queryFindById, s.toArray, values...)
+	r, err := QueryRowWithArray(ctx, s.Database, s.modelType, s.fieldsIndex, s.toArray, queryFindById, values...)
 	if s.Map != nil {
 		_, er2 := s.Map(ctx, &r)
 		if er2 != nil {
@@ -120,7 +124,7 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
 	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
-	rowData, err1 := QueryRow(ctx, s.Database, s.modelType, s.fieldsIndex, sql, s.toArray, values...)
+	rowData, err1 := QueryRowWithArray(ctx, s.Database, s.modelType, s.fieldsIndex, s.toArray, sql, values...)
 	if err1 != nil || rowData == nil {
 		return false, err1
 	}
