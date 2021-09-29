@@ -53,8 +53,7 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 			icols = append(icols, col)
 			values = append(values, "1")
 		} else {
-			var f reflect.Value
-			f = mv.Field(fdb.Index)
+			f := mv.Field(fdb.Index)
 			fieldValue := f.Interface()
 			isNil := false
 			if f.Kind() == reflect.Ptr {
