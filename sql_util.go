@@ -137,12 +137,6 @@ func QueryWithMapAndArray(ctx context.Context, db *sql.DB, fieldsIndex map[strin
 	}
 	defer rows.Close()
 	modelType := reflect.TypeOf(results).Elem().Elem()
-	if fieldsIndex == nil {
-		fieldsIndex, er1 = GetColumnIndexes(modelType)
-		if er1 != nil {
-			return er1
-		}
-	}
 	tb, er3 := Scan(rows, modelType, fieldsIndex, toArray)
 	if er3 != nil {
 		return er3
@@ -199,13 +193,6 @@ func QueryTxWithArray(ctx context.Context, tx *sql.Tx, fieldsIndex map[string]in
 	defer rows.Close()
 
 	modelType := reflect.TypeOf(results).Elem().Elem()
-	if fieldsIndex == nil {
-		fieldsIndex, er1 = GetColumnIndexes(modelType)
-		if er1 != nil {
-			return er1
-		}
-	}
-
 	tb, er3 := Scan(rows, modelType, fieldsIndex, toArray)
 	if er3 != nil {
 		return er3
@@ -234,13 +221,6 @@ func QueryByStatement(ctx context.Context, stm *sql.Stmt, fieldsIndex map[string
 	defer rows.Close()
 
 	modelType := reflect.TypeOf(results).Elem().Elem()
-	if fieldsIndex == nil {
-		fieldsIndex, er1 = GetColumnIndexes(modelType)
-		if er1 != nil {
-			return er1
-		}
-	}
-
 	tb, er3 := Scan(rows, modelType, fieldsIndex, toArray)
 	if er3 != nil {
 		return er3
@@ -311,12 +291,6 @@ func QueryRowWithArray(ctx context.Context, db *sql.DB, modelType reflect.Type, 
 	if er1 != nil {
 		return nil, er1
 	}
-	if fieldsIndex == nil {
-		fieldsIndex, er1 = GetColumnIndexes(modelType)
-		if er1 != nil {
-			return nil, er1
-		}
-	}
 	tb, er2 := Scan(rows, modelType, fieldsIndex, toArray)
 	if er2 != nil {
 		return nil, er2
@@ -342,12 +316,6 @@ func QueryRowTxWithArray(ctx context.Context, tx *sql.Tx, modelType reflect.Type
 	if er1 != nil {
 		return nil, er1
 	}
-	if fieldsIndex == nil {
-		fieldsIndex, er1 = GetColumnIndexes(modelType)
-		if er1 != nil {
-			return nil, er1
-		}
-	}
 	tb, er2 := Scan(rows, modelType, fieldsIndex, toArray)
 	if er2 != nil {
 		return nil, er2
@@ -370,12 +338,6 @@ func QueryRowByStatement(ctx context.Context, stm *sql.Stmt, modelType reflect.T
 	// rows, er1 := db.Query(s, values...)
 	if er1 != nil {
 		return nil, er1
-	}
-	if fieldsIndex == nil {
-		fieldsIndex, er1 = GetColumnIndexes(modelType)
-		if er1 != nil {
-			return nil, er1
-		}
 	}
 	tb, er2 := Scan(rows, modelType, fieldsIndex, toArray)
 	if er2 != nil {
@@ -502,6 +464,12 @@ func Scan(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int, op
 	driver.Valuer
 	sql.Scanner
 }) (t []interface{}, err error) {
+	if fieldsIndex == nil {
+		fieldsIndex, err = GetColumnIndexes(modelType)
+		if err != nil {
+			return
+		}
+	}
 	var toArray func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
