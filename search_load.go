@@ -6,8 +6,10 @@ import (
 	"database/sql/driver"
 	"reflect"
 )
-
-func NewSearchLoader(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), toArray func(interface{}) interface {
+func NewSearchLoader(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), options ...func(context.Context, interface{}) (interface{}, error)) (*Searcher, *Loader, error) {
+	return NewSearchLoaderWithArray(db, tableName, modelType, buildQuery, nil, options...)
+}
+func NewSearchLoaderWithArray(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(context.Context, interface{}) (interface{}, error)) (*Searcher, *Loader, error) {
@@ -27,6 +29,6 @@ func NewSqlSearchLoader(db *sql.DB, tableName string, modelType reflect.Type, bu
 	if er0 != nil {
 		return nil, loader, er0
 	}
-	searcher, er1 := NewSearcherWithQuery(db, modelType, buildQuery, options...)
+	searcher, er1 := NewSearcherWithQuery(db, modelType, buildQuery, toArray, options...)
 	return searcher, loader, er1
 }
