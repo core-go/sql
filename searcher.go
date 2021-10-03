@@ -8,30 +8,36 @@ import (
 )
 
 type Searcher struct {
-	search func(ctx context.Context, searchModel interface{}, results interface{}, limit int64, toArray func(interface{}) interface {
+	search  func(ctx context.Context, searchModel interface{}, results interface{}, limit int64, options ...int64) (int64, string, error)
+	ToArray func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
-	}, options...int64) (int64, string, error)
+	}
 }
-
-func NewSearcher(search func(context.Context, interface{}, interface{}, int64, func(interface{}) interface {
+func NewSearcher(search func(context.Context, interface{}, interface{}, int64, ...int64) (int64, string, error), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, ...int64) (int64, string, error)) *Searcher {
-	return &Searcher{search: search}
+}) *Searcher {
+	return NewSearcherWithArray(search, toArray)
 }
-
-func (s *Searcher) Search(ctx context.Context, m interface{}, results interface{}, limit int64, toArray func(interface{}) interface {
+func NewSearcherWithArray(search func(context.Context, interface{}, interface{}, int64, ...int64) (int64, string, error), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...int64) (int64, string, error) {
-	return s.search(ctx, m, results, limit, toArray, options...)
+}) *Searcher {
+	return &Searcher{search: search, ToArray: toArray}
 }
 
-func NewSearcherWithQuery(db *sql.DB, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), options ...func(context.Context, interface{}) (interface{}, error)) (*Searcher, error) {
-	builder, err := NewSearchBuilder(db, modelType, buildQuery, options...)
+func (s *Searcher) Search(ctx context.Context, m interface{}, results interface{}, limit int64, options ...int64) (int64, string, error) {
+	return s.search(ctx, m, results, limit, options...)
+}
+
+func NewSearcherWithQuery(db *sql.DB, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(context.Context, interface{}) (interface{}, error)) (*Searcher, error) {
+	builder, err := NewSearchBuilderWithArray(db, modelType, buildQuery, toArray, options...)
 	if err != nil {
 		return nil, err
 	}
-	return NewSearcher(builder.Search), nil
+	return NewSearcherWithArray(builder.Search, toArray), nil
 }
