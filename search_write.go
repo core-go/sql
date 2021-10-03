@@ -11,14 +11,14 @@ func NewSearchWriterWithVersionAndMap(db *sql.DB, tableName string, modelType re
 	sql.Scanner
 }, options ...func(i int) string) (*Searcher, *Writer, error) {
 	if mapper == nil {
-		searcher, er0 := NewSearcherWithQuery(db, modelType, buildQuery, toArray)
+		searcher, er0 := NewSearcherWithArray(db, modelType, buildQuery, toArray)
 		if er0 != nil {
 			return searcher, nil, er0
 		}
 		writer, er1 := NewSqlWriterWithVersion(db, tableName, modelType, versionField, mapper, toArray, options...)
 		return searcher, writer, er1
 	} else {
-		searcher, er0 := NewSearcherWithQuery(db, modelType, buildQuery, toArray, mapper.DbToModel)
+		searcher, er0 := NewSearcherWithArray(db, modelType, buildQuery, toArray, mapper.DbToModel)
 		if er0 != nil {
 			return searcher, nil, er0
 		}

@@ -29,6 +29,6 @@ func NewSqlSearchLoader(db *sql.DB, tableName string, modelType reflect.Type, bu
 	if er0 != nil {
 		return nil, loader, er0
 	}
-	searcher, er1 := NewSearcherWithQuery(db, modelType, buildQuery, toArray, options...)
+	searcher, er1 := NewSearcherWithArray(db, modelType, buildQuery, toArray, options...)
 	return searcher, loader, er1
 }
