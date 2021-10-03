@@ -154,11 +154,8 @@ func QueryWithMapAndArray(ctx context.Context, db *sql.DB, fieldsIndex map[strin
 	}
 	return nil
 }
-func Query(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, sql string, values []interface{}, options...map[string]int) error {
-	return Query(ctx, db, results, nil, sql, values, options...)
+func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, values []interface{}, options...map[string]int) error {
+	return QueryWithArray(ctx, db, results, nil, sql, values, options...)
 }
 func QueryWithArray(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
