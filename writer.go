@@ -158,7 +158,7 @@ func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64
 	}
 	MapToDB(&model, s.modelType)
 	dbColumnMap := JSONToColumns(model, s.jsonColumnMap)
-	query, values := BuildToPatchWithVersion(s.table, dbColumnMap, s.schema.Keys, s.BuildParam, s.ToArray, s.versionDBField, s.schema.Fields)
+	query, values := BuildToPatchWithVersion(s.table, dbColumnMap, s.schema.SKeys, s.BuildParam, s.ToArray, s.versionDBField, s.schema.Fields)
 	result, err := s.Database.ExecContext(ctx, query, values...)
 	if err != nil {
 		return -1, err

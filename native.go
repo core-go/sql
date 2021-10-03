@@ -7,21 +7,22 @@ import (
 	"reflect"
 	"strings"
 )
-func BuildToSave(table string, model interface{}, driver string, options...*Schema) (string, []interface{}, error) {
+
+func BuildToSave(table string, model interface{}, driver string, options ...*Schema) (string, []interface{}, error) {
 	buildParam := GetBuildByDriver(driver)
 	return BuildToSaveWithSchema(table, model, driver, buildParam, nil, options...)
 }
 func BuildToSaveWithArray(table string, model interface{}, driver string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (string, []interface{}, error) {
+}, options ...*Schema) (string, []interface{}, error) {
 	buildParam := GetBuildByDriver(driver)
 	return BuildToSaveWithSchema(table, model, driver, buildParam, toArray, options...)
 }
 func BuildToSaveWithSchema(table string, model interface{}, driver string, buildParam func(i int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (string, []interface{}, error) {
+}, options ...*Schema) (string, []interface{}, error) {
 	// driver := GetDriver(db)
 	if buildParam == nil {
 		buildParam = GetBuildByDriver(driver)
@@ -31,15 +32,19 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 	if mv.Kind() == reflect.Ptr {
 		mv = mv.Elem()
 	}
-	var cols, keys []string
-	var schema map[string]FieldDB
-	if len(options) > 0 {
+	var cols, keys []FieldDB
+	// var schema map[string]FieldDB
+	if len(options) > 0 && options[0] != nil {
 		m := options[0]
 		cols = m.Columns
 		keys = m.Keys
-		schema = m.Fields
+		// schema = m.Fields
 	} else {
-		cols, keys, schema = MakeSchema(modelType)
+		// cols, keys, schema = MakeSchema(modelType)
+		m := CreateSchema(modelType)
+		cols = m.Columns
+		keys = m.Keys
+		// schema = m.Fields
 	}
 	if driver == DriverPostgres || driver == DriverMysql {
 		iCols := make([]string, 0)
@@ -48,8 +53,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 		args := make([]interface{}, 0)
 		boolSupport := driver == DriverPostgres
 		i := 1
-		for _, col := range cols {
-			fdb := schema[col]
+		for _, fdb := range cols {
 			f := mv.Field(fdb.Index)
 			fieldValue := f.Interface()
 			isNil := false
@@ -61,7 +65,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 				}
 			}
 			if !isNil {
-				iCols = append(iCols, col)
+				iCols = append(iCols, fdb.Column)
 				v, ok := GetDBValue(fieldValue, boolSupport)
 				if ok {
 					values = append(values, v)
@@ -96,8 +100,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 				}
 			}
 		}
-		for _, col := range cols {
-			fdb := schema[col]
+		for _, fdb := range cols {
 			if !fdb.Key && fdb.Update {
 				f := mv.Field(fdb.Index)
 				fieldValue := f.Interface()
@@ -110,16 +113,16 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 					}
 				}
 				if isNil {
-					setColumns = append(setColumns, col+"=null")
+					setColumns = append(setColumns, fdb.Column+"=null")
 				} else {
 					v, ok := GetDBValue(fieldValue, boolSupport)
 					if ok {
-						setColumns = append(setColumns, col+"="+v)
+						setColumns = append(setColumns, fdb.Column+"="+v)
 					} else {
 						if boolValue, ok := fieldValue.(bool); ok {
 							if boolValue {
 								if fdb.True != nil {
-									setColumns = append(setColumns, col+"="+buildParam(i))
+									setColumns = append(setColumns, fdb.Column+"="+buildParam(i))
 									i = i + 1
 									args = append(args, *fdb.True)
 								} else {
@@ -127,7 +130,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 								}
 							} else {
 								if fdb.False != nil {
-									setColumns = append(setColumns, col+"="+buildParam(i))
+									setColumns = append(setColumns, fdb.Column+"="+buildParam(i))
 									i = i + 1
 									args = append(args, *fdb.False)
 								} else {
@@ -135,7 +138,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 								}
 							}
 						} else {
-							setColumns = append(setColumns, col+"="+buildParam(i))
+							setColumns = append(setColumns, fdb.Column+"="+buildParam(i))
 							i = i + 1
 							if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
 								args = append(args, toArray(fieldValue))
@@ -148,13 +151,17 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 			}
 		}
 		var query string
+		iKeys := make([]string, 0)
+		for _, fdb := range keys {
+			iKeys = append(iKeys, fdb.Column)
+		}
 		if len(setColumns) > 0 {
 			if driver == DriverPostgres {
 				query = fmt.Sprintf("insert into %s(%s) values (%s) on conflict (%s) do update set %s",
 					table,
 					strings.Join(iCols, ","),
 					strings.Join(values, ","),
-					strings.Join(keys, ","),
+					strings.Join(iKeys, ","),
 					strings.Join(setColumns, ","),
 				)
 			} else {
@@ -171,7 +178,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 					table,
 					strings.Join(iCols, ","),
 					strings.Join(values, ","),
-					strings.Join(keys, ","),
+					strings.Join(iKeys, ","),
 				)
 			} else {
 				query = fmt.Sprintf("insert ignore into %s(%s) values (%s)",
@@ -187,8 +194,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 		values := make([]string, 0)
 		args := make([]interface{}, 0)
 		i := 1
-		for _, col := range cols {
-			fdb := schema[col]
+		for _, fdb := range cols {
 			f := mv.Field(fdb.Index)
 			fieldValue := f.Interface()
 			isNil := false
@@ -199,7 +205,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 					fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
 				}
 			}
-			iCols = append(iCols, col)
+			iCols = append(iCols, fdb.Column)
 			if isNil {
 				values = append(values, "null")
 			} else {
@@ -250,13 +256,12 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 		i := 0
 		switch driver {
 		case DriverOracle:
-			for _, key := range cols {
-				fdb := schema[key]
+			for _, fdb := range cols {
 				f := mv.Field(fdb.Index)
 				fieldValue := f.Interface()
-				tkey := `"` + strings.Replace(key, `"`, `""`, -1) + `"`
+				tkey := `"` + strings.Replace(fdb.Column, `"`, `""`, -1) + `"`
 				tkey = strings.ToUpper(tkey)
-				inColumns = append(inColumns, "temp."+key)
+				inColumns = append(inColumns, "temp."+fdb.Column)
 				if fdb.Key {
 					onDupe := "a." + tkey + "=" + "temp." + tkey
 					uniqueCols = append(uniqueCols, onDupe)
@@ -272,7 +277,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 					}
 				}
 				if isNil {
-					variables = append(variables,"null "+tkey)
+					variables = append(variables, "null "+tkey)
 				} else {
 					v, ok := GetDBValue(fieldValue, false)
 					if ok {
@@ -285,15 +290,15 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 									values = append(values, *fdb.True)
 									i++
 								} else {
-									variables = append(variables,"1 "+tkey)
+									variables = append(variables, "1 "+tkey)
 								}
-							}else {
+							} else {
 								if fdb.False != nil {
 									variables = append(variables, buildParam(i)+" "+tkey)
 									values = append(values, *fdb.False)
 									i++
 								} else {
-									variables = append(variables,"0 "+tkey)
+									variables = append(variables, "0 "+tkey)
 								}
 							}
 						} else {
@@ -320,11 +325,10 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 			)
 			return query, values, nil
 		case DriverMssql:
-			for _, key := range cols {
-				fdb := schema[key]
+			for _, fdb := range cols {
 				f := mv.Field(fdb.Index)
 				fieldValue := f.Interface()
-				tkey := strings.Replace(key, `"`, `""`, -1)
+				tkey := strings.Replace(fdb.Column, `"`, `""`, -1)
 				isNil := false
 				if fdb.Key {
 					onDupe := table + "." + tkey + "=" + "temp." + tkey
@@ -368,7 +372,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 				}
 				dbColumns = append(dbColumns, tkey)
 				setColumns = append(setColumns, table+"."+tkey+"=temp."+tkey)
-				inColumns = append(inColumns, "temp."+key)
+				inColumns = append(inColumns, "temp."+fdb.Column)
 			}
 			query := fmt.Sprintf("MERGE INTO %s USING (SELECT %s) AS temp (%s) ON %s WHEN MATCHED THEN UPDATE SET %s WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s);",
 				table,

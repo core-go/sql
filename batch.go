@@ -11,7 +11,7 @@ import (
 func BuildInsertStatementsWithVersion(table string, models interface{}, versionIndex int, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, includeNull bool, options...*Schema) ([]Statement, error) {
+}, includeNull bool, options ...*Schema) ([]Statement, error) {
 	s := reflect.Indirect(reflect.ValueOf(models))
 	if s.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("models must be a slice")
@@ -41,13 +41,13 @@ func BuildInsertStatementsWithVersion(table string, models interface{}, versionI
 func BuildInsertStatementsWithArray(table string, models interface{}, buildParam func(int) string, boolSupport bool, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) ([]Statement, error) {
+}, options ...*Schema) ([]Statement, error) {
 	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, boolSupport, toArray, false, options...)
 }
-func BuildInsertStatementsWithBool(table string, models interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) ([]Statement, error) {
+func BuildInsertStatementsWithBool(table string, models interface{}, buildParam func(int) string, boolSupport bool, options ...*Schema) ([]Statement, error) {
 	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, boolSupport, nil, false, options...)
 }
-func BuildInsertStatements(table string, models interface{}, buildParam func(int) string, options...*Schema) ([]Statement, error) {
+func BuildInsertStatements(table string, models interface{}, buildParam func(int) string, options ...*Schema) ([]Statement, error) {
 	return BuildInsertStatementsWithVersion(table, models, -1, buildParam, false, nil, false, options...)
 }
 func BuildToUpdateBatch(table string, models interface{}, buildParam func(int) string, options ...*Schema) ([]Statement, error) {
@@ -118,15 +118,16 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 	if buildParam == nil {
 		buildParam = GetBuildByDriver(driver)
 	}
-	var cols []string
-	var schema map[string]FieldDB
+	var cols []FieldDB
+	// var schema map[string]FieldDB
 	if len(options) > 0 {
 		cols = options[0].Columns
-		schema = options[0].Fields
+		// schema = options[0].Fields
 	} else {
 		first := s.Index(0).Interface()
 		modelType := reflect.TypeOf(first)
-		cols, _, schema = MakeSchema(modelType)
+		m := CreateSchema(modelType)
+		cols = m.Columns
 	}
 	placeholders := make([]string, 0)
 	args := make([]interface{}, 0)
@@ -134,18 +135,16 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 		i := 1
 		boolSupport := driver == DriverPostgres
 		icols := make([]string, 0)
-		for _, col := range cols {
-			fdb := schema[col]
+		for _, fdb := range cols {
 			if fdb.Insert {
-				icols = append(icols, col)
+				icols = append(icols, fdb.Column)
 			}
 		}
 		for j := 0; j < slen; j++ {
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
 			values := make([]string, 0)
-			for _, col := range cols {
-				fdb := schema[col]
+			for _, fdb := range cols {
 				if fdb.Insert {
 					f := mv.Field(fdb.Index)
 					fieldValue := f.Interface()
@@ -211,8 +210,7 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 			mv := reflect.ValueOf(model)
 			iCols := make([]string, 0)
 			values := make([]string, 0)
-			for _, col := range cols {
-				fdb := schema[col]
+			for _, fdb := range cols {
 				if fdb.Insert {
 					f := mv.Field(fdb.Index)
 					fieldValue := f.Interface()
@@ -225,7 +223,7 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 						}
 					}
 					if !isNil {
-						iCols = append(iCols, col)
+						iCols = append(iCols, fdb.Column)
 						v, ok := GetDBValue(fieldValue, false)
 						if ok {
 							values = append(values, v)

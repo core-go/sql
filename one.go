@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 )
+
 func BuildToInsert(table string, model interface{}, buildParam func(int) string, options ...*Schema) (string, []interface{}) {
 	return BuildToInsertWithSchema(table, model, -1, buildParam, false, false, nil, options...)
 }
@@ -31,13 +32,12 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 	sql.Scanner
 }, options ...*Schema) (string, []interface{}) {
 	modelType := reflect.TypeOf(model)
-	var cols []string
-	var schema map[string]FieldDB
-	if len(options) > 0 {
+	var cols []FieldDB
+	if len(options) > 0 && options[0] != nil {
 		cols = options[0].Columns
-		schema = options[0].Fields
 	} else {
-		cols, _, schema = MakeSchema(modelType)
+		sc := CreateSchema(modelType)
+		cols = sc.Columns
 	}
 	mv := reflect.ValueOf(model)
 	if mv.Kind() == reflect.Ptr {
@@ -47,10 +47,9 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 	args := make([]interface{}, 0)
 	icols := make([]string, 0)
 	i := 1
-	for _, col := range cols {
-		fdb := schema[col]
+	for _, fdb := range cols {
 		if fdb.Index == versionIndex {
-			icols = append(icols, col)
+			icols = append(icols, fdb.Column)
 			values = append(values, "1")
 		} else {
 			f := mv.Field(fdb.Index)
@@ -125,16 +124,17 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 	driver.Valuer
 	sql.Scanner
 }, options ...*Schema) (string, []interface{}) {
-	var cols, keys []string
-	var schema map[string]FieldDB
+	var cols, keys []FieldDB
+	// var schema map[string]FieldDB
 	modelType := reflect.TypeOf(model)
-	if len(options) > 0 {
+	if len(options) > 0 && options[0] != nil {
 		m := options[0]
 		cols = m.Columns
 		keys = m.Keys
-		schema = m.Fields
 	} else {
-		cols, keys, schema = MakeSchema(modelType)
+		m := CreateSchema(modelType)
+		cols = m.Columns
+		keys = m.Keys
 	}
 	mv := reflect.ValueOf(model)
 	if mv.Kind() == reflect.Ptr {
@@ -145,14 +145,13 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 	args := make([]interface{}, 0)
 	vw := ""
 	i := 1
-	for _, col := range cols {
-		fdb := schema[col]
+	for _, fdb := range cols {
 		if fdb.Index == versionIndex {
 			valueOfModel := reflect.Indirect(reflect.ValueOf(model))
 			currentVersion := reflect.Indirect(valueOfModel.Field(versionIndex)).Int()
 			nv := currentVersion + 1
-			values = append(values, col+"="+strconv.FormatInt(nv, 10))
-			vw = col + "=" + strconv.FormatInt(currentVersion, 10)
+			values = append(values, fdb.Column+"="+strconv.FormatInt(nv, 10))
+			vw = fdb.Column + "=" + strconv.FormatInt(currentVersion, 10)
 		} else if !fdb.Key && fdb.Update {
 			//f := reflect.Indirect(reflect.ValueOf(model))
 			f := mv.Field(fdb.Index)
@@ -166,32 +165,32 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 				}
 			}
 			if isNil {
-				values = append(values, col+"=null")
+				values = append(values, fdb.Column+"=null")
 			} else {
 				v, ok := GetDBValue(fieldValue, boolSupport)
 				if ok {
-					values = append(values, col+"="+v)
+					values = append(values, fdb.Column+"="+v)
 				} else {
 					if boolValue, ok := fieldValue.(bool); ok {
 						if boolValue {
 							if fdb.True != nil {
-								values = append(values, col+"="+buildParam(i))
+								values = append(values, fdb.Column+"="+buildParam(i))
 								i = i + 1
 								args = append(args, *fdb.True)
 							} else {
-								values = append(values, col+"='1'")
+								values = append(values, fdb.Column+"='1'")
 							}
 						} else {
 							if fdb.False != nil {
-								values = append(values, col+"="+buildParam(i))
+								values = append(values, fdb.Column+"="+buildParam(i))
 								i = i + 1
 								args = append(args, *fdb.False)
 							} else {
-								values = append(values, col+"='0'")
+								values = append(values, fdb.Column+"='0'")
 							}
 						}
 					} else {
-						values = append(values, col+"="+buildParam(i))
+						values = append(values, fdb.Column+"="+buildParam(i))
 						i = i + 1
 						if toArray != nil && reflect.TypeOf(fieldValue).Kind() == reflect.Slice {
 							args = append(args, toArray(fieldValue))
@@ -203,8 +202,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 			}
 		}
 	}
-	for _, col := range keys {
-		fdb := schema[col]
+	for _, fdb := range keys {
 		f := mv.Field(fdb.Index)
 		fieldValue := f.Interface()
 		if f.Kind() == reflect.Ptr {
@@ -214,9 +212,9 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 		}
 		v, ok := GetDBValue(fieldValue, boolSupport)
 		if ok {
-			where = append(where, col+"="+v)
+			where = append(where, fdb.Column+"="+v)
 		} else {
-			where = append(where, col+"="+buildParam(i))
+			where = append(where, fdb.Column+"="+buildParam(i))
 			i = i + 1
 			args = append(args, fieldValue)
 		}
@@ -236,6 +234,7 @@ func BuildToPatchWithArray(table string, model map[string]interface{}, keyColumn
 }, options ...map[string]FieldDB) (string, []interface{}) {
 	return BuildToPatchWithVersion(table, model, keyColumns, buildParam, toArray, "", options...)
 }
+
 // BuildToPatchWithVersion3 model with db column name
 func BuildToPatchWithVersion(table string, model map[string]interface{}, keyColumns []string, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
