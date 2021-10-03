@@ -300,7 +300,11 @@ func QueryRowWithArray(ctx context.Context, db *sql.DB, modelType reflect.Type, 
 	if er4 := rows.Err(); er4 != nil {
 		return nil, er3
 	}
-	return tb, nil
+	if len(tb) == 0 {
+		return nil, nil
+	} else {
+		return tb[0], nil
+	}
 }
 func QueryRowTx(ctx context.Context, tx *sql.Tx, modelType reflect.Type, fieldsIndex map[string]int, sql string, values ...interface{}) (interface{}, error) {
 	return QueryRowTxWithArray(ctx, tx, modelType, fieldsIndex, nil, sql, values...)
