@@ -17,15 +17,7 @@ import (
 const (
 	DBName          = "column"
 	PrimaryKey      = "primary_key"
-	IgnoreReadWrite = "-"
-
 	DriverCassandra  = "cassandra"
-	DriverPostgres   = "postgres"
-	DriverMysql      = "mysql"
-	DriverMssql      = "mssql"
-	DriverOracle     = "oracle"
-	DriverSqlite3    = "sqlite3"
-	DriverNotSupport = "no support"
 )
 
 func OpenByConfig(c Config) (*sql.DB, error) {

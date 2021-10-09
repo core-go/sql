@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const IgnoreReadWrite = "-"
+
 type BatchStatement struct {
 	Query         string
 	Values        []interface{}

@@ -6,6 +6,15 @@ import (
 	"strconv"
 )
 
+const (
+	DriverPostgres   = "postgres"
+	DriverMysql      = "mysql"
+	DriverMssql      = "mssql"
+	DriverOracle     = "oracle"
+	DriverSqlite3    = "sqlite3"
+	DriverNotSupport = "no support"
+)
+
 func GetDriver(db *sql.DB) string {
 	if db == nil {
 		return DriverNotSupport

@@ -344,7 +344,6 @@ func Contains(s []string, str string) bool {
 
 	return false
 }
-
 func MakeJsonColumnMap(modelType reflect.Type) map[string]string {
 	numField := modelType.NumField()
 	mapJsonColumn := make(map[string]string)
@@ -375,7 +374,6 @@ func JSONToColumns(model map[string]interface{}, m map[string]string) map[string
 	}
 	return r
 }
-
 func BuildToDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
 	var args []interface{}
 	var where []string
@@ -386,4 +384,19 @@ func BuildToDelete(table string, ids map[string]interface{}, buildParam func(int
 		i++
 	}
 	return fmt.Sprintf("delete from %v where %v", table, strings.Join(where, " and ")), args
+}
+func findTag(tag string, key string) (string, bool) {
+	if has := strings.Contains(tag, key); has {
+		str1 := strings.Split(tag, ";")
+		num := len(str1)
+		for i := 0; i < num; i++ {
+			str2 := strings.Split(str1[i], ":")
+			for j := 0; j < len(str2); j++ {
+				if str2[j] == key {
+					return str2[j+1], true
+				}
+			}
+		}
+	}
+	return "", false
 }

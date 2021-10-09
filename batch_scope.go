@@ -45,22 +45,6 @@ func FindDBColumNames(modelType reflect.Type) []string {
 	}
 	return idFields
 }
-func findTag(tag string, key string) (string, bool) {
-	if has := strings.Contains(tag, key); has {
-		str1 := strings.Split(tag, ";")
-		num := len(str1)
-		for i := 0; i < num; i++ {
-			str2 := strings.Split(str1[i], ":")
-			for j := 0; j < len(str2); j++ {
-				if str2[j] == key {
-					return str2[j+1], true
-				}
-			}
-		}
-	}
-	return "", false
-}
-
 // Field model field definition
 type Field struct {
 	Tags  map[string]string
