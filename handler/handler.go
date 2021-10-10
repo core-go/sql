@@ -48,7 +48,7 @@ func (h *Handler) BeginTransaction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.Cache.Put(id, tx, t)
-	succeed(w, r, http.StatusOK, id)
+	respond(w, http.StatusOK, id)
 }
 func (h *Handler) EndTransaction(w http.ResponseWriter, r *http.Request) {
 	ps := r.URL.Query()
@@ -73,7 +73,7 @@ func (h *Handler) EndTransaction(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, er1.Error(), http.StatusInternalServerError)
 		} else {
 			h.Cache.Remove(stx)
-			succeed(w, r, http.StatusOK, true)
+			respond(w, http.StatusOK, true)
 		}
 	} else {
 		er1 := tx.Commit()
@@ -81,7 +81,7 @@ func (h *Handler) EndTransaction(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, er1.Error(), http.StatusInternalServerError)
 		} else {
 			h.Cache.Remove(stx)
-			succeed(w, r, http.StatusOK, true)
+			respond(w, http.StatusOK, true)
 		}
 	}
 }
@@ -106,7 +106,7 @@ func (h *Handler) Exec(w http.ResponseWriter, r *http.Request) {
 			handleError(w, r, http.StatusInternalServerError, er2.Error(), h.Error, er2)
 			return
 		}
-		succeed(w, r, http.StatusOK, a2)
+		respond(w, http.StatusOK, a2)
 	} else {
 		tx, er0 := h.Cache.Get(stx)
 		if er0 != nil {
@@ -138,7 +138,7 @@ func (h *Handler) Exec(w http.ResponseWriter, r *http.Request) {
 			}
 			h.Cache.Remove(stx)
 		}
-		succeed(w, r, http.StatusOK, a2)
+		respond(w, http.StatusOK, a2)
 	}
 }
 
@@ -158,7 +158,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 			handleError(w, r, 500, er1.Error(), h.Error, er1)
 			return
 		}
-		succeed(w, r, http.StatusOK, res)
+		respond(w, http.StatusOK, res)
 	} else {
 		tx, er0 := h.Cache.Get(stx)
 		if er0 != nil {
@@ -183,7 +183,7 @@ func (h *Handler) Query(w http.ResponseWriter, r *http.Request) {
 			}
 			h.Cache.Remove(stx)
 		}
-		succeed(w, r, http.StatusOK, res)
+		respond(w, http.StatusOK, res)
 	}
 }
 
@@ -237,22 +237,16 @@ func (h *Handler) ExecBatch(w http.ResponseWriter, r *http.Request) {
 		handleError(w, r, 500, er1.Error(), h.Error, er1)
 		return
 	}
-	succeed(w, r, http.StatusOK, res)
+	respond(w, http.StatusOK, res)
 }
 
 func handleError(w http.ResponseWriter, r *http.Request, code int, result interface{}, logError func(context.Context, string), err error) {
 	if logError != nil {
 		logError(r.Context(), err.Error())
 	}
-	returnJSON(w, code, result)
+	respond(w, code, result)
 }
-func succeed(w http.ResponseWriter, r *http.Request, code int, result interface{}) {
-	response, _ := json.Marshal(result)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(response)
-}
-func returnJSON(w http.ResponseWriter, code int, result interface{}) error {
+func respond(w http.ResponseWriter, code int, result interface{}) error {
 	w.WriteHeader(code)
 	w.Header().Set("Content-Type", "application/json")
 	if result == nil {
