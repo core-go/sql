@@ -35,6 +35,51 @@ func ExecuteStatements(ctx context.Context, tx *sql.Tx, commit bool, stmts ...St
 		return count, nil
 	}
 }
+func Min(x, y int) int {
+	if x > y {
+		return y
+	}
+	return x
+}
+func Max(x, y int) int {
+	if x < y {
+		return y
+	}
+	return x
+}
+func ExecuteWithBatchSize(ctx context.Context, db *sql.DB, size int, stmts ...Statement) (int64, error) {
+	l := len(stmts)
+	if len(stmts) == 0 {
+		return -1, nil
+	}
+	min := Min(l, size)
+	max := Max(l, size)
+	if min == l {
+		return ExecuteAll(ctx, db, stmts...)
+	} else {
+		i := 0
+		k := 0
+		s := make([]Statement, 0)
+		for {
+			for j := 0; j < min; j++ {
+				s = append(s, stmts[k])
+				k = k + 1
+				if k >= l {
+					break
+				}
+			}
+			_, err := ExecuteAll(ctx, db, s...)
+			if err != nil {
+				return int64(i), err
+			}
+			i += min
+			if i >= max {
+				break
+			}
+		}
+	}
+	return int64(l), nil
+}
 func ExecuteAll(ctx context.Context, db *sql.DB, stmts ...Statement) (int64, error) {
 	if stmts == nil || len(stmts) == 0 {
 		return 0, nil
