@@ -126,7 +126,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 									i = i + 1
 									args = append(args, *fdb.True)
 								} else {
-									values = append(values, "'1'")
+									setColumns = append(setColumns, fdb.Column+"='1'")
 								}
 							} else {
 								if fdb.False != nil {
@@ -134,7 +134,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 									i = i + 1
 									args = append(args, *fdb.False)
 								} else {
-									values = append(values, "'0'")
+									setColumns = append(setColumns, fdb.Column+"='0'")
 								}
 							}
 						} else {
