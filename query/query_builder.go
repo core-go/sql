@@ -111,7 +111,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 		typeOfField := value.Type().Field(i)
 		param := buildParam(marker + 1)
 
-		if v, ok := x.(*s.SearchModel); ok {
+		if v, ok := x.(*s.Filter); ok {
 			if len(v.Fields) > 0 {
 				for _, key := range v.Fields {
 					i, _, columnName := getFieldByJson(modelType, key)
@@ -178,7 +178,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			}
 			value2 = s0
 		}
-		if v, ok := x.(*s.SearchModel); ok {
+		if v, ok := x.(*s.Filter); ok {
 			if v.Excluding != nil && len(v.Excluding) > 0 {
 				index, _, columnName := getFieldByBson(value.Type(), "_id")
 				if index == -1 || columnName == "" {
