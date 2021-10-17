@@ -24,7 +24,17 @@ type Writer struct {
 	}
 }
 
-func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, toArray func(interface{}) interface {
+func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) (*Writer, error) {
+	var mapper Mapper
+	if len(options) >= 1 {
+		mapper = options[0]
+	}
+	return NewWriterWithVersionAndArray(db, tableName, modelType, "", nil, mapper)
+}
+func NewWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, versionField string, options ...Mapper) (*Writer, error) {
+	return NewWriterWithVersionAndArray(db, tableName, modelType, versionField, nil, options...)
+}
+func NewWriterWithVersionAndArray(db *sql.DB, tableName string, modelType reflect.Type, versionField string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...Mapper) (*Writer, error) {
@@ -64,7 +74,10 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 	}
 	return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}, nil
 }
-func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, toArray func(interface{}) interface {
+func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, options ...func(i int) string) (*Writer, error) {
+	return NewSqlWriterWithVersion(db, tableName, modelType, "", mapper, nil, options...)
+}
+func NewWriterWithMapAndArray(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(i int) string) (*Writer, error) {
@@ -78,14 +91,7 @@ func NewWriterWithArray(db *sql.DB, tableName string, modelType reflect.Type, to
 	if len(options) >= 1 {
 		mapper = options[0]
 	}
-	return NewWriterWithVersion(db, tableName, modelType, "", toArray, mapper)
-}
-func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) (*Writer, error) {
-	var mapper Mapper
-	if len(options) >= 1 {
-		mapper = options[0]
-	}
-	return NewWriterWithVersion(db, tableName, modelType, "", nil, mapper)
+	return NewWriterWithVersionAndArray(db, tableName, modelType, "", toArray, mapper)
 }
 
 func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
