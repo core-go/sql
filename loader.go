@@ -77,8 +77,8 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	return result, err
 }
 
-func (s *Loader) Load(ctx context.Context, ids interface{}) (interface{}, error) {
-	queryFindById, values := BuildFindById(s.Database, s.table, ids, s.mapJsonColumnKeys, s.keys, s.BuildParam)
+func (s *Loader) Load(ctx context.Context, id interface{}) (interface{}, error) {
+	queryFindById, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
 	r, err := QueryRowWithArray(ctx, s.Database, s.modelType, s.fieldsIndex, s.toArray, queryFindById, values...)
 	if s.Map != nil {
 		_, er2 := s.Map(ctx, &r)
