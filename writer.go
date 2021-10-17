@@ -69,10 +69,10 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 			if !exist {
 				dbFieldName = strings.ToLower(versionField)
 			}
-			return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, versionField: versionField, versionIndex: index, versionDBField: dbFieldName, jsonColumnMap: jsonColumnMap}, nil
+			return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, Mapper: mapper, jsonColumnMap: jsonColumnMap, ToArray: toArray, versionField: versionField, versionIndex: index, versionDBField: dbFieldName}, nil
 		}
 	}
-	return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, Mapper: mapper, versionField: versionField, versionIndex: -1, ToArray: toArray}, nil
+	return &Writer{Loader: loader, BoolSupport: boolSupport, schema: schema, Mapper: mapper, jsonColumnMap: jsonColumnMap, ToArray: toArray, versionField: versionField, versionIndex: -1}, nil
 }
 func NewWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, mapper Mapper, options ...func(i int) string) (*Writer, error) {
 	return NewSqlWriterWithVersion(db, tableName, modelType, "", mapper, nil, options...)
