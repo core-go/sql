@@ -9,7 +9,6 @@ import (
 	"strings"
 )
 
-const txs = "tx"
 func Begin(ctx context.Context, db *sql.DB, opts ...*sql.TxOptions) (context.Context, *sql.Tx, error) {
 	var tx *sql.Tx
 	var err error
@@ -25,17 +24,15 @@ func Begin(ctx context.Context, db *sql.DB, opts ...*sql.TxOptions) (context.Con
 		return c2, tx, nil
 	}
 }
-func GetTx(ctx context.Context) *sql.Tx {
-	txi := ctx.Value(txs)
-	if txi != nil {
-		txx, ok := txi.(*sql.Tx)
-		if ok {
-			return txx
+func Commit(tx *sql.Tx, err error, options...bool) error {
+	if err != nil {
+		if len(options) > 0 && options[0] {
+			tx.Rollback()
 		}
+		return err
 	}
-	return nil
+	return tx.Commit()
 }
-
 type Writer struct {
 	*Loader
 	jsonColumnMap  map[string]string

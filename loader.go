@@ -10,6 +10,19 @@ import (
 	"strings"
 )
 
+const txs = "tx"
+
+func GetTx(ctx context.Context) *sql.Tx {
+	txi := ctx.Value(txs)
+	if txi != nil {
+		txx, ok := txi.(*sql.Tx)
+		if ok {
+			return txx
+		}
+	}
+	return nil
+}
+
 type Loader struct {
 	Database          *sql.DB
 	BuildParam        func(i int) string
@@ -20,6 +33,7 @@ type Loader struct {
 	mapJsonColumnKeys map[string]string
 	fieldsIndex       map[string]int
 	table             string
+	IsRollback        bool
 	toArray           func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
@@ -57,7 +71,7 @@ func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(
 	if er0 != nil {
 		return nil, er0
 	}
-	return &Loader{Database: db, BuildParam: buildParam, Map: mp, modelType: modelType, modelsType: modelsType, keys: idNames, mapJsonColumnKeys: mapJsonColumnKeys, fieldsIndex: fieldsIndex, table: tableName, toArray: toArray}, nil
+	return &Loader{Database: db, IsRollback: true, BuildParam: buildParam, Map: mp, modelType: modelType, modelsType: modelsType, keys: idNames, mapJsonColumnKeys: mapJsonColumnKeys, fieldsIndex: fieldsIndex, table: tableName, toArray: toArray}, nil
 }
 
 func (s *Loader) Keys() []string {
@@ -67,7 +81,19 @@ func (s *Loader) Keys() []string {
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	query := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
-	err := QueryWithArray(ctx, s.Database, s.fieldsIndex, result, s.toArray, query)
+	var err error
+	tx := GetTx(ctx)
+	if tx == nil {
+		err = QueryWithArray(ctx, s.Database, s.fieldsIndex, result, s.toArray, query)
+	} else {
+		err = QueryTxWithArray(ctx, tx, s.fieldsIndex, result, s.toArray, query)
+		if err != nil {
+			if s.IsRollback {
+				tx.Rollback()
+			}
+			return result, err
+		}
+	}
 	if err == nil {
 		if s.Map != nil {
 			return MapModels(ctx, result, s.Map)
@@ -79,7 +105,24 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 
 func (s *Loader) Load(ctx context.Context, id interface{}) (interface{}, error) {
 	queryFindById, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
-	r, err := QueryRowWithArray(ctx, s.Database, s.modelType, s.fieldsIndex, s.toArray, queryFindById, values...)
+	tx := GetTx(ctx)
+	var r interface{}
+	var er1 error
+	if tx == nil {
+		r, er1 = QueryRowWithArray(ctx, s.Database, s.modelType, s.fieldsIndex, s.toArray, queryFindById, values...)
+	} else {
+		r, er1 = QueryRowTxWithArray(ctx, tx, s.modelType, s.fieldsIndex, s.toArray, queryFindById, values...)
+		if er1 != nil {
+
+			return r, er1
+		}
+	}
+	if er1 != nil {
+		if s.IsRollback && tx != nil {
+			tx.Rollback()
+		}
+		return r, er1
+	}
 	if s.Map != nil {
 		_, er2 := s.Map(ctx, &r)
 		if er2 != nil {
@@ -87,7 +130,7 @@ func (s *Loader) Load(ctx context.Context, id interface{}) (interface{}, error) 
 		}
 		return r, er2
 	}
-	return r, err
+	return r, er1
 }
 
 func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
@@ -110,8 +153,17 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 		}
 		where = "where " + strings.Join(conditions, " and ")
 	}
-	row := s.Database.QueryRowContext(ctx, fmt.Sprintf("select count(*) from %s %s", s.table, where), values...)
+	var row *sql.Row
+	tx := GetTx(ctx)
+	if tx == nil {
+		row = s.Database.QueryRowContext(ctx, fmt.Sprintf("select count(*) from %s %s", s.table, where), values...)
+	} else {
+		row = tx.QueryRowContext(ctx, fmt.Sprintf("select count(*) from %s %s", s.table, where), values...)
+	}
 	if err := row.Scan(&count); err != nil {
+		if s.IsRollback && tx != nil {
+			tx.Rollback()
+		}
 		return false, err
 	} else {
 		if count >= 1 {
@@ -124,14 +176,25 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
 	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
-	rowData, err1 := QueryRowWithArray(ctx, s.Database, s.modelType, s.fieldsIndex, s.toArray, sql, values...)
-	if err1 != nil || rowData == nil {
-		return false, err1
+	var rowData interface{}
+	var er1 error
+	tx := GetTx(ctx)
+	if tx == nil {
+		rowData, er1 = QueryRowWithArray(ctx, s.Database, s.modelType, s.fieldsIndex, s.toArray, sql, values...)
+	} else {
+		rowData, er1 = QueryRowTxWithArray(ctx, tx, s.modelType, s.fieldsIndex, s.toArray, sql, values...)
+	}
+	if er1 != nil && s.IsRollback && tx != nil {
+		tx.Rollback()
+		return false, er1
+	}
+	if er1 != nil || rowData == nil {
+		return false, er1
 	}
 	byteData, _ := json.Marshal(rowData)
-	err := json.Unmarshal(byteData, &result)
-	if err1 != nil {
-		return false, err
+	er2 := json.Unmarshal(byteData, &result)
+	if er2 != nil {
+		return false, er2
 	}
 	//reflect.ValueOf(result).Elem().Set(reflect.ValueOf(rowData).Elem())
 	if s.Map != nil {
