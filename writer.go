@@ -10,6 +10,31 @@ import (
 )
 
 const txs = "tx"
+func Begin(ctx context.Context, db *sql.DB, opts ...*sql.TxOptions) (context.Context, *sql.Tx, error) {
+	var tx *sql.Tx
+	var err error
+	if len(opts) > 0 && opts[0] != nil {
+		tx, err = db.BeginTx(ctx, opts[0])
+	} else {
+		tx, err = db.Begin()
+	}
+	if err != nil {
+		return ctx, tx, err
+	} else {
+		c2 := context.WithValue(ctx, txs, tx)
+		return c2, tx, nil
+	}
+}
+func GetTx(ctx context.Context) *sql.Tx {
+	txi := ctx.Value(txs)
+	if txi != nil {
+		txx, ok := txi.(*sql.Tx)
+		if ok {
+			return txx
+		}
+	}
+	return nil
+}
 
 type Writer struct {
 	*Loader
@@ -24,21 +49,6 @@ type Writer struct {
 	ToArray        func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
-	}
-}
-func Begin(ctx context.Context, db *sql.DB, opts ...*sql.TxOptions) (context.Context, *sql.Tx, error) {
-	var tx *sql.Tx
-	var err error
-	if len(opts) > 0 && opts[0] != nil {
-		tx, err = db.BeginTx(ctx, opts[0])
-	} else {
-		tx, err = db.Begin()
-	}
-	if err != nil {
-		return ctx, tx, err
-	} else {
-		c2 := context.WithValue(ctx, txs, tx)
-		return c2, tx, nil
 	}
 }
 func NewWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...Mapper) (*Writer, error) {
@@ -110,7 +120,6 @@ func NewWriterWithArray(db *sql.DB, tableName string, modelType reflect.Type, to
 	}
 	return NewWriterWithVersionAndArray(db, tableName, modelType, "", toArray, mapper)
 }
-
 func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 	var m interface{}
 	if s.Mapper != nil {
@@ -122,15 +131,7 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 	} else {
 		m = model
 	}
-	txi := ctx.Value(txs)
-	var tx *sql.Tx
-	tx = nil
-	if txi != nil {
-		txx, ok := txi.(*sql.Tx)
-		if ok {
-			tx = txx
-		}
-	}
+	tx := GetTx(ctx)
 	queryInsert, values := BuildToInsertWithVersion(s.table, m, s.versionIndex, s.BuildParam, s.BoolSupport, s.ToArray, s.schema)
 	if tx == nil {
 		result, err := s.Database.ExecContext(ctx, queryInsert, values...)
@@ -149,7 +150,6 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 		return result.RowsAffected()
 	}
 }
-
 func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 	var m interface{}
 	if s.Mapper != nil {
@@ -161,15 +161,7 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 	} else {
 		m = model
 	}
-	txi := ctx.Value(txs)
-	var tx *sql.Tx
-	tx = nil
-	if txi != nil {
-		txx, ok := txi.(*sql.Tx)
-		if ok {
-			tx = txx
-		}
-	}
+	tx := GetTx(ctx)
 	query, values := BuildToUpdateWithVersion(s.table, m, s.versionIndex, s.BuildParam, s.BoolSupport, s.ToArray, s.schema)
 	if tx == nil {
 		result, err := s.Database.ExecContext(ctx, query, values...)
@@ -188,7 +180,6 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 		return result.RowsAffected()
 	}
 }
-
 func (s *Writer) Save(ctx context.Context, model interface{}) (int64, error) {
 	var m interface{}
 	if s.Mapper != nil {
@@ -200,15 +191,7 @@ func (s *Writer) Save(ctx context.Context, model interface{}) (int64, error) {
 	} else {
 		m = model
 	}
-	txi := ctx.Value(txs)
-	var tx *sql.Tx
-	tx = nil
-	if txi != nil {
-		txx, ok := txi.(*sql.Tx)
-		if ok {
-			tx = txx
-		}
-	}
+	tx := GetTx(ctx)
 	if tx == nil {
 		return SaveWithArray(ctx, s.Database, s.table, m, s.ToArray, s.schema)
 	} else {
@@ -220,18 +203,9 @@ func (s *Writer) Save(ctx context.Context, model interface{}) (int64, error) {
 		}
 		return i, err
 	}
-
 }
 func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
-	txi := ctx.Value(txs)
-	var tx *sql.Tx
-	tx = nil
-	if txi != nil {
-		txx, ok := txi.(*sql.Tx)
-		if ok {
-			tx = txx
-		}
-	}
+	tx := GetTx(ctx)
 	l := len(s.keys)
 	if tx == nil {
 		if l == 1 {
@@ -271,15 +245,7 @@ func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64
 	MapToDB(&model, s.modelType)
 	dbColumnMap := JSONToColumns(model, s.jsonColumnMap)
 	query, values := BuildToPatchWithVersion(s.table, dbColumnMap, s.schema.SKeys, s.BuildParam, s.ToArray, s.versionDBField, s.schema.Fields)
-	txi := ctx.Value(txs)
-	var tx *sql.Tx
-	tx = nil
-	if txi != nil {
-		txx, ok := txi.(*sql.Tx)
-		if ok {
-			tx = txx
-		}
-	}
+	tx := GetTx(ctx)
 	if tx == nil {
 		result, err := s.Database.ExecContext(ctx, query, values...)
 		if err != nil {
