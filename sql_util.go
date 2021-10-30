@@ -124,10 +124,10 @@ func QueryMap(ctx context.Context, db *sql.DB, transform func(s string) string, 
 	}
 	return res, nil
 }
-func QueryWithMap(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
-	return QueryWithMapAndArray(ctx, db, fieldsIndex, results, nil, sql, values...)
+func Query(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
+	return QueryWithArray(ctx, db, fieldsIndex, results, nil, sql, values...)
 }
-func QueryWithMapAndArray(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
+func QueryWithArray(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, sql string, values ...interface{}) error {
@@ -154,10 +154,10 @@ func QueryWithMapAndArray(ctx context.Context, db *sql.DB, fieldsIndex map[strin
 	}
 	return nil
 }
-func Query(ctx context.Context, db *sql.DB, results interface{}, sql string, values []interface{}, options...map[string]int) error {
-	return QueryWithArray(ctx, db, results, nil, sql, values, options...)
+func QueryWithMap(ctx context.Context, db *sql.DB, results interface{}, sql string, values []interface{}, options...map[string]int) error {
+	return QueryWithMapAndArray(ctx, db, results, nil, sql, values, options...)
 }
-func QueryWithArray(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
+func QueryWithMapAndArray(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, sql string, values []interface{}, options...map[string]int) error {
@@ -165,7 +165,7 @@ func QueryWithArray(ctx context.Context, db *sql.DB, results interface{}, toArra
 	if len(options) > 0 && options[0] != nil {
 		fieldsIndex = options[0]
 	}
-	return QueryWithMapAndArray(ctx, db, fieldsIndex, results, toArray, sql, values...)
+	return QueryWithArray(ctx, db, fieldsIndex, results, toArray, sql, values...)
 }
 func Select(ctx context.Context, db *sql.DB, results interface{}, sql string, values ...interface{}) error {
 	return SelectWithArray(ctx, db, results, nil, sql, values...)
@@ -174,7 +174,7 @@ func SelectWithArray(ctx context.Context, db *sql.DB, results interface{}, toArr
 	driver.Valuer
 	sql.Scanner
 }, sql string, values ...interface{}) error {
-	return QueryWithMapAndArray(ctx, db, nil, results, toArray, sql, values...)
+	return QueryWithArray(ctx, db, nil, results, toArray, sql, values...)
 }
 func QueryTx(ctx context.Context, tx *sql.Tx, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
 	return QueryTxWithArray(ctx, tx, fieldsIndex, results, nil, sql, values...)

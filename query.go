@@ -28,7 +28,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, fieldsIndex map[string]int,
 	var total int64
 	driver := GetDriver(db)
 	if limit <= 0 {
-		er1 := QueryWithMapAndArray(ctx, db, fieldsIndex, models, toArray, query, params...)
+		er1 := QueryWithArray(ctx, db, fieldsIndex, models, toArray, query, params...)
 		if er1 != nil {
 			return -1, er1
 		}
@@ -51,7 +51,7 @@ func BuildFromQuery(ctx context.Context, db *sql.DB, fieldsIndex map[string]int,
 		} else {
 			queryPaging := BuildPagingQuery(query, limit, offset, driver)
 			queryCount, paramsCount := BuildCountQuery(query, params)
-			er1 := QueryWithMapAndArray(ctx, db, fieldsIndex, models, toArray, queryPaging, params...)
+			er1 := QueryWithArray(ctx, db, fieldsIndex, models, toArray, queryPaging, params...)
 			if er1 != nil {
 				return -1, er1
 			}

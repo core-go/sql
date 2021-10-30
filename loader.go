@@ -67,7 +67,7 @@ func (s *Loader) Keys() []string {
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	query := BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
-	err := QueryWithMapAndArray(ctx, s.Database, s.fieldsIndex, result, s.toArray, query)
+	err := QueryWithArray(ctx, s.Database, s.fieldsIndex, result, s.toArray, query)
 	if err == nil {
 		if s.Map != nil {
 			return MapModels(ctx, result, s.Map)
