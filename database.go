@@ -383,6 +383,16 @@ func Delete(ctx context.Context, db *sql.DB, table string, query map[string]inte
 	}
 	return BuildResult(result.RowsAffected())
 }
+func DeleteTx(ctx context.Context, tx *sql.Tx, table string, query map[string]interface{}, buildParam func(i int) string) (int64, error) {
+	sql, values := BuildToDelete(table, query, buildParam)
+
+	result, err := tx.ExecContext(ctx, sql, values...)
+
+	if err != nil {
+		return -1, err
+	}
+	return BuildResult(result.RowsAffected())
+}
 
 func InsertBatch(ctx context.Context, db *sql.DB, tableName string, models interface{}, options ...*Schema) (int64, error) {
 	buildParam := GetBuild(db)
