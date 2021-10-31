@@ -280,7 +280,7 @@ func InsertTxWithVersion(ctx context.Context, db *sql.DB, tx *sql.Tx, table stri
 
 	result, err := tx.ExecContext(ctx, queryInsert, values...)
 	if err != nil {
-		return handleDuplicate(db, err)
+		return -1, err
 	}
 	return result.RowsAffected()
 }

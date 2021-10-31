@@ -33,6 +33,10 @@ func Commit(tx *sql.Tx, err error, options...bool) error {
 	}
 	return tx.Commit()
 }
+func CommitAndReturn(tx *sql.Tx, res int64, err error, options...bool) (int64, error) {
+	er := Commit(tx, err, options...)
+	return res, er
+}
 type Writer struct {
 	*Loader
 	jsonColumnMap  map[string]string
@@ -142,7 +146,6 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 			if s.Rollback {
 				tx.Rollback()
 			}
-			return handleDuplicate(s.Database, err)
 		}
 		return result.RowsAffected()
 	}
