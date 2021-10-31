@@ -33,7 +33,7 @@ func Commit(tx *sql.Tx, err error, options...bool) error {
 	}
 	return tx.Commit()
 }
-func CommitAndReturn(tx *sql.Tx, res int64, err error, options...bool) (int64, error) {
+func End(tx *sql.Tx, res int64, err error, options...bool) (int64, error) {
 	er := Commit(tx, err, options...)
 	return res, er
 }
