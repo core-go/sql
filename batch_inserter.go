@@ -70,7 +70,7 @@ func (w *BatchInserter) Write(ctx context.Context, models interface{}) ([]int, [
 		models2 = models
 	}
 	s := reflect.ValueOf(models2)
-	_, er2 := InsertBatchWithSchema(ctx, w.db, w.tableName, models2, w.ToArray, w.BuildParam)
+	_, er2 := InsertBatchWithSchema(ctx, w.db, w.tableName, models2, w.ToArray, w.BuildParam, w.Schema)
 
 	if er2 == nil {
 		// Return full success

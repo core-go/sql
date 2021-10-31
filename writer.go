@@ -33,6 +33,13 @@ func Commit(tx *sql.Tx, err error, options...bool) error {
 	}
 	return tx.Commit()
 }
+func Rollback(tx *sql.Tx, err error, options...int64) (int64, error) {
+	tx.Rollback()
+	if len(options) > 0 {
+		return options[0], err
+	}
+	return -1, err
+}
 func End(tx *sql.Tx, res int64, err error, options...bool) (int64, error) {
 	er := Commit(tx, err, options...)
 	return res, er
