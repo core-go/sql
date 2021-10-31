@@ -146,6 +146,7 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 			if s.Rollback {
 				tx.Rollback()
 			}
+			return -1, err
 		}
 		return result.RowsAffected()
 	}
@@ -200,6 +201,7 @@ func (s *Writer) Save(ctx context.Context, model interface{}) (int64, error) {
 			if s.Rollback {
 				tx.Rollback()
 			}
+			return -1, err
 		}
 		return i, err
 	}
@@ -221,6 +223,7 @@ func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
 				if s.Rollback {
 					tx.Rollback()
 				}
+				return -1, err
 			}
 			return i, err
 		} else {
@@ -230,6 +233,7 @@ func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
 				if s.Rollback {
 					tx.Rollback()
 				}
+				return -1, err
 			}
 			return i, err
 		}
