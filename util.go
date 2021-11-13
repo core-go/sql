@@ -192,12 +192,12 @@ func GetDBValue(v interface{}, boolSupport bool, scale int8) (string, bool) {
 		return "", false
 	default:
 		if scale >= 0 {
-			v := reflect.ValueOf(v)
-			if v.Kind() == reflect.Ptr {
-				v = v.Elem()
+			v2 := reflect.ValueOf(v)
+			if v2.Kind() == reflect.Ptr {
+				v2 = v2.Elem()
 			}
-			if v.NumField() == 1 {
-				f := v.Field(0)
+			if v2.NumField() == 1 {
+				f := v2.Field(0)
 				fv := f.Interface()
 				k := f.Kind()
 				if k == reflect.Ptr {
@@ -211,6 +211,13 @@ func GetDBValue(v interface{}, boolSupport bool, scale int8) (string, bool) {
 						} else {
 							return "", false
 						}
+					}
+				} else {
+					sv, ok := fv.(big.Float)
+					if ok {
+						return sv.Text('f', int(scale)), true
+					} else {
+						return "", false
 					}
 				}
 			} else {
