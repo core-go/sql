@@ -2,6 +2,7 @@ package sql
 
 import (
 	"fmt"
+	"math/big"
 	"reflect"
 	"strconv"
 	"strings"
@@ -26,6 +27,7 @@ type FieldDB struct {
 	Key    bool
 	Update bool
 	Insert bool
+	Scale  int8
 	True   *string
 	False  *string
 }
@@ -75,6 +77,7 @@ func CreateSchema(modelType reflect.Type) *Schema {
 								JSON:   json,
 								Column: col,
 								Index:  idx,
+								Scale:  -1,
 								Key:    isKey,
 								Update: update,
 								Insert: insert,
@@ -84,6 +87,13 @@ func CreateSchema(modelType reflect.Type) *Schema {
 								keys = append(keys, f)
 							}
 							columns = append(columns, f)
+							tScale, sOk := field.Tag.Lookup("scale")
+							if sOk {
+								scale, err := strconv.Atoi(tScale)
+								if err == nil {
+									f.Scale = int8(scale)
+								}
+							}
 							tTag, tOk := field.Tag.Lookup("true")
 							if tOk {
 								f.True = &tTag
@@ -124,7 +134,7 @@ func QuoteColumnName(str string) string {
 	//}
 	return str
 }
-func GetDBValue(v interface{}, boolSupport bool) (string, bool) {
+func GetDBValue(v interface{}, boolSupport bool, scale int8) (string, bool) {
 	switch v.(type) {
 	case string:
 		s0 := v.(string)
@@ -138,6 +148,10 @@ func GetDBValue(v interface{}, boolSupport bool) (string, bool) {
 		return strconv.FormatInt(v.(int64), 10), true
 	case int32:
 		return strconv.FormatInt(int64(v.(int32)), 10), true
+	case big.Int:
+		var z1 big.Int
+		z1 = v.(big.Int)
+		return z1.String(), true
 	case bool:
 		if !boolSupport {
 			return "", false
@@ -148,9 +162,22 @@ func GetDBValue(v interface{}, boolSupport bool) (string, bool) {
 		} else {
 			return "false", true
 		}
+	case float64:
+		if scale >= 0 {
+			mt := "%." + strconv.Itoa(int(scale)) + "f"
+			return fmt.Sprintf(mt, v), true
+		}
+		return "", false
+	case float32:
+		if scale >= 0 {
+			mt := "%." + strconv.Itoa(int(scale)) + "f"
+			return fmt.Sprintf(mt, v), true
+		}
+		return "", false
 	default:
 		return "", false
 	}
+	return "", false
 }
 func setValue(model interface{}, index int, value interface{}) (interface{}, error) {
 	valueObject := reflect.Indirect(reflect.ValueOf(model))

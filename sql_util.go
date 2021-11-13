@@ -441,7 +441,7 @@ func GetColumnNameForSearch(modelType reflect.Type, sortField string) string {
 	if i > -1 {
 		return column
 	}
-	return sortField // injection
+	return ""
 }
 func GetSortType(sortType string) string {
 	if sortType == "-" {

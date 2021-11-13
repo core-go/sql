@@ -66,7 +66,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 			}
 			if !isNil {
 				iCols = append(iCols, fdb.Column)
-				v, ok := GetDBValue(fieldValue, boolSupport)
+				v, ok := GetDBValue(fieldValue, boolSupport, fdb.Scale)
 				if ok {
 					values = append(values, v)
 				} else {
@@ -115,7 +115,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 				if isNil {
 					setColumns = append(setColumns, fdb.Column+"=null")
 				} else {
-					v, ok := GetDBValue(fieldValue, boolSupport)
+					v, ok := GetDBValue(fieldValue, boolSupport, fdb.Scale)
 					if ok {
 						setColumns = append(setColumns, fdb.Column+"="+v)
 					} else {
@@ -209,7 +209,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 			if isNil {
 				values = append(values, "null")
 			} else {
-				v, ok := GetDBValue(fieldValue, false)
+				v, ok := GetDBValue(fieldValue, false, fdb.Scale)
 				if ok {
 					values = append(values, v)
 				} else {
@@ -279,7 +279,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 				if isNil {
 					variables = append(variables, "null "+tkey)
 				} else {
-					v, ok := GetDBValue(fieldValue, false)
+					v, ok := GetDBValue(fieldValue, false, fdb.Scale)
 					if ok {
 						variables = append(variables, v+" "+tkey)
 					} else {
@@ -344,7 +344,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 				if isNil {
 					variables = append(variables, "null")
 				} else {
-					v, ok := GetDBValue(fieldValue, false)
+					v, ok := GetDBValue(fieldValue, false, fdb.Scale)
 					if ok {
 						variables = append(variables, v)
 					} else {

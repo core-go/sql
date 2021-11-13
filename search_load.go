@@ -6,10 +6,10 @@ import (
 	"database/sql/driver"
 	"reflect"
 )
-func NewSearchLoader(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), options ...func(context.Context, interface{}) (interface{}, error)) (*Searcher, *Loader, error) {
+func NewSearchLoader(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), options ...func(context.Context, interface{}) (interface{}, error)) (*Searcher, *Loader, error) {
 	return NewSearchLoaderWithArray(db, tableName, modelType, buildQuery, nil, options...)
 }
-func NewSearchLoaderWithArray(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), toArray func(interface{}) interface {
+func NewSearchLoaderWithArray(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(context.Context, interface{}) (interface{}, error)) (*Searcher, *Loader, error) {
@@ -17,7 +17,7 @@ func NewSearchLoaderWithArray(db *sql.DB, tableName string, modelType reflect.Ty
 	return NewSqlSearchLoader(db, tableName, modelType, buildQuery, build, toArray, options...)
 }
 
-func NewSqlSearchLoader(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), buildParam func(i int) string, toArray func(interface{}) interface {
+func NewSqlSearchLoader(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), buildParam func(i int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(context.Context, interface{}) (interface{}, error)) (*Searcher, *Loader, error) {

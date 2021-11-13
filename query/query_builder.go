@@ -2,7 +2,6 @@ package query
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	s "github.com/core-go/search"
 	"reflect"
@@ -28,7 +27,10 @@ type Builder struct {
 	Driver     string
 	BuildParam func(int) string
 }
-
+func UseQuery(db *sql.DB, tableName string, modelType reflect.Type, options ...func(int) string) func(interface{}) (string, []interface{}) {
+	b:= NewBuilder(db, tableName, modelType, options...)
+	return b.BuildQuery
+}
 func NewBuilder(db *sql.DB, tableName string, modelType reflect.Type, options ...func(int) string) *Builder {
 	driver := getDriver(db)
 	var build func(int) string
@@ -81,10 +83,10 @@ func getColumnNameFromSqlBuilderTag(typeOfField reflect.StructField) *string {
 	}
 	return nil*/
 }
-func (b *Builder) BuildQuery(sm interface{}) (string, []interface{}, error) {
-	return Build(sm, b.TableName, b.ModelType, b.Driver, b.BuildParam)
+func (b *Builder) BuildQuery(fm interface{}) (string, []interface{}) {
+	return Build(fm, b.TableName, b.ModelType, b.Driver, b.BuildParam)
 }
-func Build(sm interface{}, tableName string, modelType reflect.Type, driver string, buildParam func(int) string) (string, []interface{}, error) {
+func Build(fm interface{}, tableName string, modelType reflect.Type, driver string, buildParam func(int) string) (string, []interface{}) {
 	s1 := ""
 	rawConditions := make([]string, 0)
 	queryValues := make([]interface{}, 0)
@@ -95,7 +97,7 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 	fields := make([]string, 0)
 	var excluding []string
 	var keyword string
-	value := reflect.Indirect(reflect.ValueOf(sm))
+	value := reflect.Indirect(reflect.ValueOf(fm))
 	typeOfValue := value.Type()
 	numField := value.NumField()
 	var idCol string
@@ -114,10 +116,9 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 					if len(columnName) < 0 {
 						fields = fields[len(fields):]
 						break
-					} else if i == -1 {
-						columnName = strings.ToLower(key) // injection
+					} else if i > -1 {
+						fields = append(fields, columnName)
 					}
-					fields = append(fields, columnName)
 				}
 			}
 			if len(fields) > 0 {
@@ -186,11 +187,11 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 				qMatch, isQ := tag.Lookup("q")
 				if isQ {
 					if qMatch == "prefix" {
-						qQueryValues = append(qQueryValues, keyword + "%")
+						qQueryValues = append(qQueryValues, prefix(keyword))
 					} else if qMatch == "equal" {
-						qQueryValues = append(qQueryValues, keyword + "%")
+						qQueryValues = append(qQueryValues, keyword)
 					} else {
-						qQueryValues = append(qQueryValues, "%" + keyword + "%")
+						qQueryValues = append(qQueryValues, buildQ(keyword))
 					}
 					qCols = append(qCols, columnName)
 				}
@@ -200,11 +201,10 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 		if v, ok := x.(*s.Filter); ok {
 			if v.Excluding != nil && len(v.Excluding) > 0 {
 				index, _, columnName := getFieldByBson(value.Type(), "_id")
-				if index == -1 || columnName == "" {
-					return "", nil, errors.New("column name not found")
+				if !(index == -1 || columnName == "") {
+					idCol = columnName
+					excluding = v.Excluding
 				}
-				idCol = columnName
-				excluding = v.Excluding
 			}
 			if len(v.Q) > 0 {
 				keyword = strings.TrimSpace(v.Q)
@@ -228,9 +228,9 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 						rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, like, param))
 					}
 					if key == "prefix" {
-						queryValues = append(queryValues, value2 + "%")
+						queryValues = append(queryValues, prefix(value2))
 					} else {
-						queryValues = append(queryValues, "%" + value2 + "%")
+						queryValues = append(queryValues, buildQ(value2))
 					}
 				}
 				marker++
@@ -412,10 +412,10 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 	}
 	if len(rawConditions) > 0 {
 		s2 := s1 + ` where ` + strings.Join(rawConditions, " AND ") + sortString
-		return s2, queryValues, nil
+		return s2, queryValues
 	}
 	s3 := s1 + sortString
-	return s3, queryValues, nil
+	return s3, queryValues
 }
 func extractArray(values []interface{}, field interface{}) []interface{} {
 	s := reflect.Indirect(reflect.ValueOf(field))
@@ -536,10 +536,16 @@ func buildSort(sortString string, modelType reflect.Type) string {
 			fieldName = sortField[1:]
 		}
 		columnName := getColumnNameForSearch(modelType, fieldName)
-		sortType := getSortType(c)
-		sort = append(sort, columnName+" "+sortType)
+		if len(columnName) > 0 {
+			sortType := getSortType(c)
+			sort = append(sort, columnName+" "+sortType)
+		}
 	}
-	return ` order by ` + strings.Join(sort, ",")
+	if len(sort) > 0 {
+		return ` order by ` + strings.Join(sort, ",")
+	} else {
+		return ""
+	}
 }
 func getColumnNameForSearch(modelType reflect.Type, sortField string) string {
 	sortField = strings.TrimSpace(sortField)
@@ -547,7 +553,7 @@ func getColumnNameForSearch(modelType reflect.Type, sortField string) string {
 	if i > -1 {
 		return column
 	}
-	return sortField // injection
+	return ""
 }
 func getSortType(sortType string) string {
 	if sortType == "-" {
@@ -608,4 +614,21 @@ func buildParametersFrom(i int, numCol int, buildParam func(i int) string) strin
 		arrValue = append(arrValue, buildParam(i+j+1))
 	}
 	return strings.Join(arrValue, ",")
+}
+func buildQ(s string) string {
+	if !(strings.HasPrefix(s, "%") && strings.HasSuffix(s, "%")) {
+		return "%" + s + "%"
+	} else if strings.HasPrefix(s, "%") {
+		return s + "%"
+	} else if strings.HasSuffix(s, "%") {
+		return "%" + s
+	}
+	return s
+}
+func prefix(s string) string {
+	if strings.HasSuffix(s, "%") {
+		return s
+	} else {
+		return s + "%"
+	}
 }

@@ -144,10 +144,16 @@ func BuildSort(sortString string, modelType reflect.Type) string {
 			fieldName = sortField[1:]
 		}
 		columnName := GetColumnNameForSearch(modelType, fieldName)
-		sortType := GetSortType(c)
-		sort = append(sort, columnName+" "+sortType)
+		if len(columnName) > 0 {
+			sortType := GetSortType(c)
+			sort = append(sort, columnName+" "+sortType)
+		}
 	}
-	return ` order by ` + strings.Join(sort, ",")
+	if len(sort) > 0 {
+		return ` order by ` + strings.Join(sort, ",")
+	} else {
+		return ""
+	}
 }
 
 func ExtractArray(values []interface{}, field interface{}) []interface{} {

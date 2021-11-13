@@ -70,7 +70,7 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 					}
 				} else {
 					icols = append(icols, fdb.Column)
-					v, ok := GetDBValue(fieldValue, boolSupport)
+					v, ok := GetDBValue(fieldValue, boolSupport, fdb.Scale)
 					if ok {
 						values = append(values, v)
 					} else {
@@ -167,7 +167,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 			if isNil {
 				values = append(values, fdb.Column+"=null")
 			} else {
-				v, ok := GetDBValue(fieldValue, boolSupport)
+				v, ok := GetDBValue(fieldValue, boolSupport, fdb.Scale)
 				if ok {
 					values = append(values, fdb.Column+"="+v)
 				} else {
@@ -210,7 +210,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 				fieldValue = reflect.Indirect(reflect.ValueOf(fieldValue)).Interface()
 			}
 		}
-		v, ok := GetDBValue(fieldValue, boolSupport)
+		v, ok := GetDBValue(fieldValue, boolSupport, fdb.Scale)
 		if ok {
 			where = append(where, fdb.Column+"="+v)
 		} else {
@@ -253,7 +253,7 @@ func BuildToPatchWithVersion(table string, model map[string]interface{}, keyColu
 			if v == nil {
 				values = append(values, col+"=null")
 			} else {
-				v2, ok2 := GetDBValue(v, false)
+				v2, ok2 := GetDBValue(v, false, -1)
 				if ok2 {
 					values = append(values, col+"="+v2)
 				} else {
@@ -305,7 +305,7 @@ func BuildToPatchWithVersion(table string, model map[string]interface{}, keyColu
 	for _, col := range keyColumns {
 		v0, ok0 := model[col]
 		if ok0 {
-			v, ok1 := GetDBValue(v0, false)
+			v, ok1 := GetDBValue(v0, false, -1)
 			if ok1 {
 				where = append(where, col+"="+v)
 			} else {
