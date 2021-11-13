@@ -232,32 +232,6 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 				}
 				marker++
 			}
-		} else if dateRange, ok := x.(s.DateRange); ok {
-			if dateRange.Min != nil {
-				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
-				queryValues = append(queryValues, dateRange.Min)
-				marker += 1
-			}
-			if dateRange.Max != nil {
-				var eDate = dateRange.Max.Add(time.Hour * 24)
-				dateRange.Max = &eDate
-				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-				queryValues = append(queryValues, dateRange.Max)
-				marker += 1
-			}
-		} else if dateRange, ok := x.(*s.DateRange); ok && dateRange != nil {
-			if dateRange.Min != nil {
-				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
-				queryValues = append(queryValues, dateRange.Min)
-				marker += 1
-			}
-			if dateRange.Max != nil {
-				var eDate = dateRange.Max.Add(time.Hour * 24)
-				dateRange.Max = &eDate
-				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-				queryValues = append(queryValues, dateRange.Max)
-				marker += 1
-			}
 		} else if dateTime, ok := x.(s.TimeRange); ok {
 			if dateTime.Min != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
@@ -363,6 +337,32 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
 				queryValues = append(queryValues, numberRange.Top)
 				marker++
+			}
+		} else if dateRange, ok := x.(s.DateRange); ok {
+			if dateRange.Min != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
+				queryValues = append(queryValues, dateRange.Min)
+				marker += 1
+			}
+			if dateRange.Max != nil {
+				var eDate = dateRange.Max.Add(time.Hour * 24)
+				dateRange.Max = &eDate
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
+				queryValues = append(queryValues, dateRange.Max)
+				marker += 1
+			}
+		} else if dateRange, ok := x.(*s.DateRange); ok && dateRange != nil {
+			if dateRange.Min != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
+				queryValues = append(queryValues, dateRange.Min)
+				marker += 1
+			}
+			if dateRange.Max != nil {
+				var eDate = dateRange.Max.Add(time.Hour * 24)
+				dateRange.Max = &eDate
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
+				queryValues = append(queryValues, dateRange.Max)
+				marker += 1
 			}
 		} else if kind == reflect.Slice {
 			if field.Len() > 0 {
