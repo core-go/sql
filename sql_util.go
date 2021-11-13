@@ -492,6 +492,17 @@ func Scan(rows *sql.Rows, modelType reflect.Type, fieldsIndex map[string]int, op
 	}
 	return
 }
+func ScanRow(rows *sql.Rows, s interface{}, columns []string, fieldsIndex map[string]int, options...func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}) error {
+	r, swapValues := StructScan(s, columns, fieldsIndex, options...)
+	err := rows.Scan(r...)
+	if err == nil {
+		SwapValuesToBool(s, &swapValues)
+	}
+	return err
+}
 func StructScan(s interface{}, columns []string, fieldsIndex map[string]int, options...func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner

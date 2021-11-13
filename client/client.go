@@ -14,11 +14,11 @@ import (
 )
 
 type Config struct {
-	Insecure *bool  `mapstructure:"insecure" json:"insecure,omitempty" gorm:"column:insecure" bson:"insecure,omitempty" dynamodbav:"insecure,omitempty" firestore:"insecure,omitempty"`
-	Timeout  int64  `mapstructure:"timeout" json:"timeout,omitempty" gorm:"column:timeout" bson:"timeout,omitempty" dynamodbav:"timeout,omitempty" firestore:"timeout,omitempty"`
-	CertFile string `mapstructure:"cert_file" json:"certFile,omitempty" gorm:"column:certfile" bson:"certFile,omitempty" dynamodbav:"certFile,omitempty" firestore:"certFile,omitempty"`
-	KeyFile  string `mapstructure:"key_file" json:"keyFile,omitempty" gorm:"column:keyfile" bson:"keyFile,omitempty" dynamodbav:"keyFile,omitempty" firestore:"keyFile,omitempty"`
-	PEMFile  bool   `mapstructure:"pem_file" json:"pemFile,omitempty" gorm:"column:pemFile" bson:"pemFile,omitempty" dynamodbav:"pemFile,omitempty" firestore:"pemFile,omitempty"`
+	Insecure *bool          `mapstructure:"insecure" json:"insecure,omitempty" gorm:"column:insecure" bson:"insecure,omitempty" dynamodbav:"insecure,omitempty" firestore:"insecure,omitempty"`
+	Timeout  *time.Duration `mapstructure:"timeout" json:"timeout,omitempty" gorm:"column:timeout" bson:"timeout,omitempty" dynamodbav:"timeout,omitempty" firestore:"timeout,omitempty"`
+	CertFile string         `mapstructure:"cert_file" json:"certFile,omitempty" gorm:"column:certfile" bson:"certFile,omitempty" dynamodbav:"certFile,omitempty" firestore:"certFile,omitempty"`
+	KeyFile  string         `mapstructure:"key_file" json:"keyFile,omitempty" gorm:"column:keyfile" bson:"keyFile,omitempty" dynamodbav:"keyFile,omitempty" firestore:"keyFile,omitempty"`
+	PEMFile  bool           `mapstructure:"pem_file" json:"pemFile,omitempty" gorm:"column:pemFile" bson:"pemFile,omitempty" dynamodbav:"pemFile,omitempty" firestore:"pemFile,omitempty"`
 }
 type LogConfig struct {
 	Separate       bool   `mapstructure:"separate" json:"separate,omitempty" gorm:"column:separate" bson:"separate,omitempty" dynamodbav:"separate,omitempty" firestore:"separate,omitempty"`
@@ -73,12 +73,12 @@ func InitializeLog(c LogConfig) {
 }
 func NewClient(c Config) (*http.Client, error) {
 	if len(c.CertFile) > 0 && len(c.KeyFile) > 0 {
-		return NewTLSClient(c.CertFile, c.KeyFile, time.Duration(c.Timeout)*time.Millisecond)
+		return NewTLSClient(c.CertFile, c.KeyFile, c.Timeout)
 	} else {
 		if c.Insecure != nil {
-			if c.Timeout > 0 {
+			if c.Timeout != nil {
 				transport := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: *c.Insecure}}
-				client0 := &http.Client{Transport: transport, Timeout: time.Duration(c.Timeout) * time.Millisecond}
+				client0 := &http.Client{Transport: transport, Timeout: *c.Timeout}
 				// sClient = client0
 				return client0, nil
 			} else {
@@ -87,8 +87,8 @@ func NewClient(c Config) (*http.Client, error) {
 				return client0, nil
 			}
 		} else {
-			if c.Timeout > 0 {
-				client0 := &http.Client{Timeout: time.Duration(c.Timeout) * time.Millisecond}
+			if c.Timeout != nil {
+				client0 := &http.Client{Timeout: *c.Timeout}
 				return client0, nil
 			} else {
 				client0 := &http.Client{}
@@ -97,7 +97,7 @@ func NewClient(c Config) (*http.Client, error) {
 		}
 	}
 }
-func NewTLSClient(certFile, keyFile string, timeout time.Duration, options ...string) (*http.Client, error) {
+func NewTLSClient(certFile, keyFile string, timeout *time.Duration, options ...string) (*http.Client, error) {
 	clientCert, er1 := tls.LoadX509KeyPair(certFile, keyFile)
 	if er1 != nil {
 		return nil, er1
@@ -106,14 +106,14 @@ func NewTLSClient(certFile, keyFile string, timeout time.Duration, options ...st
 	if er2 != nil {
 		return nil, er2
 	}
-	if timeout <= 0 {
+	if timeout != nil {
 		client0 := &http.Client{Transport: &http.Transport{TLSClientConfig: conf}}
 		// sClient = client0
 		return client0, nil
 	} else {
 		client0 := &http.Client{
 			Transport: &http.Transport{TLSClientConfig: conf},
-			Timeout:   timeout * time.Second,
+			Timeout:   *timeout,
 		}
 		// sClient = client0
 		return client0, nil
