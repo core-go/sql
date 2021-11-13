@@ -40,6 +40,38 @@ type Loader struct {
 	}
 }
 
+func UseLoadWithArray(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(context.Context, interface{}) (interface{}, error)) (func(context.Context, interface{}, interface{}) (bool, error), error) {
+	l, err := NewLoaderWithArray(db, tableName, modelType, toArray, options...)
+	if err != nil {
+		return nil, err
+	}
+	return l.LoadAndDecode, nil
+}
+func UseGetWithArray(db *sql.DB, tableName string, modelType reflect.Type, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, options ...func(context.Context, interface{}) (interface{}, error)) (func(context.Context, interface{}, interface{}) (bool, error), error) {
+	return UseLoadWithArray(db, tableName, modelType, toArray, options...)
+}
+func Load(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) (func(context.Context, interface{}, interface{}) (bool, error), error) {
+	l, err := NewLoader(db, tableName, modelType, options...)
+	if err != nil {
+		return nil, err
+	}
+	return l.LoadAndDecode, nil
+}
+func UseLoad(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) (func(context.Context, interface{}, interface{}) (bool, error), error) {
+	return Load(db, tableName, modelType, options...)
+}
+func Get(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) (func(context.Context, interface{}, interface{}) (bool, error), error) {
+	return Load(db, tableName, modelType, options...)
+}
+func UseGet(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) (func(context.Context, interface{}, interface{}) (bool, error), error) {
+	return Load(db, tableName, modelType, options...)
+}
 func NewLoader(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) (*Loader, error) {
 	return NewLoaderWithArray(db, tableName, modelType, nil, options...)
 }

@@ -87,7 +87,6 @@ func CreateSchema(modelType reflect.Type) *Schema {
 								skeys = append(skeys, col)
 								keys = append(keys, f)
 							}
-							columns = append(columns, f)
 							tScale, sOk := field.Tag.Lookup("scale")
 							if sOk {
 								scale, err := strconv.Atoi(tScale)
@@ -103,6 +102,7 @@ func CreateSchema(modelType reflect.Type) *Schema {
 									f.False = &fTag
 								}
 							}
+							columns = append(columns, f)
 							schema[col] = f
 						}
 					}
@@ -172,7 +172,7 @@ func GetDBValue(v interface{}, boolSupport bool, scale int8) (string, bool) {
 	case big.Float:
 		n1 := v.(big.Float)
 		if scale >= 0 {
-			n2 := RoundBigFloat(n1, int(scale))
+			n2 := Round(n1, int(scale))
 			return fmt.Sprintf("%v", &n2), true
 		} else {
 			return fmt.Sprintf("%v", &n1), true
@@ -191,7 +191,34 @@ func GetDBValue(v interface{}, boolSupport bool, scale int8) (string, bool) {
 		}
 		return "", false
 	default:
-		return "", false
+		if scale >= 0 {
+			v := reflect.ValueOf(v)
+			if v.Kind() == reflect.Ptr {
+				v = v.Elem()
+			}
+			if v.NumField() == 1 {
+				f := v.Field(0)
+				fv := f.Interface()
+				k := f.Kind()
+				if k == reflect.Ptr {
+					if f.IsNil() {
+						return "null", true
+					} else {
+						fv = reflect.Indirect(reflect.ValueOf(fv)).Interface()
+						sv, ok := fv.(big.Float)
+						if ok {
+							return sv.Text('f', int(scale)), true
+						} else {
+							return "", false
+						}
+					}
+				}
+			} else {
+				return "", false
+			}
+		} else {
+			return "", false
+		}
 	}
 	return "", false
 }
@@ -420,7 +447,12 @@ func ParseDates(args []interface{}, dates []int) []interface{} {
 	}
 	return res
 }
-func RoundBigFloat(num big.Float, scale int) big.Float {
+func RoundFloat(num float64, slice int) float64 {
+	c := math.Pow10(slice)
+	result := math.Ceil(num*c) / c
+	return result
+}
+func Round(num big.Float, scale int) big.Float {
 	marshal, _ := num.MarshalText()
 	var dot int
 	for i, v := range marshal {
