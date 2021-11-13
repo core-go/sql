@@ -104,7 +104,7 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 }
 
 func (s *Loader) Load(ctx context.Context, id interface{}) (interface{}, error) {
-	queryFindById, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
+	queryFindById, values := BuildFindByIdWithDB(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
 	tx := GetTx(ctx)
 	var r interface{}
 	var er1 error
@@ -175,7 +175,7 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 
 func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
-	sql, values := BuildFindById(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
+	sql, values := BuildFindByIdWithDB(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
 	var rowData interface{}
 	var er1 error
 	tx := GetTx(ctx)

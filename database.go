@@ -55,15 +55,9 @@ func FindPrimaryKeys(modelType reflect.Type) ([]string, []string) {
 	}
 	return idColumnFields, idJsons
 }
-func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string, options ...func(i int) string) (string, []interface{}) {
+func BuildFindById(table string, buildParam func(i int) string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
 	var where = ""
 	var values []interface{}
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
-	}
 	if len(keys) == 1 {
 		where = fmt.Sprintf("where %s = %s", mapJsonColumnKeys[keys[0]], buildParam(1))
 		values = append(values, id)
@@ -83,6 +77,15 @@ func BuildFindById(db *sql.DB, table string, id interface{}, mapJsonColumnKeys m
 		}
 	}
 	return fmt.Sprintf("select * from %v %v", table, where), values
+}
+func BuildFindByIdWithDB(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string, options ...func(i int) string) (string, []interface{}) {
+	var buildParam func(i int) string
+	if len(options) > 0 && options[0] != nil {
+		buildParam = options[0]
+	} else {
+		buildParam = GetBuild(db)
+	}
+	return BuildFindById(table, buildParam, id, mapJsonColumnKeys, keys)
 }
 
 func BuildSelectAllQuery(table string) string {
