@@ -93,10 +93,12 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 	rawJoin := make([]string, 0)
 	sortString := ""
 	fields := make([]string, 0)
+	var excluding []string
 	var keyword string
 	value := reflect.Indirect(reflect.ValueOf(sm))
 	typeOfValue := value.Type()
 	numField := value.NumField()
+	var idCol string
 	marker := 0
 	for i := 0; i < numField; i++ {
 		field := value.Field(i)
@@ -201,10 +203,8 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 				if index == -1 || columnName == "" {
 					return "", nil, errors.New("column name not found")
 				}
-				format := fmt.Sprintf("(%s)", buildParametersFrom(marker, len(v.Excluding), buildParam))
-				marker += len(v.Excluding) - 1
-				rawConditions = append(rawConditions, fmt.Sprintf("%s NOT IN %s", columnName, format))
-				queryValues = extractArray(queryValues, v.Excluding)
+				idCol = columnName
+				excluding = v.Excluding
 			}
 			if len(v.Q) > 0 {
 				keyword = strings.TrimSpace(v.Q)
@@ -214,7 +214,10 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			if len(value2) > 0 {
 				key, ok := tag.Lookup("match")
 				if !ok {
-					key = "contains"
+					key, ok = tag.Lookup("q")
+					if !ok {
+						key = "contains"
+					}
 				}
 				if key == "equal" {
 					rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, "=", param))
@@ -377,6 +380,12 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 		}
 	}
 
+	if excluding != nil && len(excluding) > 0 && len(idCol) > 0 {
+		format := fmt.Sprintf("(%s)", buildParametersFrom(marker, len(excluding), buildParam))
+		marker += len(excluding)
+		rawConditions = append(rawConditions, fmt.Sprintf("%s NOT IN %s", idCol, format))
+		queryValues = extractArray(queryValues, excluding)
+	}
 	if len(rawJoin) > 0 {
 		s1 = s1 + " " + strings.Join(rawJoin, " ")
 	}
