@@ -6,7 +6,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 	"sort"
 	"strconv"
@@ -17,20 +16,9 @@ import (
 const (
 	DBName          = "column"
 	PrimaryKey      = "primary_key"
-	DriverCassandra  = "cassandra"
+	DriverCassandra = "cassandra"
 )
 
-func OpenByConfig(c Config) (*sql.DB, error) {
-	if c.Mock {
-		return nil, nil
-	}
-	if c.Retry.Retry1 <= 0 {
-		return open(c)
-	} else {
-		durations := DurationsFromValue(c.Retry, "Retry", 9)
-		return Open(c, durations...)
-	}
-}
 type TxCache interface {
 	Put(key string, value *sql.Tx, timeToLive time.Duration) error
 	Expire(key string, timeToLive time.Duration) (bool, error)
@@ -40,74 +28,6 @@ type TxCache interface {
 	Keys() ([]string, error)
 	Count() (int64, error)
 	Size() (int64, error)
-}
-
-func open(c Config) (*sql.DB, error) {
-	dsn := c.DataSourceName
-	if len(dsn) == 0 {
-		dsn = BuildDataSourceName(c)
-	}
-	db, err := sql.Open(c.Driver, dsn)
-	if err != nil {
-		return db, err
-	}
-	if c.ConnMaxLifetime > 0 {
-		db.SetConnMaxLifetime(time.Duration(c.ConnMaxLifetime) * time.Second)
-	}
-	if c.MaxIdleConns > 0 {
-		db.SetMaxIdleConns(c.MaxIdleConns)
-	}
-	if c.MaxOpenConns > 0 {
-		db.SetMaxOpenConns(c.MaxOpenConns)
-	}
-	return db, err
-}
-func Open(c Config, retries ...time.Duration) (*sql.DB, error) {
-	if c.Mock {
-		return nil, nil
-	}
-	if len(retries) == 0 {
-		return open(c)
-	} else {
-		db, er1 := open(c)
-		if er1 == nil {
-			return db, er1
-		}
-		i := 0
-		err := Retry(retries, func() (err error) {
-			i = i + 1
-			db2, er2 := open(c)
-			if er2 == nil {
-				db = db2
-			}
-			return er2
-		})
-		if err != nil {
-			log.Printf("Cannot conect to database: %s.", err.Error())
-		}
-		return db, err
-	}
-}
-func BuildDataSourceName(c Config) string {
-	if c.Driver == "postgres" {
-		uri := fmt.Sprintf("user=%s dbname=%s password=%s host=%s port=%d sslmode=disable", c.User, c.Database, c.Password, c.Host, c.Port)
-		return uri
-	} else if c.Driver == "mysql" {
-		uri := ""
-		if c.MultiStatements {
-			uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&multiStatements=True", c.User, c.Password, c.Host, c.Port, c.Database)
-			return uri
-		}
-		uri = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local", c.User, c.Password, c.Host, c.Port, c.Database)
-		return uri
-	} else if c.Driver == "mssql" { // mssql
-		uri := fmt.Sprintf("sqlserver://%s:%s@%s:%d?Database=%s", c.User, c.Password, c.Host, c.Port, c.Database)
-		return uri
-	} else if c.Driver == "godror" || c.Driver == "oracle" {
-		return fmt.Sprintf("user=\"%s\" password=\"%s\" connectString=\"%s:%d/%s\"", c.User, c.Password, c.Host, c.Port, c.Database)
-	} else { //sqlite
-		return c.Host // return sql.Open("sqlite3", c.Host)
-	}
 }
 
 // for Loader
@@ -285,7 +205,7 @@ func InsertTxWithVersion(ctx context.Context, db *sql.DB, tx *sql.Tx, table stri
 	return result.RowsAffected()
 }
 
-func Update(ctx context.Context, db *sql.DB, table string, model interface{}, options...*Schema) (int64, error) {
+func Update(ctx context.Context, db *sql.DB, table string, model interface{}, options ...*Schema) (int64, error) {
 	var schema *Schema
 	if len(options) > 0 {
 		schema = options[0]
@@ -295,7 +215,7 @@ func Update(ctx context.Context, db *sql.DB, table string, model interface{}, op
 func UpdateWithArray(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (int64, error) {
+}, options ...*Schema) (int64, error) {
 	var schema *Schema
 	if len(options) > 0 {
 		schema = options[0]
@@ -326,7 +246,7 @@ func UpdateWithVersion(ctx context.Context, db *sql.DB, table string, model inte
 	}
 	return result.RowsAffected()
 }
-func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...*Schema) (int64, error) {
+func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options ...*Schema) (int64, error) {
 	var schema *Schema
 	if len(options) > 0 {
 		schema = options[0]
@@ -336,7 +256,7 @@ func UpdateTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model i
 func UpdateTxWithArray(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (int64, error) {
+}, options ...*Schema) (int64, error) {
 	var schema *Schema
 	if len(options) > 0 {
 		schema = options[0]
@@ -460,13 +380,13 @@ func UpdateBatchWithVersion(ctx context.Context, db *sql.DB, tableName string, m
 	return ExecuteAll(ctx, db, stmts...)
 }
 
-func Save(ctx context.Context, db *sql.DB, table string, model interface{}, options...*Schema) (int64, error) {
+func Save(ctx context.Context, db *sql.DB, table string, model interface{}, options ...*Schema) (int64, error) {
 	return SaveWithArray(ctx, db, table, model, nil, options...)
 }
 func SaveWithArray(ctx context.Context, db *sql.DB, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (int64, error) {
+}, options ...*Schema) (int64, error) {
 	drive := GetDriver(db)
 	buildParam := GetBuild(db)
 	queryString, value, err := BuildToSaveWithSchema(table, model, drive, buildParam, toArray, options...)
@@ -479,7 +399,7 @@ func SaveWithArray(ctx context.Context, db *sql.DB, table string, model interfac
 	}
 	return res.RowsAffected()
 }
-func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options...*Schema) (int64, error) {
+func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, options ...*Schema) (int64, error) {
 	var schema *Schema
 	if len(options) > 0 {
 		schema = options[0]
@@ -489,7 +409,7 @@ func SaveTx(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model int
 func SaveTxWithArray(ctx context.Context, db *sql.DB, tx *sql.Tx, table string, model interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...*Schema) (int64, error) {
+}, options ...*Schema) (int64, error) {
 	drive := GetDriver(db)
 	buildParam := GetBuild(db)
 	queryString, value, err := BuildToSaveWithSchema(table, model, drive, buildParam, toArray, options...)
