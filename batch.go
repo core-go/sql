@@ -118,7 +118,7 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 	if buildParam == nil {
 		buildParam = GetBuildByDriver(driver)
 	}
-	var cols []FieldDB
+	var cols []*FieldDB
 	// var schema map[string]FieldDB
 	if len(options) > 0 && options[0] != nil {
 		cols = options[0].Columns

@@ -32,7 +32,7 @@ func BuildToInsertWithSchema(table string, model interface{}, versionIndex int, 
 	sql.Scanner
 }, options ...*Schema) (string, []interface{}) {
 	modelType := reflect.TypeOf(model)
-	var cols []FieldDB
+	var cols []*FieldDB
 	if len(options) > 0 && options[0] != nil {
 		cols = options[0].Columns
 	} else {
@@ -124,7 +124,7 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 	driver.Valuer
 	sql.Scanner
 }, options ...*Schema) (string, []interface{}) {
-	var cols, keys []FieldDB
+	var cols, keys []*FieldDB
 	// var schema map[string]FieldDB
 	modelType := reflect.TypeOf(model)
 	if len(options) > 0 && options[0] != nil {
@@ -225,13 +225,13 @@ func BuildToUpdateWithVersion(table string, model interface{}, versionIndex int,
 	query := fmt.Sprintf("update %v set %v where %v", table, strings.Join(values, ","), strings.Join(where, " and "))
 	return query, args
 }
-func BuildToPatch(table string, model map[string]interface{}, keyColumns []string, buildParam func(int) string, options ...map[string]FieldDB) (string, []interface{}) {
+func BuildToPatch(table string, model map[string]interface{}, keyColumns []string, buildParam func(int) string, options ...map[string]*FieldDB) (string, []interface{}) {
 	return BuildToPatchWithVersion(table, model, keyColumns, buildParam, nil, "", options...)
 }
 func BuildToPatchWithArray(table string, model map[string]interface{}, keyColumns []string, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...map[string]FieldDB) (string, []interface{}) {
+}, options ...map[string]*FieldDB) (string, []interface{}) {
 	return BuildToPatchWithVersion(table, model, keyColumns, buildParam, toArray, "", options...)
 }
 
@@ -239,8 +239,8 @@ func BuildToPatchWithArray(table string, model map[string]interface{}, keyColumn
 func BuildToPatchWithVersion(table string, model map[string]interface{}, keyColumns []string, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, version string, options ...map[string]FieldDB) (string, []interface{}) { //version column name db
-	var schema map[string]FieldDB
+}, version string, options ...map[string]*FieldDB) (string, []interface{}) { //version column name db
+	var schema map[string]*FieldDB
 	if len(options) > 0 {
 		schema = options[0]
 	}

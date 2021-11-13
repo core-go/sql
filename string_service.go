@@ -60,62 +60,121 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 }
 
 func (s *StringService) Save(ctx context.Context, values []string) (int64, error) {
-	mainScope := BatchStatement{}
 	driver := s.Driver
-	for _, e := range values {
-		mainScope.Values = append(mainScope.Values, e)
+	l := len(values)
+	if l == 0 {
+		return 0, nil
 	}
-	query := ""
-	holders := BuildPlaceHolders(len(mainScope.Values), s.BuildParam)
-	if driver == DriverPostgres {
-		query = fmt.Sprintf("insert into %s (%s) values %s on conflict do nothing",
-			s.Table,
-			s.Field,
-			holders,
-		)
+	if driver == DriverPostgres || driver == DriverMysql {
+		ps := make([]string, 0)
+		p := make([]interface{}, 0)
+		for _, str := range values {
+			p = append(p, str)
+		}
+		if driver == DriverPostgres {
+			for i := 1; i <= l; i++ {
+				ps = append(ps, "(" + BuildDollarParam(i) + ")")
+			}
+		} else {
+			for i := 1; i <= l; i++ {
+				ps = append(ps, "(?)")
+			}
+		}
+		var query string
+		if driver == DriverPostgres {
+			query = fmt.Sprintf("insert into %s (%s) values %s on conflict do nothing", s.Table, s.Field, strings.Join(ps, ","))
+		} else {
+			query = fmt.Sprintf("insert ignore into %s (%s) values %s", s.Table, s.Field, strings.Join(ps, ","))
+		}
+		tx, err := s.DB.Begin()
+		if err != nil {
+			return -1, err
+		}
+		res, err := tx.ExecContext(ctx, query, p...)
+		if err != nil {
+			er := tx.Rollback()
+			if er != nil {
+				return -1, er
+			}
+			return -1, err
+		}
+		err = tx.Commit()
+		if err != nil {
+			return -1, err
+		}
+		return res.RowsAffected()
 	} else if driver == DriverSqlite3 {
-		query = fmt.Sprintf("insert or ignore into %s (%s) values %s",
-			s.Table,
-			s.Field,
-			holders,
-		)
-	} else if driver == DriverMysql {
-		query = fmt.Sprintf("insert ignore %s (%s) values %s ",
-			s.Table,
-			s.Field,
-			holders,
-		)
-	} else if driver == DriverOracle || driver == DriverMssql {
-		onDupe := s.Table + "." + s.Field + " = " + "temp." + s.Field
-		value := "temp." + s.Field
-		query = fmt.Sprintf("merge into %s using (values %s) as temp (%s) on %s when not matched then insert (%s) values (%s);",
-			s.Table,
-			holders,
-			s.Field,
-			onDupe,
-			s.Field,
-			value,
-		)
+		tx, err := s.DB.Begin()
+		if err != nil {
+			return -1, err
+		}
+		var c int64
+		c = 0
+		for _, e := range values {
+			query := fmt.Sprintf("insert or ignore into %s (%s) values (?)", s.Table, s.Field)
+			res, err := tx.ExecContext(ctx, query, e)
+			if err != nil {
+				er := tx.Rollback()
+				if er != nil {
+					return -1, er
+				}
+				return -1, err
+			}
+			a, err := res.RowsAffected()
+			if err != nil {
+				return -1, err
+			}
+			c = c + a
+		}
+		err = tx.Commit()
+		if err != nil {
+			return -1, err
+		}
+		return c, nil
 	} else {
-		return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", driver)
+		mainScope := BatchStatement{}
+		for _, e := range values {
+			mainScope.Values = append(mainScope.Values, e)
+		}
+		query := ""
+		holders := BuildPlaceHolders(len(mainScope.Values), s.BuildParam)
+		if driver == DriverOracle || driver == DriverMssql {
+			onDupe := s.Table + "." + s.Field + " = " + "temp." + s.Field
+			value := "temp." + s.Field
+			query = fmt.Sprintf("merge into %s using (values %s) as temp (%s) on %s when not matched then insert (%s) values (%s);",
+				s.Table,
+				holders,
+				s.Field,
+				onDupe,
+				s.Field,
+				value,
+			)
+		} else {
+			return 0, fmt.Errorf("unsupported db vendor, current vendor is %s", driver)
+		}
+		mainScope.Query = query
+		x, err := s.DB.ExecContext(ctx, mainScope.Query, mainScope.Values...)
+		if err != nil {
+			return 0, err
+		}
+		return x.RowsAffected()
 	}
-	mainScope.Query = query
-	x, err := s.DB.ExecContext(ctx, mainScope.Query, mainScope.Values...)
-	if err != nil {
-		return 0, err
-	}
-	return x.RowsAffected()
 }
 
 func (s *StringService) Delete(ctx context.Context, values []string) (int64, error) {
 	var arrValue []string
 	le := len(values)
+	buildParam := GetBuild(s.DB)
+	p := make([]interface{}, 0)
+	for _, str := range values {
+		p = append(p, str)
+	}
 	for i := 1; i <= le; i++ {
-		param := BuildParam(i)
+		param := buildParam(i)
 		arrValue = append(arrValue, param)
 	}
 	query := `delete from ` + s.Table + ` where ` + s.Field + ` in (` + strings.Join(arrValue, ",") + `)`
-	x, err := s.DB.ExecContext(ctx, query)
+	x, err := s.DB.ExecContext(ctx, query, p...)
 	if err != nil {
 		return 0, err
 	}

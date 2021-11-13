@@ -32,7 +32,7 @@ func BuildToSaveWithSchema(table string, model interface{}, driver string, build
 	if mv.Kind() == reflect.Ptr {
 		mv = mv.Elem()
 	}
-	var cols, keys []FieldDB
+	var cols, keys []*FieldDB
 	// var schema map[string]FieldDB
 	if len(options) > 0 && options[0] != nil {
 		m := options[0]

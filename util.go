@@ -35,9 +35,9 @@ type FieldDB struct {
 type Schema struct {
 	SKeys    []string
 	SColumns []string
-	Keys     []FieldDB
-	Columns  []FieldDB
-	Fields   map[string]FieldDB
+	Keys     []*FieldDB
+	Columns  []*FieldDB
+	Fields   map[string]*FieldDB
 }
 
 func CreateSchema(modelType reflect.Type) *Schema {
@@ -48,9 +48,9 @@ func CreateSchema(modelType reflect.Type) *Schema {
 	numField := m.NumField()
 	scolumns := make([]string, 0)
 	skeys := make([]string, 0)
-	columns := make([]FieldDB, 0)
-	keys := make([]FieldDB, 0)
-	schema := make(map[string]FieldDB, 0)
+	columns := make([]*FieldDB, 0)
+	keys := make([]*FieldDB, 0)
+	schema := make(map[string]*FieldDB, 0)
 	for idx := 0; idx < numField; idx++ {
 		field := m.Field(idx)
 		tag, _ := field.Tag.Lookup("gorm")
@@ -74,7 +74,7 @@ func CreateSchema(modelType reflect.Type) *Schema {
 								tagJsons := strings.Split(jTag, ",")
 								json = tagJsons[0]
 							}
-							f := FieldDB{
+							f := &FieldDB{
 								JSON:   json,
 								Column: col,
 								Index:  idx,
@@ -113,7 +113,7 @@ func CreateSchema(modelType reflect.Type) *Schema {
 	s := &Schema{SColumns: scolumns, SKeys: skeys, Columns: columns, Keys: keys, Fields: schema}
 	return s
 }
-func MakeSchema(modelType reflect.Type) ([]FieldDB, []FieldDB) {
+func MakeSchema(modelType reflect.Type) ([]*FieldDB, []*FieldDB) {
 	m := CreateSchema(modelType)
 	return m.Columns, m.Keys
 }
