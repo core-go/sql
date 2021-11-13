@@ -913,3 +913,15 @@ func MapModels(ctx context.Context, models interface{}, mp func(context.Context,
 	}
 	return models, nil
 }
+func HandleError(tx *sql.Tx, err *error) {
+	if re := recover(); re != nil {
+		tx.Rollback()
+	} else {
+		if *err != nil {
+			tx.Rollback()
+		} else {
+			er := tx.Commit()
+			err = &er
+		}
+	}
+}

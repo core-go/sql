@@ -2,9 +2,9 @@ package query
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	s "github.com/core-go/search"
-	"log"
 	"reflect"
 	"strconv"
 	"strings"
@@ -81,29 +81,23 @@ func getColumnNameFromSqlBuilderTag(typeOfField reflect.StructField) *string {
 	}
 	return nil*/
 }
-func (b *Builder) BuildQuery(sm interface{}) (string, []interface{}) {
+func (b *Builder) BuildQuery(sm interface{}) (string, []interface{}, error) {
 	return Build(sm, b.TableName, b.ModelType, b.Driver, b.BuildParam)
 }
-func Build(sm interface{}, tableName string, modelType reflect.Type, driver string, buildParam func(int) string) (string, []interface{}) {
+func Build(sm interface{}, tableName string, modelType reflect.Type, driver string, buildParam func(int) string) (string, []interface{}, error) {
 	s1 := ""
 	rawConditions := make([]string, 0)
 	queryValues := make([]interface{}, 0)
+	qQueryValues := make([]string, 0)
+	qCols := make([]string, 0)
 	rawJoin := make([]string, 0)
 	sortString := ""
 	fields := make([]string, 0)
 	var keyword string
-	var keywordFormat map[string]string
-	keywordFormat = map[string]string{
-		"prefix":  "?%",
-		"contain": "%?%",
-		"equal":   "?",
-	}
-
 	value := reflect.Indirect(reflect.ValueOf(sm))
 	typeOfValue := value.Type()
 	numField := value.NumField()
 	marker := 0
-
 	for i := 0; i < numField; i++ {
 		field := value.Field(i)
 		kind := field.Kind()
@@ -153,36 +147,59 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 		if joinFromSqlBuilderTag != nil {
 			rawJoin = append(rawJoin, *joinFromSqlBuilderTag)
 		}
-
 		ps := false
 		var value2 string
+		tag := typeOfValue.Field(i).Tag
+		isContinue := false
+		isStrPointer := false
 		if kind == reflect.Ptr {
 			if field.IsNil() {
-				continue
-			}
-			s0, ok0 := x.(*string)
-			if ok0 {
-				if s0 == nil || len(*s0) == 0 {
-					continue
+				isContinue = true
+				isStrPointer = true
+			} else {
+				s0, ok0 := x.(*string)
+				if ok0 {
+					if s0 == nil || len(*s0) == 0 {
+						isContinue = true
+						isStrPointer = true
+					}
+					ps = true
+					value2 = *s0
 				}
-				ps = true
-				value2 = *s0
+				field = field.Elem()
+				kind = field.Kind()
 			}
-			field = field.Elem()
-			kind = field.Kind()
 		}
-		s0, ok0 := x.(string)
-		if ok0 {
-			if len(s0) == 0 {
-				continue
+		if !isStrPointer {
+			s0, ok0 := x.(string)
+			if ok0 {
+				if len(s0) == 0 {
+					isContinue = true
+				}
+				value2 = s0
 			}
-			value2 = s0
+		}
+		if isContinue {
+			if len(keyword) > 0 {
+				qMatch, isQ := tag.Lookup("q")
+				if isQ {
+					if qMatch == "prefix" {
+						qQueryValues = append(qQueryValues, keyword + "%")
+					} else if qMatch == "equal" {
+						qQueryValues = append(qQueryValues, keyword + "%")
+					} else {
+						qQueryValues = append(qQueryValues, "%" + keyword + "%")
+					}
+					qCols = append(qCols, columnName)
+				}
+			}
+			continue
 		}
 		if v, ok := x.(*s.Filter); ok {
 			if v.Excluding != nil && len(v.Excluding) > 0 {
 				index, _, columnName := getFieldByBson(value.Type(), "_id")
 				if index == -1 || columnName == "" {
-					log.Panic("column name not found")
+					return "", nil, errors.New("column name not found")
 				}
 				format := fmt.Sprintf("(%s)", buildParametersFrom(marker, len(v.Excluding), buildParam))
 				marker += len(v.Excluding) - 1
@@ -194,128 +211,100 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 			}
 			continue
 		} else if ps || kind == reflect.String {
-			var searchValue bool
-			if field.Len() > 0 {
-				const defaultKey = "contain"
-				if key, ok := typeOfValue.Field(i).Tag.Lookup("match"); ok {
-					if format, exist := keywordFormat[key]; exist {
-						searchValue = true
-						//if sql == "mysql" {
-						//	value2 = EscapeString(value2)
-						//} else if sql == "postgres" || sql == "mssql" {
-						//	value2 = EscapeStringForSelect(value2)
-						//}
-						value2 = func(format, s string) string {
-							return strings.Replace(format, "?", s, -1)
-						}(format, value2)
-						//value2 = value2 + `%`
-						//rawConditions = append(rawConditions, fmt.Sprintf("%s %s ?", columnName, like))
-						queryValues = append(queryValues, value2)
-					} else {
-						log.Panicf("match not support \"%v\" format\n", key)
-					}
-				} else if format, exist := keywordFormat[defaultKey]; exist {
-					searchValue = true
-					//if sql == "mysql" {
-					//	value2 = EscapeString(value2)
-					//} else if sql == "postgres" || sql == "mssql" {
-					//	value2 = EscapeStringForSelect(value2)
-					//}
-					//value2 = `%` + value2 + `%`
-					value2 = func(format, s string) string {
-						return strings.Replace(format, "?", s, -1)
-					}(format, value2)
-					//rawConditions = append(rawConditions, fmt.Sprintf("%s %s ?", columnName, like))
-					queryValues = append(queryValues, value2)
-				} else {
-					searchValue = true
-					value2, valid := x.(string)
-					if !valid {
-						log.Panicf("invalid data \"%v\" \n", x)
-					}
-					value2 = value2 + `%`
-					//rawConditions = append(rawConditions, fmt.Sprintf("%s %s ?", columnName, like))
-					queryValues = append(queryValues, value2)
+			if len(value2) > 0 {
+				key, ok := tag.Lookup("match")
+				if !ok {
+					key = "contains"
 				}
-			} else if len(keyword) > 0 {
-				if key, ok := typeOfValue.Field(i).Tag.Lookup("keyword"); ok {
-					if format, exist := keywordFormat[key]; exist {
-						//if sql == "mysql" {
-						//	keyword = EscapeString(keyword)
-						//} else if sql == "postgres" || sql == "mssql" {
-						//	keyword = EscapeStringForSelect(keyword)
-						//}
-						if format == `?%` {
-							keyword = keyword + `%`
-						} else if format == `%?%` {
-							keyword = `%` + keyword + `%`
-						} else {
-							log.Panicf("keyword not support \"%v\" format\n", key)
-						}
-
-						queryValues = append(queryValues, keyword)
-					} else {
-						log.Panicf("keyword not support \"%v\" format\n", key)
-					}
-				}
-			}
-			if searchValue {
-				if driver == driverPostgres { // "postgres"
-					rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, `ilike`, param))
+				if key == "equal" {
+					rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, "=", param))
 				} else {
-					rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, like, param))
+					if driver == driverPostgres { // "postgres"
+						rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, `ilike`, param))
+					} else {
+						rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, like, param))
+					}
+					if key == "prefix" {
+						queryValues = append(queryValues, value2 + "%")
+					} else {
+						queryValues = append(queryValues, "%" + value2 + "%")
+					}
 				}
 				marker++
 			}
 		} else if dateRange, ok := x.(s.DateRange); ok {
-			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
-			queryValues = append(queryValues, dateRange.Min)
-			var eDate = dateRange.Max.Add(time.Hour * 24)
-			dateRange.Max = &eDate
-			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-			queryValues = append(queryValues, dateRange.Max)
-			marker += 2
+			if dateRange.Min != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
+				queryValues = append(queryValues, dateRange.Min)
+				marker += 1
+			}
+			if dateRange.Max != nil {
+				var eDate = dateRange.Max.Add(time.Hour * 24)
+				dateRange.Max = &eDate
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
+				queryValues = append(queryValues, dateRange.Max)
+				marker += 1
+			}
 		} else if dateRange, ok := x.(*s.DateRange); ok && dateRange != nil {
-			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
-			queryValues = append(queryValues, dateRange.Min)
-			var eDate = dateRange.Max.Add(time.Hour * 24)
-			dateRange.Max = &eDate
-			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-			queryValues = append(queryValues, dateRange.Max)
-			marker += 2
+			if dateRange.Min != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
+				queryValues = append(queryValues, dateRange.Min)
+				marker += 1
+			}
+			if dateRange.Max != nil {
+				var eDate = dateRange.Max.Add(time.Hour * 24)
+				dateRange.Max = &eDate
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
+				queryValues = append(queryValues, dateRange.Max)
+				marker += 1
+			}
 		} else if dateTime, ok := x.(s.TimeRange); ok {
-			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
-			queryValues = append(queryValues, dateTime.StartTime)
-			var eDate = dateTime.EndTime.Add(time.Hour * 24)
-			dateTime.EndTime = &eDate
-			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-			queryValues = append(queryValues, dateTime.EndTime)
-			marker += 2
+			if dateTime.Min != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
+				queryValues = append(queryValues, dateTime.Min)
+				marker += 1
+			}
+			if dateTime.Max != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessEqualThan, param))
+				queryValues = append(queryValues, dateTime.Max)
+				marker += 1
+			} else if dateTime.Top != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
+				queryValues = append(queryValues, dateTime.Max)
+				marker += 1
+			}
 		} else if dateTime, ok := x.(*s.TimeRange); ok && dateTime != nil {
-			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
-			queryValues = append(queryValues, dateTime.StartTime)
-			var eDate = dateTime.EndTime.Add(time.Hour * 24)
-			dateTime.EndTime = &eDate
-			rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-			queryValues = append(queryValues, dateTime.EndTime)
-			marker += 2
+			if dateTime.Min != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
+				queryValues = append(queryValues, dateTime.Min)
+				marker += 1
+			}
+			if dateTime.Max != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessEqualThan, param))
+				queryValues = append(queryValues, dateTime.Max)
+				marker += 1
+			} else if dateTime.Top != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
+				queryValues = append(queryValues, dateTime.Top)
+				marker += 1
+			}
 		} else if numberRange, ok := x.(s.NumberRange); ok {
 			if numberRange.Min != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
 				queryValues = append(queryValues, numberRange.Min)
 				marker++
-			} else if numberRange.Lower != nil {
+			} else if numberRange.Bottom != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterThan, param))
-				queryValues = append(queryValues, numberRange.Lower)
+				queryValues = append(queryValues, numberRange.Bottom)
 				marker++
 			}
 			if numberRange.Max != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessEqualThan, param))
 				queryValues = append(queryValues, numberRange.Max)
 				marker++
-			} else if numberRange.Upper != nil {
+			} else if numberRange.Top != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-				queryValues = append(queryValues, numberRange.Upper)
+				queryValues = append(queryValues, numberRange.Top)
 				marker++
 			}
 		} else if numberRange, ok := x.(*s.NumberRange); ok && numberRange != nil {
@@ -323,18 +312,56 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
 				queryValues = append(queryValues, numberRange.Min)
 				marker++
-			} else if numberRange.Lower != nil {
+			} else if numberRange.Bottom != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterThan, param))
-				queryValues = append(queryValues, numberRange.Lower)
+				queryValues = append(queryValues, numberRange.Bottom)
 				marker++
 			}
 			if numberRange.Max != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessEqualThan, param))
 				queryValues = append(queryValues, numberRange.Max)
 				marker++
-			} else if numberRange.Upper != nil {
+			} else if numberRange.Top != nil {
 				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
-				queryValues = append(queryValues, numberRange.Upper)
+				queryValues = append(queryValues, numberRange.Top)
+				marker++
+			}
+		} else if numberRange, ok := x.(s.Int64Range); ok {
+			if numberRange.Min != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
+				queryValues = append(queryValues, numberRange.Min)
+				marker++
+			} else if numberRange.Bottom != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterThan, param))
+				queryValues = append(queryValues, numberRange.Bottom)
+				marker++
+			}
+			if numberRange.Max != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessEqualThan, param))
+				queryValues = append(queryValues, numberRange.Max)
+				marker++
+			} else if numberRange.Top != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
+				queryValues = append(queryValues, numberRange.Top)
+				marker++
+			}
+		} else if numberRange, ok := x.(*s.Int64Range); ok && numberRange != nil {
+			if numberRange.Min != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterEqualThan, param))
+				queryValues = append(queryValues, numberRange.Min)
+				marker++
+			} else if numberRange.Bottom != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, greaterThan, param))
+				queryValues = append(queryValues, numberRange.Bottom)
+				marker++
+			}
+			if numberRange.Max != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessEqualThan, param))
+				queryValues = append(queryValues, numberRange.Max)
+				marker++
+			} else if numberRange.Top != nil {
+				rawConditions = append(rawConditions, fmt.Sprintf("%s %s %s", columnName, lessThan, param))
+				queryValues = append(queryValues, numberRange.Top)
 				marker++
 			}
 		} else if kind == reflect.Slice {
@@ -353,12 +380,33 @@ func Build(sm interface{}, tableName string, modelType reflect.Type, driver stri
 	if len(rawJoin) > 0 {
 		s1 = s1 + " " + strings.Join(rawJoin, " ")
 	}
+	if len(qCols) > 0 {
+		qConditions := make([]string, 0)
+		if driver == driverPostgres { // "postgres"
+			for i, s := range qCols {
+				param := buildParam(marker + 1)
+				qConditions = append(qConditions, fmt.Sprintf("%s %s %s", s, `ilike`, param))
+				queryValues = append(queryValues, qQueryValues[i])
+				marker++
+			}
+		} else {
+			for i, s := range qCols {
+				param := buildParam(marker + 1)
+				qConditions = append(qConditions, fmt.Sprintf("%s %s %s", s, like, param))
+				queryValues = append(queryValues, qQueryValues[i])
+				marker++
+			}
+		}
+		if len(qConditions) > 0 {
+			rawConditions = append(rawConditions, " (" + strings.Join(qConditions, " or ") + ") ")
+		}
+	}
 	if len(rawConditions) > 0 {
 		s2 := s1 + ` where ` + strings.Join(rawConditions, " AND ") + sortString
-		return s2, queryValues
+		return s2, queryValues, nil
 	}
 	s3 := s1 + sortString
-	return s3, queryValues
+	return s3, queryValues, nil
 }
 func extractArray(values []interface{}, field interface{}) []interface{} {
 	s := reflect.Indirect(reflect.ValueOf(field))

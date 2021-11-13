@@ -9,7 +9,7 @@ import (
 
 type SearchBuilder struct {
 	Database    *sql.DB
-	BuildQuery  func(sm interface{}) (string, []interface{})
+	BuildQuery  func(sm interface{}) (string, []interface{}, error)
 	ModelType   reflect.Type
 	Map         func(ctx context.Context, model interface{}) (interface{}, error)
 	fieldsIndex map[string]int
@@ -18,10 +18,10 @@ type SearchBuilder struct {
 		sql.Scanner
 	}
 }
-func NewSearchBuilder(db *sql.DB, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), options ...func(context.Context, interface{}) (interface{}, error)) (*SearchBuilder, error) {
+func NewSearchBuilder(db *sql.DB, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), options ...func(context.Context, interface{}) (interface{}, error)) (*SearchBuilder, error) {
 	return NewSearchBuilderWithArray(db, modelType, buildQuery, nil, options...)
 }
-func NewSearchBuilderWithArray(db *sql.DB, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), toArray func(interface{}) interface {
+func NewSearchBuilderWithArray(db *sql.DB, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(context.Context, interface{}) (interface{}, error)) (*SearchBuilder, error) {
@@ -38,11 +38,14 @@ func NewSearchBuilderWithArray(db *sql.DB, modelType reflect.Type, buildQuery fu
 }
 
 func (b *SearchBuilder) Search(ctx context.Context, m interface{}, results interface{}, limit int64, options ...int64) (int64, string, error) {
-	sql, params := b.BuildQuery(m)
+	sql, params, er0 := b.BuildQuery(m)
+	if er0 != nil {
+		return -1, "", er0
+	}
 	var offset int64 = 0
 	if len(options) > 0 && options[0] > 0 {
 		offset = options[0]
 	}
-	total, err := BuildFromQuery(ctx, b.Database, b.fieldsIndex, results, sql, params, limit, offset, b.ToArray, b.Map)
-	return total, "", err
+	total, er2 := BuildFromQuery(ctx, b.Database, b.fieldsIndex, results, sql, params, limit, offset, b.ToArray, b.Map)
+	return total, "", er2
 }

@@ -6,7 +6,7 @@ import (
 	"reflect"
 )
 
-func NewSearchWriterWithVersionAndMap(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), versionField string, mapper Mapper, toArray func(interface{}) interface {
+func NewSearchWriterWithVersionAndMap(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), versionField string, mapper Mapper, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(i int) string) (*Searcher, *Writer, error) {
@@ -26,7 +26,7 @@ func NewSearchWriterWithVersionAndMap(db *sql.DB, tableName string, modelType re
 		return searcher, writer, er1
 	}
 }
-func NewSearchWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), versionField string, toArray func(interface{}) interface {
+func NewSearchWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), versionField string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options...Mapper) (*Searcher, *Writer, error) {
@@ -36,7 +36,7 @@ func NewSearchWriterWithVersion(db *sql.DB, tableName string, modelType reflect.
 	}
 	return NewSearchWriterWithVersionAndMap(db, tableName, modelType, buildQuery, versionField, mapper, toArray)
 }
-func NewSearchWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), mapper Mapper, toArray func(interface{}) interface {
+func NewSearchWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), mapper Mapper, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options...string) (*Searcher, *Writer, error) {
@@ -46,10 +46,10 @@ func NewSearchWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type
 	}
 	return NewSearchWriterWithVersionAndMap(db, tableName, modelType, buildQuery, versionField, mapper, toArray)
 }
-func NewSearchWriter(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), options...Mapper) (*Searcher, *Writer, error) {
+func NewSearchWriter(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), options...Mapper) (*Searcher, *Writer, error) {
 	return NewSearchWriterWithArray(db, tableName, modelType, buildQuery, nil, options...)
 }
-func NewSearchWriterWithArray(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}), toArray func(interface{}) interface {
+func NewSearchWriterWithArray(db *sql.DB, tableName string, modelType reflect.Type, buildQuery func(interface{}) (string, []interface{}, error), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options...Mapper) (*Searcher, *Writer, error) {
