@@ -59,7 +59,15 @@ func NewSqlStreamInserter(db *sql.DB, tableName string, modelType reflect.Type, 
 }
 
 func (w *StreamInserter) Write(ctx context.Context, model interface{}) error {
-	w.batch = append(w.batch, model)
+	if w.Map != nil {
+		m2, er0 := w.Map(ctx, model)
+		if er0 != nil {
+			return er0
+		}
+		w.batch = append(w.batch, m2)
+	} else {
+		w.batch = append(w.batch, model)
+	}
 	if len(w.batch) >= w.batchSize {
 		return w.Flush(ctx)
 	}

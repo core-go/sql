@@ -12,11 +12,12 @@ type StreamWriter struct {
 	tableName    string
 	BuildParam   func(i int) string
 	Map          func(ctx context.Context, model interface{}) (interface{}, error)
-	BoolSupport  bool
-	VersionIndex int
+	// BoolSupport  bool
+	// VersionIndex int
 	schema       *Schema
 	batchSize    int
 	batch        []interface{}
+	Driver       string
 	ToArray      func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
@@ -53,13 +54,21 @@ func NewSqlStreamWriter(db *sql.DB, tableName string, modelType reflect.Type, ba
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	boolSupport := driver == DriverPostgres
+	// boolSupport := driver == DriverPostgres
 	schema := CreateSchema(modelType)
-	return &StreamWriter{db: db, BoolSupport: boolSupport, VersionIndex: -1, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
+	return &StreamWriter{db: db, Driver: driver, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
 func (w *StreamWriter) Write(ctx context.Context, model interface{}) error {
-	w.batch = append(w.batch, model)
+	if w.Map != nil {
+		m2, er0 := w.Map(ctx, model)
+		if er0 != nil {
+			return er0
+		}
+		w.batch = append(w.batch, m2)
+	} else {
+		w.batch = append(w.batch, model)
+	}
 	if len(w.batch) >= w.batchSize {
 		return w.Flush(ctx)
 	}
@@ -69,7 +78,10 @@ func (w *StreamWriter) Write(ctx context.Context, model interface{}) error {
 func (w *StreamWriter) Flush(ctx context.Context) error {
 	var queryArgsArray []Statement
 	for _, v := range w.batch {
-		query, args := BuildToUpdateWithArray(w.tableName, v, w.BuildParam, true, w.ToArray, w.schema)
+		query, args, err := BuildToSaveWithArray(w.tableName, v, w.Driver, w.ToArray, w.schema)
+		if err != nil {
+			return err
+		}
 		queryArgs := Statement{
 			Query: query,
 			Params: args,

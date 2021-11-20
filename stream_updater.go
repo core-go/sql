@@ -59,7 +59,15 @@ func NewSqlStreamUpdater(db *sql.DB, tableName string, modelType reflect.Type, b
 }
 
 func (w *StreamUpdater) Write(ctx context.Context, model interface{}) error {
-	w.batch = append(w.batch, model)
+	if w.Map != nil {
+		m2, er0 := w.Map(ctx, model)
+		if er0 != nil {
+			return er0
+		}
+		w.batch = append(w.batch, m2)
+	} else {
+		w.batch = append(w.batch, model)
+	}
 	if len(w.batch) >= w.batchSize {
 		return w.Flush(ctx)
 	}
@@ -69,7 +77,7 @@ func (w *StreamUpdater) Write(ctx context.Context, model interface{}) error {
 func (w *StreamUpdater) Flush(ctx context.Context) error {
 	var queryArgsArray []Statement
 	for _, v := range w.batch {
-		query, args := BuildToUpdateWithArray(w.tableName, v, w.BuildParam, true, w.ToArray, w.schema)
+		query, args := BuildToUpdateWithArray(w.tableName, v, w.BuildParam, w.BoolSupport, w.ToArray, w.schema)
 		queryArgs := Statement{
 			Query: query,
 			Params: args,

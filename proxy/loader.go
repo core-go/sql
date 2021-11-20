@@ -10,16 +10,6 @@ import (
 
 const txs = "txId"
 
-func GetTxId(ctx context.Context) *string {
-	txi := ctx.Value(txs)
-	if txi != nil {
-		txx, ok := txi.(*string)
-		if ok {
-			return txx
-		}
-	}
-	return nil
-}
 type Proxy interface {
 	BeginTransaction(ctx context.Context, timeout int64) (string, error)
 	CommitTransaction(ctx context.Context, tx string) error
@@ -92,7 +82,7 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	query := q.BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
 	var err error
-	tx := GetTxId(ctx)
+	tx := q.GetTxId(ctx)
 	if tx == nil {
 		err = s.Proxy.Query(ctx, result, query)
 	} else {
@@ -115,7 +105,7 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 
 func (s *Loader) Load(ctx context.Context, id interface{}) (interface{}, error) {
 	queryFindById, values := q.BuildFindById(s.table, s.BuildParam, id, s.mapJsonColumnKeys, s.keys)
-	tx := GetTxId(ctx)
+	tx := q.GetTxId(ctx)
 	result := reflect.New(s.modelsType).Interface()
 	var r interface{}
 	var er1 error
@@ -156,7 +146,7 @@ func (s *Loader) Load(ctx context.Context, id interface{}) (interface{}, error) 
 
 func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	queryFindById, values := q.BuildFindById(s.table, s.BuildParam, id, s.mapJsonColumnKeys, s.keys)
-	tx := GetTxId(ctx)
+	tx := q.GetTxId(ctx)
 	var er1 error
 	if tx == nil {
 		er1 = s.Proxy.QueryOne(ctx, result, queryFindById, values...)
@@ -199,7 +189,7 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 		where = "where " + strings.Join(conditions, " and ")
 	}
 	var er1 error
-	tx := GetTxId(ctx)
+	tx := q.GetTxId(ctx)
 	if tx == nil {
 		er1 = s.Proxy.QueryOne(ctx, &count, fmt.Sprintf("select count(*) as count from %s %s", s.table, where), values...)
 	} else {
