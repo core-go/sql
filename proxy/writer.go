@@ -101,7 +101,7 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 	} else {
 		m = model
 	}
-	tx := GetTx(ctx)
+	tx := GetTxId(ctx)
 	queryInsert, values := q.BuildToInsertWithVersion(s.table, m, s.versionIndex, s.BuildParam, s.BoolSupport, nil, s.schema)
 	if tx == nil {
 		return s.Proxy.Exec(ctx, queryInsert, values...)
@@ -127,7 +127,7 @@ func (s *Writer) Update(ctx context.Context, model interface{}) (int64, error) {
 	} else {
 		m = model
 	}
-	tx := GetTx(ctx)
+	tx := GetTxId(ctx)
 	query, values := q.BuildToUpdateWithVersion(s.table, m, s.versionIndex, s.BuildParam, s.BoolSupport, nil, s.schema)
 	if tx == nil {
 		return s.Proxy.Exec(ctx, query, values...)
@@ -153,7 +153,7 @@ func (s *Writer) Save(ctx context.Context, model interface{}) (int64, error) {
 	} else {
 		m = model
 	}
-	tx := GetTx(ctx)
+	tx := GetTxId(ctx)
 	query, values, er0 := q.BuildToSave(s.table, m, s.Driver, s.schema)
 	if er0 != nil {
 		return -1, er0
@@ -181,7 +181,7 @@ func (s *Writer) Patch(ctx context.Context, model map[string]interface{}) (int64
 	MapToDB(&model, s.modelType)
 	dbColumnMap := q.JSONToColumns(model, s.jsonColumnMap)
 	query, values := q.BuildToPatchWithVersion(s.table, dbColumnMap, s.schema.SKeys, s.BuildParam, nil, s.versionDBField, s.schema.Fields)
-	tx := GetTx(ctx)
+	tx := GetTxId(ctx)
 	if tx == nil {
 		return s.Proxy.Exec(ctx, query, values...)
 	} else {
@@ -214,7 +214,7 @@ func MapToDB(model *map[string]interface{}, modelType reflect.Type) {
 	}
 }
 func (s *Writer) Delete(ctx context.Context, id interface{}) (int64, error) {
-	tx := GetTx(ctx)
+	tx := GetTxId(ctx)
 	// l := len(s.keys)
 	query := q.BuildQueryById(id, s.modelType, s.keys[0])
 	sql, values := q.BuildToDelete(s.table, query, s.BuildParam)

@@ -73,7 +73,7 @@ func (h *Handler) EndTransaction(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, er1.Error(), http.StatusInternalServerError)
 		} else {
 			h.Cache.Remove(stx)
-			respond(w, http.StatusOK, true)
+			respond(w, http.StatusOK, "true")
 		}
 	} else {
 		er1 := tx.Commit()
@@ -81,7 +81,7 @@ func (h *Handler) EndTransaction(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, er1.Error(), http.StatusInternalServerError)
 		} else {
 			h.Cache.Remove(stx)
-			respond(w, http.StatusOK, true)
+			respond(w, http.StatusOK, "true")
 		}
 	}
 }

@@ -22,6 +22,16 @@ func GetTx(ctx context.Context) *sql.Tx {
 	}
 	return nil
 }
+func GetTxId(ctx context.Context) *string {
+	txi := ctx.Value("txId")
+	if txi != nil {
+		txx, ok := txi.(*string)
+		if ok {
+			return txx
+		}
+	}
+	return nil
+}
 
 type Loader struct {
 	Database          *sql.DB

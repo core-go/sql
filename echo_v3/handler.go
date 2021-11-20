@@ -77,7 +77,7 @@ func (h *Handler) EndTransaction(ctx echo.Context) error {
 			return er1
 		} else {
 			h.Cache.Remove(stx)
-			return ctx.JSON(http.StatusOK, true)
+			return ctx.JSON(http.StatusOK, "true")
 		}
 	} else {
 		er1 := tx.Commit()
@@ -86,7 +86,7 @@ func (h *Handler) EndTransaction(ctx echo.Context) error {
 			return er1
 		} else {
 			h.Cache.Remove(stx)
-			return ctx.JSON(http.StatusOK, true)
+			return ctx.JSON(http.StatusOK, "true")
 		}
 	}
 }

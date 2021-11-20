@@ -26,7 +26,7 @@ func Begin(ctx context.Context, db *sql.DB, opts ...*sql.TxOptions) (context.Con
 }
 func Commit(tx *sql.Tx, err error, options...bool) error {
 	if err != nil {
-		if len(options) > 0 && options[0] {
+		if !(len(options) > 0 && options[0] == false) {
 			tx.Rollback()
 		}
 		return err

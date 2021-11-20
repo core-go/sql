@@ -75,7 +75,7 @@ func (h *Handler) EndTransaction(ctx *gin.Context) {
 			ctx.String(http.StatusInternalServerError, er1.Error())
 		} else {
 			h.Cache.Remove(stx)
-			ctx.JSON(http.StatusOK, true)
+			ctx.JSON(http.StatusOK, "true")
 		}
 	} else {
 		er1 := tx.Commit()
@@ -83,7 +83,7 @@ func (h *Handler) EndTransaction(ctx *gin.Context) {
 			ctx.String(http.StatusInternalServerError, er1.Error())
 		} else {
 			h.Cache.Remove(stx)
-			ctx.JSON(http.StatusOK, true)
+			ctx.JSON(http.StatusOK, "true")
 		}
 	}
 }

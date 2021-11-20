@@ -6,9 +6,9 @@ import (
 	"reflect"
 )
 
-const txs = "tx"
+const txs = "txId"
 
-func GetTx(ctx context.Context) *string {
+func GetTxId(ctx context.Context) *string {
 	txi := ctx.Value(txs)
 	if txi != nil {
 		txx, ok := txi.(*string)
@@ -89,7 +89,7 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 	query := q.BuildSelectAllQuery(s.table)
 	result := reflect.New(s.modelsType).Interface()
 	var err error
-	tx := GetTx(ctx)
+	tx := GetTxId(ctx)
 	if tx == nil {
 		err = s.Proxy.Query(ctx, result, query)
 	} else {
@@ -112,7 +112,7 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 
 func (s *Loader) Load(ctx context.Context, id interface{}) (interface{}, error) {
 	queryFindById, values := q.BuildFindById(s.table, s.BuildParam, id, s.mapJsonColumnKeys, s.keys)
-	tx := GetTx(ctx)
+	tx := GetTxId(ctx)
 	result := reflect.New(s.modelsType).Interface()
 	var r interface{}
 	var er1 error
