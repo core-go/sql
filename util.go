@@ -468,6 +468,10 @@ func RoundFloat(num float64, slice int) float64 {
 }
 func Round(num big.Float, scale int) big.Float {
 	marshal, _ := num.MarshalText()
+	if strings.IndexRune(string(marshal), '.') == -1 {
+		return num
+	}
+	fmt.Println(marshal)
 	var dot int
 	for i, v := range marshal {
 		if v == 46 {
