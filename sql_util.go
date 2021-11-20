@@ -760,3 +760,24 @@ func EndTx(ctx context.Context, proxy Proxy, tx string, res int64, err error, op
 	er := CommitTx(ctx, proxy, tx, err, options...)
 	return res, er
 }
+func ExecProxy(ctx context.Context, proxy Proxy, query string, args ...interface{}) (int64, error) {
+	tx := GetTxId(ctx)
+	if tx == nil {
+		return proxy.Exec(ctx, query, args...)
+	}
+	return proxy.ExecTx(ctx, *tx, false, query, args...)
+}
+func QueryProxy(ctx context.Context, proxy Proxy, result interface{}, query string, args ...interface{}) error {
+	tx := GetTxId(ctx)
+	if tx == nil {
+		return proxy.Query(ctx, result, query, args...)
+	}
+	return proxy.QueryTx(ctx, *tx, false, result, query, args...)
+}
+func QueryOneProxy(ctx context.Context, proxy Proxy, result interface{}, query string, args ...interface{}) error {
+	tx := GetTxId(ctx)
+	if tx == nil {
+		return proxy.QueryOne(ctx, result, query, args...)
+	}
+	return proxy.QueryOneTx(ctx, *tx, false, result, query, args...)
+}
