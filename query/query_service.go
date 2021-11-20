@@ -1,14 +1,25 @@
-package sql
+package query
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
-type StringService struct {
+const (
+	DriverPostgres   = "postgres"
+	DriverMysql      = "mysql"
+	DriverMssql      = "mssql"
+	DriverOracle     = "oracle"
+	DriverSqlite3    = "sqlite3"
+	DriverNotSupport = "no support"
+)
+
+type QueryService struct {
 	DB         *sql.DB
 	Table      string
 	Field      string
@@ -16,8 +27,10 @@ type StringService struct {
 	Driver     string
 	BuildParam func(i int) string
 }
-
-func NewStringService(db *sql.DB, table string, field string, options ...func(i int) string) *StringService {
+func NewStringService(db *sql.DB, table string, field string, options ...func(i int) string) *QueryService {
+	return NewQueryService(db, table, field, options...)
+}
+func NewQueryService(db *sql.DB, table string, field string, options ...func(i int) string) *QueryService {
 	driver := GetDriver(db)
 	var b func(i int) string
 	if len(options) > 0 {
@@ -33,10 +46,10 @@ func NewStringService(db *sql.DB, table string, field string, options ...func(i 
 	} else {
 		sql = fmt.Sprintf("select %s from %s where %s like %s", field, table, field, b(1)) + " limit %d"
 	}
-	return &StringService{DB: db, Table: table, Field: field, Sql: sql, Driver: driver, BuildParam: b}
+	return &QueryService{DB: db, Table: table, Field: field, Sql: sql, Driver: driver, BuildParam: b}
 }
 
-func (s *StringService) Load(ctx context.Context, key string, max int64) ([]string, error) {
+func (s *QueryService) Load(ctx context.Context, key string, max int64) ([]string, error) {
 	re := regexp.MustCompile(`\%|\?`)
 	key = re.ReplaceAllString(key, "")
 	key = key + "%"
@@ -59,7 +72,7 @@ func (s *StringService) Load(ctx context.Context, key string, max int64) ([]stri
 	return vs, nil
 }
 
-func (s *StringService) Save(ctx context.Context, values []string) (int64, error) {
+func (s *QueryService) Save(ctx context.Context, values []string) (int64, error) {
 	driver := s.Driver
 	l := len(values)
 	if l == 0 {
@@ -161,7 +174,7 @@ func (s *StringService) Save(ctx context.Context, values []string) (int64, error
 	}
 }
 
-func (s *StringService) Delete(ctx context.Context, values []string) (int64, error) {
+func (s *QueryService) Delete(ctx context.Context, values []string) (int64, error) {
 	var arrValue []string
 	le := len(values)
 	buildParam := GetBuild(s.DB)
@@ -187,4 +200,57 @@ func BuildPlaceHolders(n int, buildParam func(int) string) string {
 		ss = append(ss, s)
 	}
 	return strings.Join(ss, ",")
+}
+func GetDriver(db *sql.DB) string {
+	if db == nil {
+		return DriverNotSupport
+	}
+	driver := reflect.TypeOf(db.Driver()).String()
+	switch driver {
+	case "*pq.Driver":
+		return DriverPostgres
+	case "*godror.drv":
+		return DriverOracle
+	case "*mysql.MySQLDriver":
+		return DriverMysql
+	case "*mssql.Driver":
+		return DriverMssql
+	case "*sqlite3.SQLiteDriver":
+		return DriverSqlite3
+	default:
+		return DriverNotSupport
+	}
+}
+func GetBuild(db *sql.DB) func(i int) string {
+	driver := reflect.TypeOf(db.Driver()).String()
+	switch driver {
+	case "*pq.Driver":
+		return BuildDollarParam
+	case "*godror.drv":
+		return BuildOracleParam
+	case "*mssql.Driver":
+		return BuildMsSqlParam
+	default:
+		return BuildParam
+	}
+}
+func BuildParam(i int) string {
+	return "?"
+}
+func BuildOracleParam(i int) string {
+	return ":" + strconv.Itoa(i)
+}
+func BuildMsSqlParam(i int) string {
+	return "@p" + strconv.Itoa(i)
+}
+func BuildDollarParam(i int) string {
+	return "$" + strconv.Itoa(i)
+}
+type BatchStatement struct {
+	Query         string
+	Values        []interface{}
+	Keys          []string
+	Columns       []string
+	Attributes    map[string]interface{}
+	AttributeKeys map[string]interface{}
 }
