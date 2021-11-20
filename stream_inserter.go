@@ -12,8 +12,7 @@ type StreamInserter struct {
 	tableName    string
 	BuildParam   func(i int) string
 	Map          func(ctx context.Context, model interface{}) (interface{}, error)
-	BoolSupport  bool
-	VersionIndex int
+	Driver       string
 	schema       *Schema
 	batchSize    int
 	batch        []interface{}
@@ -53,9 +52,8 @@ func NewSqlStreamInserter(db *sql.DB, tableName string, modelType reflect.Type, 
 		buildParam = GetBuild(db)
 	}
 	driver := GetDriver(db)
-	boolSupport := driver == DriverPostgres
 	schema := CreateSchema(modelType)
-	return &StreamInserter{db: db, BoolSupport: boolSupport, VersionIndex: -1, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
+	return &StreamInserter{db: db, Driver: driver, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
 func (w *StreamInserter) Write(ctx context.Context, model interface{}) error {
@@ -75,6 +73,11 @@ func (w *StreamInserter) Write(ctx context.Context, model interface{}) error {
 }
 
 func (w *StreamInserter) Flush(ctx context.Context) error {
+	// driver := GetDriver(w.db)
+	query, args, err := BuildToInsertBatchWithSchema(w.tableName, w.batch, w.Driver, w.ToArray, w.BuildParam, w.schema)
+	if err != nil {
+		return err
+	}
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -84,15 +87,10 @@ func (w *StreamInserter) Flush(ctx context.Context) error {
 		w.batch = make([]interface{}, 0)
 	}()
 	defer tx.Rollback()
-	driver := GetDriver(w.db)
-	query, args, er1 := BuildToInsertBatchWithSchema(w.tableName, w.batch, driver, w.ToArray, w.BuildParam, w.schema)
-	if er1 != nil {
-		return er1
+
+	_, err = tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
 	}
-	_, err2 := tx.ExecContext(ctx, query, args...)
-	if err2 != nil {
-		return err2
-	}
-	tx.Commit()
-	return nil
+	return tx.Commit()
 }
