@@ -109,7 +109,7 @@ func FindFieldIndex(modelType reflect.Type, fieldName string) int {
 	}
 	return -1
 }
-func Exec(ctx context.Context, stmt *sql.Stmt, values ...interface{}) (int64, error) {
+func ExecStmt(ctx context.Context, stmt *sql.Stmt, values ...interface{}) (int64, error) {
 	result, err := stmt.ExecContext(ctx, values...)
 	if err != nil {
 		return -1, err

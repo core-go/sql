@@ -127,6 +127,83 @@ func QueryMap(ctx context.Context, db *sql.DB, transform func(s string) string, 
 func Query(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
 	return QueryWithArray(ctx, db, fieldsIndex, results, nil, sql, values...)
 }
+func ExecContext(ctx context.Context, db *sql.DB, query string, args ...interface{}) (sql.Result, error){
+	tx := GetTx(ctx)
+	if tx != nil {
+		return tx.ExecContext(ctx, query, args...)
+	} else {
+		return db.ExecContext(ctx, query, args...)
+	}
+}
+func Exec(ctx context.Context, db *sql.DB, query string, args ...interface{}) (int64, error){
+	tx := GetTx(ctx)
+	if tx != nil {
+		res, err := tx.ExecContext(ctx, query, args...)
+		return RowsAffected(res, err)
+	} else {
+		res, err := db.ExecContext(ctx, query, args...)
+		return RowsAffected(res, err)
+	}
+}
+func SelectContext(ctx context.Context, db *sql.DB, results interface{}, sql string, values ...interface{}) error {
+	return SelectContextWithArray(ctx, db, results, nil, sql, values...)
+}
+func SelectContextWithArray(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, sql string, values ...interface{}) error {
+	return QueryContextWithArray(ctx, db, nil, results, toArray, sql, values...)
+}
+func QueryContext(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, query string, values ...interface{}) error {
+	return QueryContextWithArray(ctx, db, fieldsIndex, results, nil, query, values...)
+}
+func QueryContextWithMap(ctx context.Context, db *sql.DB, results interface{}, sql string, values []interface{}, options...map[string]int) error {
+	return QueryContextWithMapAndArray(ctx, db, results, nil, sql, values, options...)
+}
+func QueryContextWithMapAndArray(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, sql string, values []interface{}, options...map[string]int) error {
+	var fieldsIndex map[string]int
+	if len(options) > 0 && options[0] != nil {
+		fieldsIndex = options[0]
+	}
+	return QueryContextWithArray(ctx, db, fieldsIndex, results, toArray, sql, values...)
+}
+func QueryContextWithArray(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, query string, values ...interface{}) error {
+	var rows *sql.Rows
+	var er1 error
+	tx := GetTx(ctx)
+	if tx != nil {
+		rows, er1 = tx.QueryContext(ctx, query, values...)
+	} else {
+		rows, er1 = db.QueryContext(ctx, query, values...)
+	}
+	if er1 != nil {
+		return er1
+	}
+	defer rows.Close()
+	modelType := reflect.TypeOf(results).Elem().Elem()
+	tb, er3 := Scan(rows, modelType, fieldsIndex, toArray)
+	if er3 != nil {
+		return er3
+	}
+	for _, element := range tb {
+		appendToArray(results, element)
+	}
+	er4 := rows.Close()
+	if er4 != nil {
+		return er4
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if er5 := rows.Err(); er5 != nil {
+		return er5
+	}
+	return nil
+}
 func QueryWithArray(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
