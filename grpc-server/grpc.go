@@ -106,6 +106,65 @@ func (s *GRPCHandler) Query(ctx context.Context, in *grpc.Request) (*grpc.QueryR
 	}
 }
 
+func (s *GRPCHandler) QueryOne(ctx context.Context, in *grpc.Request) (*grpc.QueryResponse, error) {
+	statement := q.JStatement{}
+	err := json.NewDecoder(bytes.NewBuffer(in.Params)).Decode(&statement.Params)
+	if err != nil {
+		return &grpc.QueryResponse{Message: "Error: " + err.Error()}, err
+	}
+	statement.Query = in.Query
+	for _, v := range in.Dates {
+		statement.Dates = append(statement.Dates, int(v))
+	}
+	statement.Params = q.ParseDates(statement.Params, statement.Dates)
+	stx := in.Tx
+	if len(stx) == 0 {
+		res, err := q.QueryMap(ctx, s.DB, s.Transform, statement.Query, statement.Params...)
+		data := new(bytes.Buffer)
+		if len(res) == 0 {
+			err = json.NewEncoder(data).Encode(nil)
+		} else {
+			err = json.NewEncoder(data).Encode(&res[0])
+		}
+		if err != nil {
+			return &grpc.QueryResponse{Message: "Error: " + err.Error()}, err
+		}
+		return &grpc.QueryResponse{
+			Message: data.String(),
+		}, err
+	} else {
+		tx, er0 := s.Cache.Get(stx)
+		if er0 != nil {
+			return &grpc.QueryResponse{
+				Message: "",
+			}, er0
+		}
+		if tx == nil {
+			return &grpc.QueryResponse{
+				Message: "cannot get tx from cache. Maybe tx got timeout",
+			}, err
+		}
+		res, er1 := q.QueryMapWithTx(ctx, tx, s.Transform, statement.Query, statement.Params...)
+		if er1 != nil {
+			return &grpc.QueryResponse{
+				Message: "",
+			}, er1
+		}
+		data := new(bytes.Buffer)
+		if len(res) == 0 {
+			err = json.NewEncoder(data).Encode(nil)
+		} else {
+			err = json.NewEncoder(data).Encode(&res[0])
+		}
+		if err != nil {
+			return &grpc.QueryResponse{Message: "Error: " + err.Error()}, err
+		}
+		return &grpc.QueryResponse{
+			Message: data.String(),
+		}, err
+	}
+}
+
 func (s *GRPCHandler) Execute(ctx context.Context, in *grpc.Request) (*grpc.Response, error) {
 	statement := q.JStatement{}
 	er0 := json.NewDecoder(bytes.NewBuffer(in.Params)).Decode(&statement.Params)

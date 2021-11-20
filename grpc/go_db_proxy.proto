@@ -43,6 +43,7 @@ message EndTransactionRequest {
 // Define service
 service DbProxy {
   rpc Query (Request) returns (QueryResponse) {}
+  rpc QueryOne (Request) returns (QueryResponse) {}
   rpc Execute (Request) returns (Response) {}
   rpc ExecBatch (BatchRequest) returns (Response) {}
   rpc BeginTransaction (BeginTransactionRequest) returns (BeginTransactionResponse) {}

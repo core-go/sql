@@ -118,6 +118,29 @@ func (c *GRPCClient) Query(ctx context.Context, result interface{}, query string
 	return er3
 }
 
+func (c *GRPCClient) QueryOne(ctx context.Context, result interface{}, query string, values ...interface{}) error {
+	stm := sql.BuildStatement(query, values...)
+	argsData := new(bytes.Buffer)
+	er1 := json.NewEncoder(argsData).Encode(&stm.Params)
+	if er1 != nil {
+		return er1
+	}
+	var dates []int32
+	if stm.Dates != nil && len(stm.Dates) > 0 {
+		for _, v := range stm.Dates {
+			dates = append(dates, int32(v))
+		}
+	}
+	rq := &pb.Request{Query: stm.Query, Params: argsData.Bytes(), Dates: dates}
+	rs, er2 := c.Client.QueryOne(ctx, rq)
+	if er2 != nil {
+		return er2
+	}
+	x := json.NewDecoder(bytes.NewBuffer([]byte(rs.Message)))
+	er3 := x.Decode(result)
+	return er3
+}
+
 func (c *GRPCClient) ExecTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error) {
 	stm := sql.BuildStatement(query, values...)
 	argsData := new(bytes.Buffer)
@@ -198,6 +221,33 @@ func (c *GRPCClient) QueryTx(ctx context.Context, tx string, commit bool, result
 	}
 	rq := &pb.Request{Query: stm.Query, Params: argsData.Bytes(), Dates: dates, Tx: tx, Commit: sc}
 	rs, er2 := c.Client.Query(ctx, rq)
+	if er2 != nil {
+		return er2
+	}
+	x := json.NewDecoder(bytes.NewBuffer([]byte(rs.Message)))
+	er3 := x.Decode(result)
+	return er3
+}
+
+func (c *GRPCClient) QueryOneTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error {
+	stm := sql.BuildStatement(query, values...)
+	argsData := new(bytes.Buffer)
+	er1 := json.NewEncoder(argsData).Encode(&stm.Params)
+	if er1 != nil {
+		return er1
+	}
+	var dates []int32
+	if stm.Dates != nil && len(stm.Dates) > 0 {
+		for _, v := range stm.Dates {
+			dates = append(dates, int32(v))
+		}
+	}
+	sc := ""
+	if commit {
+		sc = "true"
+	}
+	rq := &pb.Request{Query: stm.Query, Params: argsData.Bytes(), Dates: dates, Tx: tx, Commit: sc}
+	rs, er2 := c.Client.QueryOne(ctx, rq)
 	if er2 != nil {
 		return er2
 	}
