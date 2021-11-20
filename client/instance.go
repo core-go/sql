@@ -65,6 +65,12 @@ func (c *ProxyClient) Query(ctx context.Context, result interface{}, query strin
 	return err
 }
 
+func (c *ProxyClient) QueryOne(ctx context.Context, result interface{}, query string, values ...interface{}) error {
+	stm := sql.BuildStatement(query, values...)
+	err := Post(ctx, c.Client, c.Url+"/query-one", stm, result, c.Log)
+	return err
+}
+
 func (c *ProxyClient) ExecTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error) {
 	stm := sql.BuildStatement(query, values...)
 	sc := ""
@@ -99,6 +105,16 @@ func (c *ProxyClient) QueryTx(ctx context.Context, tx string, commit bool, resul
 		sc = "&commit=true"
 	}
 	err := Post(ctx, c.Client, c.Url+"/query?tx="+tx+sc, stm, &result, c.Log)
+	return err
+}
+
+func (c *ProxyClient) QueryOneTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error {
+	stm := sql.BuildStatement(query, values...)
+	sc := ""
+	if commit {
+		sc = "&commit=true"
+	}
+	err := Post(ctx, c.Client, c.Url+"/query-one?tx="+tx+sc, stm, &result, c.Log)
 	return err
 }
 

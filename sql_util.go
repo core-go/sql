@@ -704,9 +704,11 @@ type Proxy interface {
 	Exec(ctx context.Context, query string, values ...interface{}) (int64, error)
 	ExecBatch(ctx context.Context, master bool, stm ...Statement) (int64, error)
 	Query(ctx context.Context, result interface{}, query string, values ...interface{}) error
+	QueryOne(ctx context.Context, result interface{}, query string, values ...interface{}) error
 	ExecTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error)
 	ExecBatchTx(ctx context.Context, tx string, commit bool, master bool, stm ...Statement) (int64, error)
 	QueryTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error
+	QueryOneTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error
 
 	Insert(ctx context.Context, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)
 	Update(ctx context.Context, table string, model interface{}, buildParam func(int) string, boolSupport bool, options...*Schema) (int64, error)

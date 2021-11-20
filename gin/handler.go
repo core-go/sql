@@ -190,7 +190,59 @@ func (h *Handler) Query(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, res)
 	}
 }
-
+func (h *Handler) QueryOne(ctx *gin.Context) {
+	r := ctx.Request
+	s := q.JStatement{}
+	er0 := json.NewDecoder(r.Body).Decode(&s)
+	if er0 != nil {
+		ctx.String(http.StatusBadRequest, er0.Error())
+		return
+	}
+	s.Params = q.ParseDates(s.Params, s.Dates)
+	ps := r.URL.Query()
+	stx := ps.Get("tx")
+	if len(stx) == 0 {
+		res, er1 := q.QueryMap(r.Context(), h.DB, h.Transform, s.Query, s.Params...)
+		if er1 != nil {
+			handleError(ctx, 500, er1.Error(), h.Error, er1)
+			return
+		}
+		if len(res) > 0 {
+			ctx.JSON(http.StatusOK, res[0])
+		} else {
+			ctx.JSON(http.StatusOK, nil)
+		}
+	} else {
+		tx, er0 := h.Cache.Get(stx)
+		if er0 != nil {
+			ctx.String(http.StatusInternalServerError, er0.Error())
+			return
+		}
+		if tx == nil {
+			ctx.String(http.StatusInternalServerError, "cannot get tx from cache. Maybe tx got timeout")
+			return
+		}
+		res, er1 := q.QueryMapWithTx(r.Context(), tx, h.Transform, s.Query, s.Params...)
+		if er1 != nil {
+			handleError(ctx, 500, er1.Error(), h.Error, er1)
+			return
+		}
+		commit := ps.Get("commit")
+		if commit == "true" {
+			er3 := tx.Commit()
+			if er3 != nil {
+				handleError(ctx, http.StatusInternalServerError, er3.Error(), h.Error, er3)
+				return
+			}
+			h.Cache.Remove(stx)
+		}
+		if len(res) > 0 {
+			ctx.JSON(http.StatusOK, res[0])
+		} else {
+			ctx.JSON(http.StatusOK, nil)
+		}
+	}
+}
 func (h *Handler) ExecBatch(ctx *gin.Context) {
 	r := ctx.Request
 	var s []q.JStatement

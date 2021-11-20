@@ -2,8 +2,10 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	q "github.com/core-go/sql"
 	"reflect"
+	"strings"
 )
 
 const txs = "txId"
@@ -18,7 +20,6 @@ func GetTxId(ctx context.Context) *string {
 	}
 	return nil
 }
-
 type Proxy interface {
 	BeginTransaction(ctx context.Context, timeout int64) (string, error)
 	CommitTransaction(ctx context.Context, tx string) error
@@ -26,9 +27,11 @@ type Proxy interface {
 	Exec(ctx context.Context, query string, values ...interface{}) (int64, error)
 	ExecBatch(ctx context.Context, master bool, stm ...q.Statement) (int64, error)
 	Query(ctx context.Context, result interface{}, query string, values ...interface{}) error
+	QueryOne(ctx context.Context, result interface{}, query string, values ...interface{}) error
 	ExecTx(ctx context.Context, tx string, commit bool, query string, values ...interface{}) (int64, error)
 	ExecBatchTx(ctx context.Context, tx string, commit bool, master bool, stm ...q.Statement) (int64, error)
 	QueryTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error
+	QueryOneTx(ctx context.Context, tx string, commit bool, result interface{}, query string, values ...interface{}) error
 
 	Insert(ctx context.Context, table string, model interface{}, buildParam func(int) string, boolSupport bool, options ...*q.Schema) (int64, error)
 	Update(ctx context.Context, table string, model interface{}, buildParam func(int) string, boolSupport bool, options ...*q.Schema) (int64, error)
@@ -149,4 +152,68 @@ func (s *Loader) Load(ctx context.Context, id interface{}) (interface{}, error) 
 		return nil, nil
 	}
 	return r, er1
+}
+
+func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
+	queryFindById, values := q.BuildFindById(s.table, s.BuildParam, id, s.mapJsonColumnKeys, s.keys)
+	tx := GetTxId(ctx)
+	var er1 error
+	if tx == nil {
+		er1 = s.Proxy.QueryOne(ctx, result, queryFindById, values...)
+	} else {
+		er1 = s.Proxy.QueryOneTx(ctx, *tx, false, result, queryFindById, values...)
+	}
+	if er1 != nil {
+		if s.IsRollback && tx != nil {
+			s.Proxy.RollbackTransaction(ctx, *tx)
+		}
+		return false, er1
+	}
+	if s.Map != nil {
+		_, er2 := s.Map(ctx, result)
+		if er2 != nil {
+			return true, er2
+		}
+	}
+	return true, er1
+}
+
+func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
+	var count map[string]int
+	var where string
+	var values []interface{}
+	colNumber := 1
+	if len(s.keys) == 1 {
+		where = fmt.Sprintf("where %s = %s", s.mapJsonColumnKeys[s.keys[0]], s.BuildParam(colNumber))
+		values = append(values, id)
+		colNumber++
+	} else {
+		conditions := make([]string, 0)
+		var ids = id.(map[string]interface{})
+		for k, idk := range ids {
+			columnName := s.mapJsonColumnKeys[k]
+			conditions = append(conditions, fmt.Sprintf("%s = %s", columnName, s.BuildParam(colNumber)))
+			values = append(values, idk)
+			colNumber++
+		}
+		where = "where " + strings.Join(conditions, " and ")
+	}
+	var er1 error
+	tx := GetTxId(ctx)
+	if tx == nil {
+		er1 = s.Proxy.QueryOne(ctx, &count, fmt.Sprintf("select count(*) as count from %s %s", s.table, where), values...)
+	} else {
+		er1 = s.Proxy.QueryOneTx(ctx, *tx, false, &count, fmt.Sprintf("select count(*) as count from %s %s", s.table, where), values...)
+	}
+	if er1 != nil {
+		if s.IsRollback && tx != nil {
+			s.Proxy.RollbackTransaction(ctx, *tx)
+		}
+		return false, er1
+	} else {
+		if count["count"] >= 1 {
+			return true, nil
+		}
+		return false, nil
+	}
 }
