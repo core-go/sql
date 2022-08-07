@@ -123,8 +123,8 @@ func open(c Config) (*sql.DB, error) {
 	if err != nil {
 		return db, err
 	}
-	if c.ConnMaxLifetime > 0 {
-		db.SetConnMaxLifetime(time.Duration(c.ConnMaxLifetime) * time.Second)
+	if c.ConnMaxLifetime != nil {
+		db.SetConnMaxLifetime(*c.ConnMaxLifetime)
 	}
 	if c.MaxIdleConns > 0 {
 		db.SetMaxIdleConns(c.MaxIdleConns)

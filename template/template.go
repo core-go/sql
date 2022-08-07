@@ -35,33 +35,33 @@ func isValidNode(n string) bool {
 }
 
 type StringFormat struct {
-	Texts      []string    `mapstructure:"texts" json:"texts,omitempty" gorm:"column:texts" bson:"texts,omitempty" dynamodbav:"texts,omitempty" firestore:"texts,omitempty"`
-	Parameters []Parameter `mapstructure:"parameters" json:"parameters,omitempty" gorm:"column:parameters" bson:"parameters,omitempty" dynamodbav:"parameters,omitempty" firestore:"parameters,omitempty"`
+	Texts      []string    `yaml:"texts" mapstructure:"texts" json:"texts,omitempty" gorm:"column:texts" bson:"texts,omitempty" dynamodbav:"texts,omitempty" firestore:"texts,omitempty"`
+	Parameters []Parameter `yaml:"parameters" mapstructure:"parameters" json:"parameters,omitempty" gorm:"column:parameters" bson:"parameters,omitempty" dynamodbav:"parameters,omitempty" firestore:"parameters,omitempty"`
 }
 type Parameter struct {
-	Name string `mapstructure:"name" json:"name,omitempty" gorm:"column:name" bson:"name,omitempty" dynamodbav:"name,omitempty" firestore:"name,omitempty"`
-	Type string `mapstructure:"type" json:"type,omitempty" gorm:"column:type" bson:"type,omitempty" dynamodbav:"type,omitempty" firestore:"type,omitempty"`
+	Name string `yaml:"name" mapstructure:"name" json:"name,omitempty" gorm:"column:name" bson:"name,omitempty" dynamodbav:"name,omitempty" firestore:"name,omitempty"`
+	Type string `yaml:"type" mapstructure:"type" json:"type,omitempty" gorm:"column:type" bson:"type,omitempty" dynamodbav:"type,omitempty" firestore:"type,omitempty"`
 }
 type TemplateNode struct {
-	Type      string       `mapstructure:"type" json:"type,omitempty" gorm:"column:type" bson:"type,omitempty" dynamodbav:"type,omitempty" firestore:"type,omitempty"`
-	Text      string       `mapstructure:"text" json:"text,omitempty" gorm:"column:text" bson:"text,omitempty" dynamodbav:"text,omitempty" firestore:"text,omitempty"`
-	Property  string       `mapstructure:"property" json:"property,omitempty" gorm:"column:property" bson:"property,omitempty" dynamodbav:"property,omitempty" firestore:"property,omitempty"`
-	Value     string       `mapstructure:"value" json:"value,omitempty" gorm:"column:value" bson:"value,omitempty" dynamodbav:"value,omitempty" firestore:"value,omitempty"`
-	Array     string       `mapstructure:"array" json:"array,omitempty" gorm:"column:array" bson:"array,omitempty" dynamodbav:"array,omitempty" firestore:"array,omitempty"`
-	Separator string       `mapstructure:"separator" json:"array,omitempty" gorm:"column:separator" bson:"separator,omitempty" dynamodbav:"separator,omitempty" firestore:"separator,omitempty"`
-	Prefix    string       `mapstructure:"prefix" json:"array,omitempty" gorm:"column:prefix" bson:"prefix,omitempty" dynamodbav:"prefix,omitempty" firestore:"prefix,omitempty"`
-	Suffix    string       `mapstructure:"suffix" json:"array,omitempty" gorm:"column:suffix" bson:"suffix,omitempty" dynamodbav:"suffix,omitempty" firestore:"suffix,omitempty"`
-	Format    StringFormat `mapstructure:"format" json:"format,omitempty" gorm:"column:format" bson:"format,omitempty" dynamodbav:"format,omitempty" firestore:"format,omitempty"`
+	Type      string       `yaml:"type" mapstructure:"type" json:"type,omitempty" gorm:"column:type" bson:"type,omitempty" dynamodbav:"type,omitempty" firestore:"type,omitempty"`
+	Text      string       `yaml:"text" mapstructure:"text" json:"text,omitempty" gorm:"column:text" bson:"text,omitempty" dynamodbav:"text,omitempty" firestore:"text,omitempty"`
+	Property  string       `yaml:"property" mapstructure:"property" json:"property,omitempty" gorm:"column:property" bson:"property,omitempty" dynamodbav:"property,omitempty" firestore:"property,omitempty"`
+	Value     string       `yaml:"value" mapstructure:"value" json:"value,omitempty" gorm:"column:value" bson:"value,omitempty" dynamodbav:"value,omitempty" firestore:"value,omitempty"`
+	Array     string       `yaml:"array" mapstructure:"array" json:"array,omitempty" gorm:"column:array" bson:"array,omitempty" dynamodbav:"array,omitempty" firestore:"array,omitempty"`
+	Separator string       `yaml:"separator" mapstructure:"separator" json:"array,omitempty" gorm:"column:separator" bson:"separator,omitempty" dynamodbav:"separator,omitempty" firestore:"separator,omitempty"`
+	Prefix    string       `yaml:"prefix" mapstructure:"prefix" json:"array,omitempty" gorm:"column:prefix" bson:"prefix,omitempty" dynamodbav:"prefix,omitempty" firestore:"prefix,omitempty"`
+	Suffix    string       `yaml:"suffix" mapstructure:"suffix" json:"array,omitempty" gorm:"column:suffix" bson:"suffix,omitempty" dynamodbav:"suffix,omitempty" firestore:"suffix,omitempty"`
+	Format    StringFormat `yaml:"format" mapstructure:"format" json:"format,omitempty" gorm:"column:format" bson:"format,omitempty" dynamodbav:"format,omitempty" firestore:"format,omitempty"`
 }
 type Template struct {
-	Id        string         `mapstructure:"id" json:"id,omitempty" gorm:"column:id" bson:"id,omitempty" dynamodbav:"id,omitempty" firestore:"id,omitempty"`
-	Text      string         `mapstructure:"text" json:"text,omitempty" gorm:"column:text" bson:"text,omitempty" dynamodbav:"text,omitempty" firestore:"text,omitempty"`
-	Templates []TemplateNode `mapstructure:"templates" json:"templates,omitempty" gorm:"column:templates" bson:"templates,omitempty" dynamodbav:"templates,omitempty" firestore:"templates,omitempty"`
+	Id        string         `yaml:"id" mapstructure:"id" json:"id,omitempty" gorm:"column:id" bson:"id,omitempty" dynamodbav:"id,omitempty" firestore:"id,omitempty"`
+	Text      string         `yaml:"text" mapstructure:"text" json:"text,omitempty" gorm:"column:text" bson:"text,omitempty" dynamodbav:"text,omitempty" firestore:"text,omitempty"`
+	Templates []TemplateNode `yaml:"templates" mapstructure:"templates" json:"templates,omitempty" gorm:"column:templates" bson:"templates,omitempty" dynamodbav:"templates,omitempty" firestore:"templates,omitempty"`
 }
 type TStatement struct {
-	Query  string        `mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
-	Params []interface{} `mapstructure:"params" json:"params,omitempty" gorm:"column:params" bson:"params,omitempty" dynamodbav:"params,omitempty" firestore:"params,omitempty"`
-	Index  int           `mapstructure:"index" json:"index,omitempty" gorm:"column:index" bson:"index,omitempty" dynamodbav:"index,omitempty" firestore:"index,omitempty"`
+	Query  string        `yaml:"query" mapstructure:"query" json:"query,omitempty" gorm:"column:query" bson:"query,omitempty" dynamodbav:"query,omitempty" firestore:"query,omitempty"`
+	Params []interface{} `yaml:"params" mapstructure:"params" json:"params,omitempty" gorm:"column:params" bson:"params,omitempty" dynamodbav:"params,omitempty" firestore:"params,omitempty"`
+	Index  int           `yaml:"index" mapstructure:"index" json:"index,omitempty" gorm:"column:index" bson:"index,omitempty" dynamodbav:"index,omitempty" firestore:"index,omitempty"`
 }
 
 func LoadTemplates(trim func(string) string, files ...string) (map[string]*Template, error) {
