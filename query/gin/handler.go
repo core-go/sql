@@ -11,12 +11,12 @@ const internalServerError = "Internal Server Error"
 
 type QueryHandler struct {
 	Load     func(ctx context.Context, key string, max int64) ([]string, error)
-	LogError func(context.Context, string)
+	LogError func(context.Context, string, ...map[string]interface{})
 	Keyword  string
 	Max      string
 }
 
-func NewQueryHandler(load func(ctx context.Context, key string, max int64) ([]string, error), logError func(context.Context, string), opts ...string) *QueryHandler {
+func NewQueryHandler(load func(ctx context.Context, key string, max int64) ([]string, error), logError func(context.Context, string, ...map[string]interface{}), opts ...string) *QueryHandler {
 	keyword := "keyword"
 	if len(opts) > 0 && len(opts[0]) > 0 {
 		keyword = opts[0]

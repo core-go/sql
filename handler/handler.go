@@ -16,12 +16,12 @@ type Handler struct {
 	Transform func(s string) string
 	Cache     q.TxCache
 	Generate  func(ctx context.Context) (string, error)
-	Error     func(context.Context, string)
+	Error     func(context.Context, string, ...map[string]interface{})
 }
 
 const d = 120 * time.Second
-func NewHandler(db *sql.DB, transform func(s string) string, cache q.TxCache, generate func(context.Context) (string, error), options... func(context.Context, string)) *Handler {
-	var logError func(context.Context, string)
+func NewHandler(db *sql.DB, transform func(s string) string, cache q.TxCache, generate func(context.Context) (string, error), options... func(context.Context, string, ...map[string]interface{})) *Handler {
+	var logError func(context.Context, string, ...map[string]interface{})
 	if len(options) >= 1 {
 		logError = options[0]
 	}
@@ -291,7 +291,7 @@ func (h *Handler) ExecBatch(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, res)
 }
 
-func handleError(w http.ResponseWriter, r *http.Request, code int, result interface{}, logError func(context.Context, string), err error) {
+func handleError(w http.ResponseWriter, r *http.Request, code int, result interface{}, logError func(context.Context, string, ...map[string]interface{}), err error) {
 	if logError != nil {
 		logError(r.Context(), err.Error())
 	}

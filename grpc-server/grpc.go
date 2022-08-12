@@ -20,16 +20,20 @@ type GRPCHandler struct {
 	Transform func(s string) string
 	Cache     q.TxCache
 	Generate  func(ctx context.Context) (string, error)
-	Error     func(context.Context, string)
+	Error     func(context.Context, string, ...map[string]interface{})
 }
 
-func NewHandler(db *sql.DB, transform func(s string) string, cache q.TxCache, generate func(ctx context.Context) (string, error), err func(context.Context, string)) *GRPCHandler {
+func NewHandler(db *sql.DB, transform func(s string) string, cache q.TxCache, generate func(ctx context.Context) (string, error), options... func(context.Context, string, ...map[string]interface{})) *GRPCHandler {
+	var logError func(context.Context, string, ...map[string]interface{})
+	if len(options) >= 1 {
+		logError = options[0]
+	}
 	g := GRPCHandler{
 		Transform: transform,
 		Cache:     cache,
 		DB:        db,
 		Generate:  generate,
-		Error:     err,
+		Error:     logError,
 	}
 	return &g
 }
