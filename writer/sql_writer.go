@@ -1,10 +1,12 @@
-package sql
+package writer
 
 import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"reflect"
+
+	q "github.com/core-go/sql"
 )
 
 type SqlWriter struct {
@@ -13,7 +15,7 @@ type SqlWriter struct {
 	BuildParam  func(i int) string
 	Map         func(ctx context.Context, model interface{}) (interface{}, error)
 	BoolSupport bool
-	schema      *Schema
+	schema      *q.Schema
 	ToArray     func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
@@ -28,11 +30,11 @@ func NewSqlWriterWithMap(db *sql.DB, tableName string, modelType reflect.Type, m
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
-		buildParam = GetBuild(db)
+		buildParam = q.GetBuild(db)
 	}
-	driver := GetDriver(db)
-	boolSupport := driver == DriverPostgres
-	schema := CreateSchema(modelType)
+	driver := q.GetDriver(db)
+	boolSupport := driver == q.DriverPostgres
+	schema := q.CreateSchema(modelType)
 	return &SqlWriter{db: db, tableName: tableName, BuildParam: buildParam, Map: mp, BoolSupport: boolSupport, schema: schema, ToArray: toArray}
 }
 
@@ -50,9 +52,9 @@ func (w *SqlWriter) Write(ctx context.Context, model interface{}) error {
 		if er0 != nil {
 			return er0
 		}
-		_, err := SaveWithArray(ctx, w.db, w.tableName, m2, w.ToArray, w.schema)
+		_, err := q.SaveWithArray(ctx, w.db, w.tableName, m2, w.ToArray, w.schema)
 		return err
 	}
-	_, err := SaveWithArray(ctx, w.db, w.tableName, model, w.ToArray, w.schema)
+	_, err := q.SaveWithArray(ctx, w.db, w.tableName, model, w.ToArray, w.schema)
 	return err
 }

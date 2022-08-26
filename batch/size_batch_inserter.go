@@ -1,9 +1,11 @@
-package sql
+package batch
 
 import (
 	"context"
 	"database/sql"
 	"reflect"
+
+	q "github.com/core-go/sql"
 )
 
 type SizeBatchInserter struct {
@@ -24,7 +26,7 @@ func NewSizeSqlBatchInserter(db *sql.DB, tableName string, mp func(context.Conte
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
-		buildParam = GetBuild(db)
+		buildParam = q.GetBuild(db)
 	}
 	return &SizeBatchInserter{db: db, tableName: tableName, BuildParam: buildParam, Map: mp}
 }
@@ -35,10 +37,10 @@ func (w *SizeBatchInserter) Write(ctx context.Context, models interface{}) ([]in
 	var models2 interface{}
 	var er0 error
 	if w.Map != nil {
-		models2, er0 = MapModels(ctx, models, w.Map)
+		models2, er0 = q.MapModels(ctx, models, w.Map)
 		if er0 != nil {
 			s0 := reflect.ValueOf(models2)
-			_, er0b := InterfaceSlice(models2)
+			_, er0b := q.InterfaceSlice(models2)
 			failIndices = ToArrayIndex(s0, failIndices)
 			return successIndices, failIndices, er0b
 		}
@@ -46,13 +48,13 @@ func (w *SizeBatchInserter) Write(ctx context.Context, models interface{}) ([]in
 		models2 = models
 	}
 	s := reflect.ValueOf(models2)
-	_models, er1 := InterfaceSlice(models2)
+	_models, er1 := q.InterfaceSlice(models2)
 	if er1 != nil {
 		// Return full fail
 		failIndices = ToArrayIndex(s, failIndices)
 		return successIndices, failIndices, er1
 	}
-	_, er2 := InsertManyWithSize(ctx, w.db, w.tableName, _models, 0, w.BuildParam)
+	_, er2 := q.InsertManyWithSize(ctx, w.db, w.tableName, _models, 0, w.BuildParam)
 
 	if er2 == nil {
 		// Return full success

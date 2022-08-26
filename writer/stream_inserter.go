@@ -1,10 +1,12 @@
-package sql
+package writer
 
 import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"reflect"
+
+	q "github.com/core-go/sql"
 )
 
 type StreamInserter struct {
@@ -13,7 +15,7 @@ type StreamInserter struct {
 	BuildParam   func(i int) string
 	Map          func(ctx context.Context, model interface{}) (interface{}, error)
 	Driver       string
-	schema       *Schema
+	schema       *q.Schema
 	batchSize    int
 	batch        []interface{}
 	ToArray      func(interface{}) interface {
@@ -49,10 +51,10 @@ func NewSqlStreamInserter(db *sql.DB, tableName string, modelType reflect.Type, 
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
-		buildParam = GetBuild(db)
+		buildParam = q.GetBuild(db)
 	}
-	driver := GetDriver(db)
-	schema := CreateSchema(modelType)
+	driver := q.GetDriver(db)
+	schema := q.CreateSchema(modelType)
 	return &StreamInserter{db: db, Driver: driver, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
@@ -74,7 +76,7 @@ func (w *StreamInserter) Write(ctx context.Context, model interface{}) error {
 
 func (w *StreamInserter) Flush(ctx context.Context) error {
 	// driver := GetDriver(w.db)
-	query, args, err := BuildToInsertBatchWithSchema(w.tableName, w.batch, w.Driver, w.ToArray, w.BuildParam, w.schema)
+	query, args, err := q.BuildToInsertBatchWithSchema(w.tableName, w.batch, w.Driver, w.ToArray, w.BuildParam, w.schema)
 	if err != nil {
 		return err
 	}

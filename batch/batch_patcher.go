@@ -1,9 +1,11 @@
-package sql
+package batch
 
 import (
 	"context"
 	"database/sql"
 	"reflect"
+
+	q "github.com/core-go/sql"
 )
 
 type BatchPatcher struct {
@@ -23,13 +25,13 @@ func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type
 	modelsTypes := reflect.Zero(reflect.SliceOf(modelType)).Type()
 	idJsonName := make([]string, 0)
 	if fieldName == nil || len(fieldName) == 0 {
-		fieldName, idJsonName = FindPrimaryKeys(modelType)
+		fieldName, idJsonName = q.FindPrimaryKeys(modelType)
 	}
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
-		buildParam = GetBuild(db)
+		buildParam = q.GetBuild(db)
 	}
 	return &BatchPatcher{db: db, tableName: tableName, idNames: fieldName, idJsonName: idJsonName, modelsType: modelType, modelsTypes: modelsTypes, buildParam: buildParam}
 }
@@ -37,7 +39,7 @@ func NewBatchPatcherWithIds(db *sql.DB, tableName string, modelType reflect.Type
 func (w *BatchPatcher) Write(ctx context.Context, models []map[string]interface{}) ([]int, []int, error) {
 	successIndices := make([]int, 0)
 	failIndices := make([]int, 0)
-	_, err := PatchInTransaction(ctx, w.db, w.tableName, models, w.idNames, w.idJsonName, w.buildParam)
+	_, err := q.PatchInTransaction(ctx, w.db, w.tableName, models, w.idNames, w.idJsonName, w.buildParam)
 
 	if err == nil {
 		// Return full success

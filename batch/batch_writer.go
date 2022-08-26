@@ -1,17 +1,19 @@
-package sql
+package batch
 
 import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"reflect"
+
+	q "github.com/core-go/sql"
 )
 
 type BatchWriter struct {
 	db           *sql.DB
 	tableName    string
 	Map          func(ctx context.Context, model interface{}) (interface{}, error)
-	Schema       *Schema
+	Schema       *q.Schema
 	ToArray      func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
@@ -32,7 +34,7 @@ func NewBatchWriterWithArray(db *sql.DB, tableName string, modelType reflect.Typ
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
 	}
-	schema := CreateSchema(modelType)
+	schema := q.CreateSchema(modelType)
 	return &BatchWriter{db: db, tableName: tableName, Schema: schema, Map: mp, ToArray: toArray}
 }
 
@@ -42,26 +44,26 @@ func (w *BatchWriter) Write(ctx context.Context, models interface{}) ([]int, []i
 	var m interface{}
 	var er0 error
 	if w.Map != nil {
-		m, er0 = MapModels(ctx, models, w.Map)
+		m, er0 = q.MapModels(ctx, models, w.Map)
 		if er0 != nil {
 			s0 := reflect.ValueOf(m)
-			_, er0b := InterfaceSlice(m)
-			failIndices = ToArrayIndex(s0, failIndices)
+			_, er0b := q.InterfaceSlice(m)
+			failIndices = q.ToArrayIndex(s0, failIndices)
 			return successIndices, failIndices, er0b
 		}
 	} else {
 		m = models
 	}
 	s := reflect.ValueOf(m)
-	_, er2 := SaveBatchWithArray(ctx, w.db, w.tableName, m, w.ToArray, w.Schema)
+	_, er2 := q.SaveBatchWithArray(ctx, w.db, w.tableName, m, w.ToArray, w.Schema)
 
 	if er2 == nil {
 		// Return full success
-		successIndices = ToArrayIndex(s, successIndices)
+		successIndices = q.ToArrayIndex(s, successIndices)
 		return successIndices, failIndices, er2
 	} else {
 		// Return full fail
-		failIndices = ToArrayIndex(s, failIndices)
+		failIndices = q.ToArrayIndex(s, failIndices)
 	}
 	return successIndices, failIndices, er2
 }
