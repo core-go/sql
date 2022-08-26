@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type PasscodeService struct {
+type PasscodeRepository struct {
 	db            *sql.DB
 	tableName     string
 	idName        string
@@ -18,10 +18,16 @@ type PasscodeService struct {
 	Driver        string
 	BuildParam    func(i int) string
 }
-func NewPasscodeService(db *sql.DB, tableName string, options ...string) *PasscodeService {
-	return NewPasscodeServiceWithTx(db, tableName, "", options...)
+func NewPasscodeAdapter(db *sql.DB, tableName string, options ...string) *PasscodeRepository {
+	return NewPasscodeRepositoryWithTx(db, tableName, "", options...)
 }
-func NewPasscodeServiceWithTx(db *sql.DB, tableName string, tx string, options ...string) *PasscodeService {
+func NewPasscodeAdapterWithTx(db *sql.DB, tableName string, tx string, options ...string) *PasscodeRepository {
+	return NewPasscodeRepositoryWithTx(db, tableName, tx, options...)
+}
+func NewPasscodeRepository(db *sql.DB, tableName string, options ...string) *PasscodeRepository {
+	return NewPasscodeRepositoryWithTx(db, tableName, "", options...)
+}
+func NewPasscodeRepositoryWithTx(db *sql.DB, tableName string, tx string, options ...string) *PasscodeRepository {
 	var idName, passcodeName, expiredAtName string
 	if len(options) >= 1 && len(options[0]) > 0 {
 		expiredAtName = options[0]
@@ -40,7 +46,7 @@ func NewPasscodeServiceWithTx(db *sql.DB, tableName string, tx string, options .
 	}
 	driver := GetDriver(db)
 	buildParam := GetBuild(db)
-	return &PasscodeService{
+	return &PasscodeRepository{
 		db:            db,
 		tableName:     strings.ToLower(tableName),
 		idName:        strings.ToLower(idName),
@@ -52,7 +58,7 @@ func NewPasscodeServiceWithTx(db *sql.DB, tableName string, tx string, options .
 	}
 }
 
-func (s *PasscodeService) Save(ctx context.Context, id string, passcode string, expireAt time.Time) (int64, error) {
+func (s *PasscodeRepository) Save(ctx context.Context, id string, passcode string, expireAt time.Time) (int64, error) {
 	var placeholder []string
 	columns := []string{s.idName, s.passcodeName, s.expiredAtName}
 	var queryString string
@@ -155,7 +161,7 @@ func (s *PasscodeService) Save(ctx context.Context, id string, passcode string, 
 	return x.RowsAffected()
 }
 
-func (s *PasscodeService) Load(ctx context.Context, id string) (string, time.Time, error) {
+func (s *PasscodeRepository) Load(ctx context.Context, id string) (string, time.Time, error) {
 	driverName := GetDriver(s.db)
 	arr := make(map[string]interface{})
 	strSql := fmt.Sprintf(`SELECT %s, %s FROM `, s.passcodeName, s.expiredAtName) + s.tableName + ` WHERE ` + s.idName + ` = ` + s.BuildParam(1)
@@ -208,7 +214,7 @@ func (s *PasscodeService) Load(ctx context.Context, id string) (string, time.Tim
 	return code, expiredAt, nil
 }
 
-func (s *PasscodeService) Delete(ctx context.Context, id string) (int64, error) {
+func (s *PasscodeRepository) Delete(ctx context.Context, id string) (int64, error) {
 	strSQL := `DELETE FROM ` + s.tableName + ` WHERE ` + s.idName + ` =  ` + s.BuildParam(1)
 	x, err := s.db.ExecContext(ctx, strSQL, id)
 	if err != nil {

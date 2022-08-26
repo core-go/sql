@@ -342,30 +342,6 @@ func CheckByIndex(modelType reflect.Type, index int, update bool) (col string, i
 func BuildParamWithNull(colName string) string {
 	return QuoteColumnName(colName) + "=null"
 }
-func GetFieldByIndex(ModelType reflect.Type, index int) (json string, col string, colExist bool) {
-	fields := ModelType.Field(index)
-	tag, _ := fields.Tag.Lookup("gorm")
-
-	if has := strings.Contains(tag, "column"); has {
-		str1 := strings.Split(tag, ";")
-		num := len(str1)
-		json = fields.Name
-		for i := 0; i < num; i++ {
-			str2 := strings.Split(str1[i], ":")
-			for j := 0; j < len(str2); j++ {
-				if str2[j] == "column" {
-					jTag, jOk := fields.Tag.Lookup("json")
-					if jOk {
-						tagJsons := strings.Split(jTag, ",")
-						json = tagJsons[0]
-					}
-					return json, str2[j+1], true
-				}
-			}
-		}
-	}
-	return "", "", false
-}
 func BuildSqlParametersAndValues(columns []string, values []interface{}, n *int, start int, joinStr string, buildParam func(int) string) (string, []interface{}, error) {
 	arr := make([]string, *n)
 	j := start
