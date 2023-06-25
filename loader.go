@@ -225,8 +225,10 @@ func (s *Loader) Exist(ctx context.Context, id interface{}) (bool, error) {
 		return false, nil
 	}
 }
-
 func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result interface{}) (bool, error) {
+	return s.Get(ctx, id, result)
+}
+func (s *Loader) Get(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
 	sql, values := BuildFindByIdWithDB(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
 	var rowData interface{}
