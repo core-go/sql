@@ -45,15 +45,20 @@ func End(tx *sql.Tx, res int64, err error, options...bool) (int64, error) {
 	er := Commit(tx, err, options...)
 	return res, er
 }
-func Init(modelType reflect.Type, db *sql.DB) (*Schema, map[string]string, []string, []string, func(i int) string) {
+func Init(modelType reflect.Type, db *sql.DB) (map[string]int, *Schema, map[string]string, []string, []string, func(i int) string, string, error) {
+	fieldsIndex, err := GetColumnIndexes(modelType)
+	if err != nil {
+		return nil, nil, nil, nil, nil, nil, "", err
+	}
 	schema := CreateSchema(modelType)
 	jsonColumnMap := MakeJsonColumnMap(modelType)
 	keys, arr := FindPrimaryKeys(modelType)
 	if db == nil {
-		return schema, jsonColumnMap, keys, arr, nil
+		return fieldsIndex, schema, jsonColumnMap, keys, arr, nil, "", nil
 	}
+	driver := GetDriver(db)
 	buildParam := GetBuild(db)
-	return schema, jsonColumnMap, keys, arr, buildParam
+	return fieldsIndex, schema, jsonColumnMap, keys, arr, buildParam, driver, nil
 }
 type Writer struct {
 	*Loader
@@ -452,7 +457,6 @@ func BuildToPatchWithArray(table string, model map[string]interface{}, keyColumn
 	return BuildToPatchWithVersion(table, model, keyColumns, buildParam, toArray, "", options...)
 }
 
-// BuildToPatchWithVersion3 model with db column name
 func BuildToPatchWithVersion(table string, model map[string]interface{}, keyColumns []string, buildParam func(int) string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner

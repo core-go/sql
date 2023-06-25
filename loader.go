@@ -32,7 +32,18 @@ func GetTxId(ctx context.Context) *string {
 	}
 	return nil
 }
-
+func InitFields(modelType reflect.Type, db *sql.DB) (map[string]int, func(i int) string, string, error) {
+	fieldsIndex, err := GetColumnIndexes(modelType)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if db == nil {
+		return fieldsIndex, nil, "", nil
+	}
+	driver := GetDriver(db)
+	buildParam := GetBuild(db)
+	return fieldsIndex, buildParam, driver, nil
+}
 type Loader struct {
 	Database          *sql.DB
 	BuildParam        func(i int) string

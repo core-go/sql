@@ -132,7 +132,7 @@ func Build(fm interface{}, tableName string, modelType reflect.Type, driver stri
 				}
 			}
 			if len(v.Sort) > 0 {
-				sortString = buildSort(v.Sort, modelType)
+				sortString = BuildSort(v.Sort, modelType)
 			}
 		}
 
@@ -525,7 +525,7 @@ func getColumnsSelect(modelType reflect.Type) []string {
 	}
 	return columnNameKeys
 }
-func buildSort(sortString string, modelType reflect.Type) string {
+func BuildSort(sortString string, modelType reflect.Type) string {
 	var sort = make([]string, 0)
 	sorts := strings.Split(sortString, ",")
 	for i := 0; i < len(sorts); i++ {
