@@ -182,7 +182,7 @@ func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}, 
 
 func QuoteString(name string, driver string) string {
 	if driver == q.DriverPostgres {
-		name = "`" + strings.Replace(name, "`", "``", -1) + "`"
+		name = `"` + name + `"`
 	}
 	return name
 }
