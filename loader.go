@@ -32,17 +32,18 @@ func GetTxId(ctx context.Context) *string {
 	}
 	return nil
 }
-func InitFields(modelType reflect.Type, db *sql.DB) (map[string]int, func(i int) string, string, error) {
+func InitFields(modelType reflect.Type, db *sql.DB) (map[string]int, string, func(i int) string, string, error) {
 	fieldsIndex, err := GetColumnIndexes(modelType)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, "", nil, "", err
 	}
+	fields := BuildFields(modelType)
 	if db == nil {
-		return fieldsIndex, nil, "", nil
+		return fieldsIndex, fields, nil, "", nil
 	}
 	driver := GetDriver(db)
 	buildParam := GetBuild(db)
-	return fieldsIndex, buildParam, driver, nil
+	return fieldsIndex, fields, buildParam, driver, nil
 }
 type Loader struct {
 	Database          *sql.DB
@@ -54,6 +55,7 @@ type Loader struct {
 	mapJsonColumnKeys map[string]string
 	fieldsIndex       map[string]int
 	table             string
+	Fields            string
 	IsRollback        bool
 	toArray           func(interface{}) interface {
 		driver.Valuer
@@ -124,7 +126,8 @@ func NewSqlLoader(db *sql.DB, tableName string, modelType reflect.Type, mp func(
 	if er0 != nil {
 		return nil, er0
 	}
-	return &Loader{Database: db, IsRollback: true, BuildParam: buildParam, Map: mp, modelType: modelType, modelsType: modelsType, keys: idNames, mapJsonColumnKeys: mapJsonColumnKeys, fieldsIndex: fieldsIndex, table: tableName, toArray: toArray}, nil
+	fields := BuildFields(modelType)
+	return &Loader{Database: db, IsRollback: true, BuildParam: buildParam, Map: mp, modelType: modelType, modelsType: modelsType, keys: idNames, mapJsonColumnKeys: mapJsonColumnKeys, fieldsIndex: fieldsIndex, table: tableName, Fields: fields, toArray: toArray}, nil
 }
 
 func (s *Loader) Keys() []string {
@@ -132,7 +135,7 @@ func (s *Loader) Keys() []string {
 }
 
 func (s *Loader) All(ctx context.Context) (interface{}, error) {
-	query := BuildSelectAllQuery(s.table)
+	query := fmt.Sprintf("select %s from %s", s.Fields, s.table)
 	result := reflect.New(s.modelsType).Interface()
 	var err error
 	tx := GetTx(ctx)
@@ -157,7 +160,8 @@ func (s *Loader) All(ctx context.Context) (interface{}, error) {
 }
 
 func (s *Loader) Load(ctx context.Context, id interface{}) (interface{}, error) {
-	queryFindById, values := BuildFindByIdWithDB(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
+	query := fmt.Sprintf("select %s from %s", s.Fields, s.table)
+	queryFindById, values := BuildFindByIdWithDB(s.Database, query, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
 	tx := GetTx(ctx)
 	var r interface{}
 	var er1 error
@@ -230,7 +234,8 @@ func (s *Loader) LoadAndDecode(ctx context.Context, id interface{}, result inter
 }
 func (s *Loader) Get(ctx context.Context, id interface{}, result interface{}) (bool, error) {
 	var values []interface{}
-	sql, values := BuildFindByIdWithDB(s.Database, s.table, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
+	query := fmt.Sprintf("select %s from %s", s.Fields, s.table)
+	sql, values := BuildFindByIdWithDB(s.Database, query, id, s.mapJsonColumnKeys, s.keys, s.BuildParam)
 	var rowData interface{}
 	var er1 error
 	tx := GetTx(ctx)
@@ -339,17 +344,17 @@ func BuildSelectAllQuery(table string) string {
 	return fmt.Sprintf("select * from %v", table)
 }
 
-func BuildFindByIdWithDB(db *sql.DB, table string, id interface{}, mapJsonColumnKeys map[string]string, keys []string, options ...func(i int) string) (string, []interface{}) {
+func BuildFindByIdWithDB(db *sql.DB, query string, id interface{}, mapJsonColumnKeys map[string]string, keys []string, options ...func(i int) string) (string, []interface{}) {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
 		buildParam = GetBuild(db)
 	}
-	return BuildFindById(table, buildParam, id, mapJsonColumnKeys, keys)
+	return BuildFindById(query, buildParam, id, mapJsonColumnKeys, keys)
 }
 
-func BuildFindById(table string, buildParam func(i int) string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
+func BuildFindById(selectAll string, buildParam func(i int) string, id interface{}, mapJsonColumnKeys map[string]string, keys []string) (string, []interface{}) {
 	var where = ""
 	var values []interface{}
 	if len(keys) == 1 {
@@ -370,7 +375,7 @@ func BuildFindById(table string, buildParam func(i int) string, id interface{}, 
 			where = "where " + strings.Join(conditions, " and ")
 		}
 	}
-	return fmt.Sprintf("select * from %v %v", table, where), values
+	return fmt.Sprintf("%s %s", selectAll, where), values
 }
 
 func IsNil(i interface{}) bool {

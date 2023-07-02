@@ -45,20 +45,21 @@ func End(tx *sql.Tx, res int64, err error, options...bool) (int64, error) {
 	er := Commit(tx, err, options...)
 	return res, er
 }
-func Init(modelType reflect.Type, db *sql.DB) (map[string]int, *Schema, map[string]string, []string, []string, func(i int) string, string, error) {
+func Init(modelType reflect.Type, db *sql.DB) (map[string]int, *Schema, map[string]string, []string, []string, string, func(i int) string, string, error) {
 	fieldsIndex, err := GetColumnIndexes(modelType)
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, "", err
+		return nil, nil, nil, nil, nil, "", nil, "", err
 	}
 	schema := CreateSchema(modelType)
+	fields := BuildFieldsBySchema(schema)
 	jsonColumnMap := MakeJsonColumnMap(modelType)
 	keys, arr := FindPrimaryKeys(modelType)
 	if db == nil {
-		return fieldsIndex, schema, jsonColumnMap, keys, arr, nil, "", nil
+		return fieldsIndex, schema, jsonColumnMap, keys, arr, fields, nil, "", nil
 	}
 	driver := GetDriver(db)
 	buildParam := GetBuild(db)
-	return fieldsIndex, schema, jsonColumnMap, keys, arr, buildParam, driver, nil
+	return fieldsIndex, schema, jsonColumnMap, keys, arr, fields, buildParam, driver, nil
 }
 type Writer struct {
 	*Loader
