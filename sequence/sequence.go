@@ -42,13 +42,25 @@ func NewSequenceAdapter(db *sql.DB, buildParam func(int) string, options ...stri
 		BuildParam: buildParam,
 	}
 }
-func (s *SequenceAdapter) Next(ctx context.Context, id string) (int64, error) {
-	query := fmt.Sprintf(`select %s from %s where %s = %s`, s.Sequence, s.Tables, s.Table, s.BuildParam(1))
-	tx, err := s.DB.Begin()
+func (s *SequenceAdapter) Next(ctx context.Context, seqName string) (int64, error) {
+	seq, err := s.next(ctx, seqName)
 	if err != nil {
-		return -1, err
+		return seq, err
 	}
-	rows, err := tx.QueryContext(ctx, query, id)
+	for {
+		if seq == -2 {
+			seq, err := s.next(ctx, seqName)
+			if err != nil {
+				return seq, err
+			}
+		} else {
+			return seq, nil
+		}
+	}
+}
+func (s *SequenceAdapter) next(ctx context.Context, seqName string) (int64, error) {
+	query := fmt.Sprintf(`select %s from %s where %s = %s`, s.Sequence, s.Tables, s.Table, s.BuildParam(1))
+	rows, err := s.DB.QueryContext(ctx, query, seqName)
 	if err != nil {
 		return -1, err
 	}
@@ -58,32 +70,27 @@ func (s *SequenceAdapter) Next(ctx context.Context, id string) (int64, error) {
 		if err := rows.Scan(&seq); err != nil {
 			return -1, err
 		}
-		updateSql := fmt.Sprintf(`update %s set %s = %s where %s = %s`, s.Tables, s.Sequence, s.BuildParam(1), s.Table, s.BuildParam(2))
-		_, err = tx.ExecContext(ctx, updateSql, seq+1, id)
+		updateSql := fmt.Sprintf(`update %s set %s = %s + 1 where %s = %s and %s = %d`, s.Tables, s.Sequence, s.Sequence, s.Table, s.BuildParam(1), s.Sequence, seq)
+		res, err := s.DB.ExecContext(ctx, updateSql, seqName)
 		if err != nil {
-			er := tx.Rollback()
-			if er != nil {
-				return -1, er
-			}
 			return -1, err
 		}
-		err = tx.Commit()
+		c, err := res.RowsAffected()
 		if err != nil {
 			return -1, err
+		}
+		if c == 0 {
+			return -2, nil
 		}
 		return seq, nil
 	} else {
 		insertSql := fmt.Sprintf(`insert into %s (%s, %s) values (%s, 2)`, s.Tables, s.Table, s.Sequence, s.BuildParam(1))
-		_, err = tx.ExecContext(ctx, insertSql, id)
+		_, err = s.DB.ExecContext(ctx, insertSql, seqName)
 		if err != nil {
-			er := tx.Rollback()
-			if er != nil {
-				return -1, er
+			x := strings.ToLower(err.Error())
+			if strings.Index(x, "unique constraint") >= 0 || strings.Index(x, "Violation of PRIMARY KEY constraint") >= 0 {
+				return -2, nil
 			}
-			return -1, err
-		}
-		err = tx.Commit()
-		if err != nil {
 			return -1, err
 		}
 		return 1, nil
