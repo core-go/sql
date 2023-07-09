@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"runtime/debug"
 	"strings"
 )
 
@@ -79,6 +80,31 @@ func ExecuteWithBatchSize(ctx context.Context, db *sql.DB, size int, stmts ...St
 		}
 	}
 	return int64(l), nil
+}
+func CallbackTx(ctx context.Context, callback func(ctx2 context.Context)error, db *sql.DB, opts ...*sql.TxOptions) (err error) {
+	var tx *sql.Tx
+	if len(opts) > 0 && opts[0] != nil {
+		tx, err = db.BeginTx(ctx, opts[0])
+	} else {
+		tx, err = db.Begin()
+	}
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := recover(); err != nil {
+			tx.Rollback()
+			debug.PrintStack()
+			return
+		}
+	}()
+	ctx = context.WithValue(ctx, txs, tx)
+	if err = callback(ctx); err != nil {
+		tx.Rollback()
+		return err
+	}
+	err = tx.Commit()
+	return err
 }
 func ExecuteAll(ctx context.Context, db *sql.DB, stmts ...Statement) (int64, error) {
 	if stmts == nil || len(stmts) == 0 {
