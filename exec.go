@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"runtime/debug"
 	"strings"
 )
@@ -91,13 +92,14 @@ func CallbackTx(ctx context.Context, db *sql.DB, callback func(ctx2 context.Cont
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := recover(); err != nil {
+	defer func(e error) {
+		if err0 := recover(); err0 != nil {
 			tx.Rollback()
 			debug.PrintStack()
+			err = errors.New("error when execute sql")
 			return
 		}
-	}()
+	}(err)
 	ctx = context.WithValue(ctx, txs, tx)
 	if err = callback(ctx); err != nil {
 		tx.Rollback()
