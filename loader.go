@@ -12,6 +12,25 @@ import (
 
 const txs = "tx"
 
+type Executor interface {
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+}
+func GetExec(ctx context.Context, db *sql.DB, opts...string) Executor {
+	name := txs
+	if len(opts) > 0 && len(opts[0]) > 0 {
+		name = opts[0]
+	}
+	txi := ctx.Value(name)
+	if txi != nil {
+		txx, ok := txi.(*sql.Tx)
+		if ok {
+			return txx
+		}
+	}
+	return db
+}
 func GetTx(ctx context.Context) *sql.Tx {
 	txi := ctx.Value(txs)
 	if txi != nil {

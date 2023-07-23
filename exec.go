@@ -81,12 +81,12 @@ func ExecuteWithBatchSize(ctx context.Context, db *sql.DB, size int, stmts ...St
 	}
 	return int64(l), nil
 }
-func CallbackTx(ctx context.Context, callback func(ctx2 context.Context)error, db *sql.DB, opts ...*sql.TxOptions) (err error) {
+func CallbackTx(ctx context.Context, db *sql.DB, callback func(ctx2 context.Context)error, opts ...*sql.TxOptions) (err error) {
 	var tx *sql.Tx
 	if len(opts) > 0 && opts[0] != nil {
 		tx, err = db.BeginTx(ctx, opts[0])
 	} else {
-		tx, err = db.Begin()
+		tx, err = db.BeginTx(ctx, nil)
 	}
 	if err != nil {
 		return err
