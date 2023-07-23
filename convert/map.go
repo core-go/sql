@@ -1,11 +1,12 @@
 package convert
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 )
 
-func ToMap(in interface{}) map[string]interface{} {
+func ToMap(in interface{}, ignoreFields ...string) map[string]interface{} {
 	out := make(map[string]interface{})
 	v := reflect.ValueOf(in)
 	if v.Kind() == reflect.Ptr {
@@ -30,6 +31,11 @@ func ToMap(in interface{}) map[string]interface{} {
 		n := getTag(typ.Field(i), "json")
 		out[n] = fv
 	}
+	for _, v := range ignoreFields {
+		if _, ok := out[v]; ok {
+			delete(out, v)
+		}
+	}
 	return out
 }
 func getTag(fi reflect.StructField, tag string) string {
@@ -42,4 +48,11 @@ func getTag(fi reflect.StructField, tag string) string {
 		}
 	}
 	return fi.Name
+}
+func ToObject(ms map[string]interface{}, result interface{}) error {
+	bytes, err := json.Marshal(ms)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(bytes, result)
 }
