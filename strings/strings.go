@@ -6,6 +6,18 @@ import (
 	"time"
 )
 
+func Unique(s []string) []string {
+	inResult := make(map[string]bool)
+	var result []string
+	for _, str := range s {
+		if _, ok := inResult[str]; !ok {
+			inResult[str] = true
+			result = append(result, str)
+		}
+	}
+	return result
+}
+
 func Repeat(str string, n int) (out string) {
 	for i := 0; i < n; i++ {
 		out += str
