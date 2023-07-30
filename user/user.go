@@ -1,4 +1,4 @@
-package text
+package user
 
 import (
 	"context"
@@ -10,54 +10,56 @@ import (
 	"strings"
 )
 
-type URL struct {
-	Id   string  `yaml:"id" mapstructure:"id" json:"id,omitempty" gorm:"column:id" bson:"_id,omitempty" dynamodbav:"id,omitempty" firestore:"id,omitempty"`
-	Name *string `yaml:"name" mapstructure:"name" json:"name,omitempty" gorm:"column:name" bson:"name,omitempty" dynamodbav:"name,omitempty" firestore:"name,omitempty"`
-	Url  *string `yaml:"url" mapstructure:"url" json:"url,omitempty" gorm:"column:url" bson:"url,omitempty" dynamodbav:"url,omitempty" firestore:"url,omitempty"`
+type User struct {
+	Id    string  `yaml:"id" mapstructure:"id" json:"id,omitempty" gorm:"column:id" bson:"_id,omitempty" dynamodbav:"id,omitempty" firestore:"id,omitempty"`
+	Name  *string `yaml:"name" mapstructure:"name" json:"name,omitempty" gorm:"column:name" bson:"name,omitempty" dynamodbav:"name,omitempty" firestore:"name,omitempty"`
+	Email *string `yaml:"email" mapstructure:"email" json:"email,omitempty" gorm:"column:email" bson:"email,omitempty" dynamodbav:"email,omitempty" firestore:"email,omitempty"`
+	Phone *string `yaml:"phone" mapstructure:"phone" json:"phone,omitempty" gorm:"column:phone" bson:"phone,omitempty" dynamodbav:"phone,omitempty" firestore:"phone,omitempty"`
+	Url   *string `yaml:"url" mapstructure:"url" json:"url,omitempty" gorm:"column:url" bson:"url,omitempty" dynamodbav:"url,omitempty" firestore:"url,omitempty"`
 }
 
-type URLPort interface {
-	Load(ctx context.Context, id string) (*URL, error)
-	Query(ctx context.Context, ids []string) ([]URL, error)
+type UserPort interface {
+	Load(ctx context.Context, id string) (*User, error)
+	Query(ctx context.Context, ids []string) ([]User, error)
 }
 
-type URLAdapter struct {
+type UserAdapter struct {
 	db         *sql.DB
 	Select     string
 	BuildParam func(int) string
 }
 
-func NewURLAdapter(db *sql.DB, query string, opts ...func(i int) string) (*URLAdapter, error) {
+func NewUserAdapter(db *sql.DB, query string, opts ...func(i int) string) *UserAdapter {
 	var buildParam func(i int) string
 	if len(opts) > 0 && opts[0] != nil {
 		buildParam = opts[0]
 	} else {
 		buildParam = getBuild(db)
 	}
-	return &URLAdapter{
+	return &UserAdapter{
 		db:         db,
 		Select:     query,
 		BuildParam: buildParam,
-	}, nil
+	}
 }
 
-func (r *URLAdapter) Load(ctx context.Context, id string) (*URL, error) {
+func (r *UserAdapter) Load(ctx context.Context, id string) (*User, error) {
 	p := make([]string, 0)
 	p = append(p, id)
-	values, err := r.Query(ctx, p)
+	users, err := r.Query(ctx, p)
 	if err != nil {
 		return nil, err
 	}
-	if len(values) > 0 {
-		return &values[0], nil
+	if len(users) > 0 {
+		return &users[0], nil
 	}
 	return nil, nil
 }
 
-func (r *URLAdapter) Query(ctx context.Context, ids []string) ([]URL, error) {
-	var values []URL
+func (r *UserAdapter) Query(ctx context.Context, ids []string) ([]User, error) {
+	var users []User
 	if len(ids) == 0 {
-		return values, nil
+		return users, nil
 	}
 	le := len(ids)
 	p := make([]interface{}, 0)
@@ -74,21 +76,21 @@ func (r *URLAdapter) Query(ctx context.Context, ids []string) ([]URL, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var row URL
-		if err := rows.Scan(&row.Id, &row.Name, &row.Url); err != nil {
-			return values, err
+		var row User
+		if err := rows.Scan(&row.Id, &row.Name, &row.Email, &row.Phone, &row.Url); err != nil {
+			return users, err
 		}
-		values = append(values, row)
+		users = append(users, row)
 	}
 	if err = rows.Err(); err != nil {
-		return values, err
+		return users, err
 	}
-	SortById(values)
-	return values, nil
+	SortById(users)
+	return users, nil
 }
 
-func ToMap(rows []URL) map[string]*URL {
-	rs := make(map[string]*URL, 0)
+func ToMap(rows []User) map[string]*User {
+	rs := make(map[string]*User, 0)
 	for _, row := range rows {
 		rs[row.Id] = &row
 	}
@@ -106,10 +108,10 @@ func Unique(s []string) []string {
 	}
 	return result
 }
-func SortById(urls []URL) {
-	sort.Slice(urls, func(i, j int) bool { return urls[i].Id < urls[j].Id })
+func SortById(users []User) {
+	sort.Slice(users, func(i, j int) bool { return users[i].Id < users[j].Id })
 }
-func BinarySearch(id string, a []URL) (result int, searchCount int) {
+func BinarySearch(id string, a []User) (result int, searchCount int) {
 	mid := len(a) / 2
 	x := strings.Compare(a[mid].Id, id)
 	switch {
