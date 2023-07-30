@@ -253,6 +253,37 @@ func SelectWithArray(ctx context.Context, db Executor, results interface{}, toAr
 }, sql string, values ...interface{}) error {
 	return QueryWithArray(ctx, db, nil, results, toArray, sql, values...)
 }
+func QueryTx(ctx context.Context, tx *sql.Tx, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
+	return QueryTxWithArray(ctx, tx, fieldsIndex, results, nil, sql, values...)
+}
+func QueryTxWithArray(ctx context.Context, tx *sql.Tx, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, sql string, values ...interface{}) error {
+	rows, er1 := tx.QueryContext(ctx, sql, values...)
+	if er1 != nil {
+		return er1
+	}
+	defer rows.Close()
+
+	modelType := reflect.TypeOf(results).Elem().Elem()
+	tb, er3 := Scan(rows, modelType, fieldsIndex, toArray)
+	if er3 != nil {
+		return er3
+	}
+	for _, element := range tb {
+		appendToArray(results, element)
+	}
+	er4 := rows.Close()
+	if er4 != nil {
+		return er4
+	}
+	// Rows.Err will report the last error encountered by Rows.Scan.
+	if er5 := rows.Err(); er5 != nil {
+		return er5
+	}
+	return nil
+}
 func QueryAndCount(ctx context.Context, db Executor, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
