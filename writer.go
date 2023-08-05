@@ -53,13 +53,14 @@ func Init(modelType reflect.Type, db *sql.DB) (map[string]int, *Schema, map[stri
 	schema := CreateSchema(modelType)
 	fields := BuildFieldsBySchema(schema)
 	jsonColumnMap := MakeJsonColumnMap(modelType)
+	jm := GetWritableColumns(schema.Fields, jsonColumnMap)
 	keys, arr := FindPrimaryKeys(modelType)
 	if db == nil {
-		return fieldsIndex, schema, jsonColumnMap, keys, arr, fields, nil, "", nil
+		return fieldsIndex, schema, jm, keys, arr, fields, nil, "", nil
 	}
 	driver := GetDriver(db)
 	buildParam := GetBuild(db)
-	return fieldsIndex, schema, jsonColumnMap, keys, arr, fields, buildParam, driver, nil
+	return fieldsIndex, schema, jm, keys, arr, fields, buildParam, driver, nil
 }
 type Writer struct {
 	*Loader
@@ -113,7 +114,8 @@ func NewSqlWriterWithVersion(db *sql.DB, tableName string, modelType reflect.Typ
 	driver := GetDriver(db)
 	boolSupport := driver == DriverPostgres
 	schema := CreateSchema(modelType)
-	jsonColumnMap := MakeJsonColumnMap(modelType)
+	jsonColumnMapT := MakeJsonColumnMap(modelType)
+	jsonColumnMap := GetWritableColumns(schema.Fields, jsonColumnMapT)
 	if len(versionField) > 0 {
 		index := FindFieldIndex(modelType, versionField)
 		if index >= 0 {
@@ -439,6 +441,20 @@ func JSONToColumns(model map[string]interface{}, m map[string]string) map[string
 	}
 	return r
 }
+func GetWritableColumns(fields map[string]*FieldDB, jsonColumnMap map[string]string) map[string]string {
+	m := jsonColumnMap
+	for k, v := range jsonColumnMap {
+		for _, db := range fields {
+			if db.Column == v {
+				if db.Update == false && db.Key == false {
+					delete(m, k)
+				}
+			}
+		}
+	}
+	return m
+}
+
 func Contains(s []string, str string) bool {
 	for _, v := range s {
 		if v == str {
