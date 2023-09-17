@@ -16,6 +16,7 @@ import (
 const (
 	DBName          = "column"
 	PrimaryKey      = "primary_key"
+	DriverCassandra = "cassandra"
 )
 
 type BuildParamFn func(int) string
