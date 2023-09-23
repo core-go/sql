@@ -556,21 +556,6 @@ func GetColumnsSelect(modelType reflect.Type) []string {
 	}
 	return columnNameKeys
 }
-func GetColumnNameForSearch(modelType reflect.Type, sortField string) string {
-	sortField = strings.TrimSpace(sortField)
-	i, _, column := GetFieldByJson(modelType, sortField)
-	if i > -1 {
-		return column
-	}
-	return ""
-}
-func GetSortType(sortType string) string {
-	if sortType == "-" {
-		return desc
-	} else {
-		return asc
-	}
-}
 func GetColumns(cols []string, err error) ([]string, error) {
 	if cols == nil || err != nil {
 		return cols, err
