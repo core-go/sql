@@ -9,6 +9,7 @@ import (
 	"strings"
 )
 
+const IgnoreReadWrite = "-"
 const txs = "tx"
 
 type Executor interface {
