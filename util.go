@@ -1,7 +1,6 @@
 package sql
 
 import (
-	"database/sql"
 	"fmt"
 	"math"
 	"math/big"
@@ -169,12 +168,6 @@ func CreateSchema(modelType reflect.Type) *Schema {
 func MakeSchema(modelType reflect.Type) ([]*FieldDB, []*FieldDB) {
 	m := CreateSchema(modelType)
 	return m.Columns, m.Keys
-}
-func RowsAffected(res sql.Result, err error) (int64, error) {
-	if err != nil {
-		return -1, err
-	}
-	return res.RowsAffected()
 }
 func Find(slice []string, val string) (int, bool) {
 	for i, item := range slice {

@@ -10,47 +10,6 @@ import (
 	"strings"
 )
 
-const txs = "tx"
-
-type Executor interface {
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-}
-func GetExec(ctx context.Context, db *sql.DB, opts...string) Executor {
-	name := txs
-	if len(opts) > 0 && len(opts[0]) > 0 {
-		name = opts[0]
-	}
-	txi := ctx.Value(name)
-	if txi != nil {
-		txx, ok := txi.(*sql.Tx)
-		if ok {
-			return txx
-		}
-	}
-	return db
-}
-func GetTx(ctx context.Context) *sql.Tx {
-	txi := ctx.Value(txs)
-	if txi != nil {
-		txx, ok := txi.(*sql.Tx)
-		if ok {
-			return txx
-		}
-	}
-	return nil
-}
-func GetTxId(ctx context.Context) *string {
-	txi := ctx.Value("txId")
-	if txi != nil {
-		txx, ok := txi.(*string)
-		if ok {
-			return txx
-		}
-	}
-	return nil
-}
 func InitFields(modelType reflect.Type, db *sql.DB) (map[string]int, string, func(i int) string, string, error) {
 	fieldsIndex, err := GetColumnIndexes(modelType)
 	if err != nil {
