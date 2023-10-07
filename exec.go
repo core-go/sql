@@ -108,6 +108,18 @@ func CallbackTx(ctx context.Context, db *sql.DB, callback func(ctx2 context.Cont
 	err = tx.Commit()
 	return err
 }
+func ExecuteTx(ctx context.Context, db *sql.DB, callback func(context.Context)(int64, error), opts ...*sql.TxOptions) (int64, error) {
+	var res int64
+	er0 := CallbackTx(ctx, db, func(ctx2 context.Context) error {
+		result, err := callback(ctx)
+		if err != nil {
+			return err
+		}
+		res = result
+		return nil
+	}, opts...)
+	return res, er0
+}
 func ExecuteAll(ctx context.Context, db *sql.DB, stmts ...Statement) (int64, error) {
 	if stmts == nil || len(stmts) == 0 {
 		return 0, nil
