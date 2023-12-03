@@ -76,7 +76,7 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	}
 	return -1, jsonName, jsonName
 }
-func Count(ctx context.Context, db *sql.DB, sql string, values ...interface{}) (int64, error) {
+func Count(ctx context.Context, db Executor, sql string, values ...interface{}) (int64, error) {
 	var total int64
 	row := db.QueryRowContext(ctx, sql, values...)
 	err2 := row.Scan(&total)
@@ -138,7 +138,7 @@ func QueryMapWithTx(ctx context.Context, db *sql.Tx, transform func(s string) st
 	}
 	return res, nil
 }
-func QueryMap(ctx context.Context, db *sql.DB, transform func(s string) string, sql string, values ...interface{}) ([]map[string]interface{}, error) {
+func QueryMap(ctx context.Context, db Executor, transform func(s string) string, sql string, values ...interface{}) ([]map[string]interface{}, error) {
 	rows, er1 := db.QueryContext(ctx, sql, values...)
 	if er1 != nil {
 		return nil, er1
@@ -194,23 +194,9 @@ func QueryMap(ctx context.Context, db *sql.DB, transform func(s string) string, 
 func Query(ctx context.Context, db Executor, fieldsIndex map[string]int, results interface{}, sql string, values ...interface{}) error {
 	return QueryWithArray(ctx, db, fieldsIndex, results, nil, sql, values...)
 }
-func ExecContext(ctx context.Context, db Executor, query string, args ...interface{}) (sql.Result, error){
-	tx := GetTx(ctx)
-	if tx != nil {
-		return tx.ExecContext(ctx, query, args...)
-	} else {
-		return db.ExecContext(ctx, query, args...)
-	}
-}
-func Exec(ctx context.Context, db *sql.DB, query string, args ...interface{}) (int64, error){
-	tx := GetTx(ctx)
-	if tx != nil {
-		res, err := tx.ExecContext(ctx, query, args...)
-		return RowsAffected(res, err)
-	} else {
-		res, err := db.ExecContext(ctx, query, args...)
-		return RowsAffected(res, err)
-	}
+func Exec(ctx context.Context, db Executor, query string, args ...interface{}) (int64, error){
+	res, err := db.ExecContext(ctx, query, args...)
+	return RowsAffected(res, err)
 }
 func RowsAffected(res sql.Result, err error) (int64, error) {
 	if err != nil {
@@ -218,22 +204,22 @@ func RowsAffected(res sql.Result, err error) (int64, error) {
 	}
 	return res.RowsAffected()
 }
-func SelectContext(ctx context.Context, db *sql.DB, results interface{}, sql string, values ...interface{}) error {
+func SelectContext(ctx context.Context, db Executor, results interface{}, sql string, values ...interface{}) error {
 	return SelectContextWithArray(ctx, db, results, nil, sql, values...)
 }
-func SelectContextWithArray(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
+func SelectContextWithArray(ctx context.Context, db Executor, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, sql string, values ...interface{}) error {
 	return QueryContextWithArray(ctx, db, nil, results, toArray, sql, values...)
 }
-func QueryContext(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, query string, values ...interface{}) error {
+func QueryContext(ctx context.Context, db Executor, fieldsIndex map[string]int, results interface{}, query string, values ...interface{}) error {
 	return QueryContextWithArray(ctx, db, fieldsIndex, results, nil, query, values...)
 }
-func QueryContextWithMap(ctx context.Context, db *sql.DB, results interface{}, sql string, values []interface{}, options...map[string]int) error {
+func QueryContextWithMap(ctx context.Context, db Executor, results interface{}, sql string, values []interface{}, options...map[string]int) error {
 	return QueryContextWithMapAndArray(ctx, db, results, nil, sql, values, options...)
 }
-func QueryContextWithMapAndArray(ctx context.Context, db *sql.DB, results interface{}, toArray func(interface{}) interface {
+func QueryContextWithMapAndArray(ctx context.Context, db Executor, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, sql string, values []interface{}, options...map[string]int) error {
@@ -243,18 +229,13 @@ func QueryContextWithMapAndArray(ctx context.Context, db *sql.DB, results interf
 	}
 	return QueryContextWithArray(ctx, db, fieldsIndex, results, toArray, sql, values...)
 }
-func QueryContextWithArray(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
+func QueryContextWithArray(ctx context.Context, db Executor, fieldsIndex map[string]int, results interface{}, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, query string, values ...interface{}) error {
 	var rows *sql.Rows
 	var er1 error
-	tx := GetTx(ctx)
-	if tx != nil {
-		rows, er1 = tx.QueryContext(ctx, query, values...)
-	} else {
-		rows, er1 = db.QueryContext(ctx, query, values...)
-	}
+	rows, er1 = db.QueryContext(ctx, query, values...)
 	if er1 != nil {
 		return er1
 	}
