@@ -111,7 +111,7 @@ func CallbackTx(ctx context.Context, db *sql.DB, callback func(ctx2 context.Cont
 func ExecuteTx(ctx context.Context, db *sql.DB, callback func(context.Context)(int64, error), opts ...*sql.TxOptions) (int64, error) {
 	var res int64
 	er0 := CallbackTx(ctx, db, func(ctx2 context.Context) error {
-		result, err := callback(ctx)
+		result, err := callback(ctx2)
 		if err != nil {
 			return err
 		}
