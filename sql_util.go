@@ -76,6 +76,17 @@ func GetFieldByJson(modelType reflect.Type, jsonName string) (int, string, strin
 	}
 	return -1, jsonName, jsonName
 }
+func Any(ctx context.Context, db Executor, sql string, values ...interface{}) (bool, error) {
+	rows, err := db.QueryContext(ctx, sql, values...)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		return true, nil
+	}
+	return false, nil
+}
 func Count(ctx context.Context, db Executor, sql string, values ...interface{}) (int64, error) {
 	var total int64
 	row := db.QueryRowContext(ctx, sql, values...)
