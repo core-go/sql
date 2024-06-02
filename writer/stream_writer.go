@@ -9,46 +9,46 @@ import (
 	q "github.com/core-go/sql"
 )
 
-type StreamWriter struct {
-	db           *sql.DB
-	tableName    string
-	BuildParam   func(i int) string
-	Map          func(ctx context.Context, model interface{}) (interface{}, error)
+type StreamWriter[T any] struct {
+	db         *sql.DB
+	tableName  string
+	BuildParam func(i int) string
+	Map        func(ctx context.Context, model interface{}) (interface{}, error)
 	// BoolSupport  bool
 	// VersionIndex int
-	schema       *q.Schema
-	batchSize    int
-	batch        []interface{}
-	Driver       string
-	ToArray      func(interface{}) interface {
+	schema    *q.Schema
+	batchSize int
+	batch     []interface{}
+	Driver    string
+	ToArray   func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
 }
 
-func NewStreamWriter(db *sql.DB, tableName string, modelType reflect.Type, batchSize int, options ...func(context.Context, interface{}) (interface{}, error)) *StreamWriter {
+func NewStreamWriter[T any](db *sql.DB, tableName string, batchSize int, options ...func(context.Context, interface{}) (interface{}, error)) *StreamWriter[T] {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
 
-	return NewSqlStreamWriter(db, tableName, modelType, batchSize, mp, nil)
+	return NewSqlStreamWriter[T](db, tableName, batchSize, mp, nil)
 }
-func NewStreamWriterWithArray(db *sql.DB, tableName string, modelType reflect.Type, batchSize int, toArray func(interface{}) interface {
+func NewStreamWriterWithArray[T any](db *sql.DB, tableName string, batchSize int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(context.Context, interface{}) (interface{}, error)) *StreamWriter {
+}, options ...func(context.Context, interface{}) (interface{}, error)) *StreamWriter[T] {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
-	return NewSqlStreamWriter(db, tableName, modelType, batchSize, mp, toArray)
+	return NewSqlStreamWriter[T](db, tableName, batchSize, mp, toArray)
 }
-func NewSqlStreamWriter(db *sql.DB, tableName string, modelType reflect.Type, batchSize int,
+func NewSqlStreamWriter[T any](db *sql.DB, tableName string, batchSize int,
 	mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(i int) string) *StreamWriter {
+		driver.Valuer
+		sql.Scanner
+	}, options ...func(i int) string) *StreamWriter[T] {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -57,11 +57,16 @@ func NewSqlStreamWriter(db *sql.DB, tableName string, modelType reflect.Type, ba
 	}
 	driver := q.GetDriver(db)
 	// boolSupport := driver == DriverPostgres
+	var t T
+	modelType := reflect.TypeOf(t)
+	if modelType.Kind() == reflect.Ptr {
+		modelType = modelType.Elem()
+	}
 	schema := q.CreateSchema(modelType)
-	return &StreamWriter{db: db, Driver: driver, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
+	return &StreamWriter[T]{db: db, Driver: driver, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
-func (w *StreamWriter) Write(ctx context.Context, model interface{}) error {
+func (w *StreamWriter[T]) Write(ctx context.Context, model T) error {
 	if w.Map != nil {
 		m2, er0 := w.Map(ctx, model)
 		if er0 != nil {
@@ -77,7 +82,7 @@ func (w *StreamWriter) Write(ctx context.Context, model interface{}) error {
 	return nil
 }
 
-func (w *StreamWriter) Flush(ctx context.Context) error {
+func (w *StreamWriter[T]) Flush(ctx context.Context) error {
 	var queryArgsArray []q.Statement
 	for _, v := range w.batch {
 		query, args, err := q.BuildToSaveWithArray(w.tableName, v, w.Driver, w.ToArray, w.schema)
@@ -85,7 +90,7 @@ func (w *StreamWriter) Flush(ctx context.Context) error {
 			return err
 		}
 		queryArgs := q.Statement{
-			Query: query,
+			Query:  query,
 			Params: args,
 		}
 		queryArgsArray = append(queryArgsArray, queryArgs)

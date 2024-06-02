@@ -9,44 +9,44 @@ import (
 	q "github.com/core-go/sql"
 )
 
-type StreamInserter struct {
-	db           *sql.DB
-	tableName    string
-	BuildParam   func(i int) string
-	Map          func(ctx context.Context, model interface{}) (interface{}, error)
-	Driver       string
-	schema       *q.Schema
-	batchSize    int
-	batch        []interface{}
-	ToArray      func(interface{}) interface {
+type StreamInserter[T any] struct {
+	db         *sql.DB
+	tableName  string
+	BuildParam func(i int) string
+	Map        func(ctx context.Context, model interface{}) (interface{}, error)
+	Driver     string
+	schema     *q.Schema
+	batchSize  int
+	batch      []interface{}
+	ToArray    func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
 }
 
-func NewStreamInserter(db *sql.DB, tableName string, modelType reflect.Type, batchSize int, options ...func(context.Context, interface{}) (interface{}, error)) *StreamInserter {
+func NewStreamInserter[T any](db *sql.DB, tableName string, batchSize int, options ...func(context.Context, interface{}) (interface{}, error)) *StreamInserter[T] {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
 
-	return NewSqlStreamInserter(db, tableName, modelType, batchSize, mp, nil)
+	return NewSqlStreamInserter[T](db, tableName, batchSize, mp, nil)
 }
-func NewStreamInserterWithArray(db *sql.DB, tableName string, modelType reflect.Type, batchSize int, toArray func(interface{}) interface {
+func NewStreamInserterWithArray[T any](db *sql.DB, tableName string, batchSize int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(context.Context, interface{}) (interface{}, error)) *StreamInserter {
+}, options ...func(context.Context, interface{}) (interface{}, error)) *StreamInserter[T] {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
-	return NewSqlStreamInserter(db, tableName, modelType, batchSize, mp, toArray)
+	return NewSqlStreamInserter[T](db, tableName, batchSize, mp, toArray)
 }
-func NewSqlStreamInserter(db *sql.DB, tableName string, modelType reflect.Type, batchSize int,
+func NewSqlStreamInserter[T any](db *sql.DB, tableName string, batchSize int,
 	mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(i int) string) *StreamInserter {
+		driver.Valuer
+		sql.Scanner
+	}, options ...func(i int) string) *StreamInserter[T] {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -54,11 +54,16 @@ func NewSqlStreamInserter(db *sql.DB, tableName string, modelType reflect.Type, 
 		buildParam = q.GetBuild(db)
 	}
 	driver := q.GetDriver(db)
+	var t T
+	modelType := reflect.TypeOf(t)
+	if modelType.Kind() == reflect.Ptr {
+		modelType = modelType.Elem()
+	}
 	schema := q.CreateSchema(modelType)
-	return &StreamInserter{db: db, Driver: driver, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
+	return &StreamInserter[T]{db: db, Driver: driver, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
-func (w *StreamInserter) Write(ctx context.Context, model interface{}) error {
+func (w *StreamInserter[T]) Write(ctx context.Context, model T) error {
 	if w.Map != nil {
 		m2, er0 := w.Map(ctx, model)
 		if er0 != nil {
@@ -74,7 +79,7 @@ func (w *StreamInserter) Write(ctx context.Context, model interface{}) error {
 	return nil
 }
 
-func (w *StreamInserter) Flush(ctx context.Context) error {
+func (w *StreamInserter[T]) Flush(ctx context.Context) error {
 	// driver := GetDriver(w.db)
 	query, args, err := q.BuildToInsertBatchWithSchema(w.tableName, w.batch, w.Driver, w.ToArray, w.BuildParam, w.schema)
 	if err != nil {
