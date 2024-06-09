@@ -32,6 +32,9 @@ func NewSearchAdapterWithArray[T any, K any, F any](db *sql.DB, table string, bu
 	sql.Scanner
 }, versionField string, buildParam func(int) string, opts ...func(context.Context, interface{}) (interface{}, error)) (*SearchAdapter[T, K, F], error) {
 	adapter, err := NewSqlGenericAdapterWithVersionAndArray[T, K](db, table, versionField, toArray, buildParam)
+	if err != nil {
+		return nil, err
+	}
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(opts) >= 1 {
 		mp = opts[0]

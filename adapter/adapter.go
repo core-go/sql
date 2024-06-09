@@ -80,7 +80,7 @@ func NewSqlAdapterWithVersionAndArray[T any](db *sql.DB, tableName string, versi
 	return adapter, nil
 }
 
-func (a *Adapter[T]) Create(ctx context.Context, model interface{}) (int64, error) {
+func (a *Adapter[T]) Create(ctx context.Context, model T) (int64, error) {
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
 	query, args := q.BuildToInsertWithVersion(a.Table, model, a.versionIndex, a.BuildParam, a.BoolSupport, a.ToArray, a.Schema)
 	res, err := tx.ExecContext(ctx, query, args...)
@@ -89,7 +89,7 @@ func (a *Adapter[T]) Create(ctx context.Context, model interface{}) (int64, erro
 	}
 	return res.RowsAffected()
 }
-func (a *Adapter[T]) Update(ctx context.Context, model interface{}) (int64, error) {
+func (a *Adapter[T]) Update(ctx context.Context, model T) (int64, error) {
 	query, args := q.BuildToUpdateWithVersion(a.Table, model, a.versionIndex, a.BuildParam, a.BoolSupport, a.ToArray, a.Schema)
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
 	res, err := tx.ExecContext(ctx, query, args...)
@@ -98,7 +98,7 @@ func (a *Adapter[T]) Update(ctx context.Context, model interface{}) (int64, erro
 	}
 	return res.RowsAffected()
 }
-func (a *Adapter[T]) Save(ctx context.Context, model interface{}) (int64, error) {
+func (a *Adapter[T]) Save(ctx context.Context, model T) (int64, error) {
 	query, args, err := q.BuildToSaveWithSchema(a.Table, model, a.Driver, a.BuildParam, a.ToArray, a.Schema)
 	if err != nil {
 		return 0, err

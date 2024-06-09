@@ -181,7 +181,7 @@ func (s *Writer) Insert(ctx context.Context, model interface{}) (int64, error) {
 	if tx == nil {
 		result, err := s.Database.ExecContext(ctx, queryInsert, values...)
 		if err != nil {
-			return handleDuplicate(s.Database, err)
+			return HandleDuplicate(s.Database, err)
 		}
 		return result.RowsAffected()
 	} else {

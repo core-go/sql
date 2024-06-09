@@ -10,15 +10,16 @@ import (
 )
 
 type BatchWriter struct {
-	db           *sql.DB
-	tableName    string
-	Map          func(ctx context.Context, model interface{}) (interface{}, error)
-	Schema       *q.Schema
-	ToArray      func(interface{}) interface {
+	db        *sql.DB
+	tableName string
+	Map       func(ctx context.Context, model interface{}) (interface{}, error)
+	Schema    *q.Schema
+	ToArray   func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
 }
+
 func NewBatchWriter(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) *BatchWriter {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
@@ -48,7 +49,7 @@ func (w *BatchWriter) Write(ctx context.Context, models interface{}) ([]int, []i
 		if er0 != nil {
 			s0 := reflect.ValueOf(m)
 			_, er0b := q.InterfaceSlice(m)
-			failIndices = q.ToArrayIndex(s0, failIndices)
+			failIndices = ToArrayIndex(s0, failIndices)
 			return successIndices, failIndices, er0b
 		}
 	} else {
@@ -59,11 +60,11 @@ func (w *BatchWriter) Write(ctx context.Context, models interface{}) ([]int, []i
 
 	if er2 == nil {
 		// Return full success
-		successIndices = q.ToArrayIndex(s, successIndices)
+		successIndices = ToArrayIndex(s, successIndices)
 		return successIndices, failIndices, er2
 	} else {
 		// Return full fail
-		failIndices = q.ToArrayIndex(s, failIndices)
+		failIndices = ToArrayIndex(s, failIndices)
 	}
 	return successIndices, failIndices, er2
 }

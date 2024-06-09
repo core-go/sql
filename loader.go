@@ -61,6 +61,7 @@ func InitFields(modelType reflect.Type, db *sql.DB) (map[string]int, string, fun
 	buildParam := GetBuild(db)
 	return fieldsIndex, fields, buildParam, driver, nil
 }
+
 type Loader struct {
 	Database          *sql.DB
 	BuildParam        func(i int) string
@@ -379,7 +380,7 @@ func BuildFindById(selectAll string, buildParam func(i int) string, id interface
 	} else {
 		conditions := make([]string, 0)
 		if ids, ok := id.(map[string]interface{}); ok {
-			j := 0
+			j := 1
 			for _, keyJson := range keys {
 				columnName := mapJsonColumnKeys[keyJson]
 				if idk, ok1 := ids[keyJson]; ok1 {

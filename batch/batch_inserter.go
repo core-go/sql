@@ -22,6 +22,7 @@ type BatchInserter struct {
 		sql.Scanner
 	}
 }
+
 func NewBatchInserter(db *sql.DB, tableName string, modelType reflect.Type, options ...func(context.Context, interface{}) (interface{}, error)) *BatchInserter {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
@@ -65,7 +66,7 @@ func (w *BatchInserter) Write(ctx context.Context, models interface{}) ([]int, [
 		if er0 != nil {
 			s0 := reflect.ValueOf(models2)
 			_, er0b := q.InterfaceSlice(models2)
-			failIndices = q.ToArrayIndex(s0, failIndices)
+			failIndices = ToArrayIndex(s0, failIndices)
 			return successIndices, failIndices, er0b
 		}
 	} else {
@@ -76,11 +77,11 @@ func (w *BatchInserter) Write(ctx context.Context, models interface{}) ([]int, [
 
 	if er2 == nil {
 		// Return full success
-		successIndices = q.ToArrayIndex(s, successIndices)
+		successIndices = ToArrayIndex(s, successIndices)
 		return successIndices, failIndices, er2
 	} else {
 		// Return full fail
-		failIndices = q.ToArrayIndex(s, failIndices)
+		failIndices = ToArrayIndex(s, failIndices)
 	}
 	return successIndices, failIndices, er2
 }
