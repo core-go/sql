@@ -45,9 +45,9 @@ func NewStreamUpdaterWithArray[T any](db *sql.DB, tableName string, modelType re
 }
 func NewSqlStreamUpdater[T any](db *sql.DB, tableName string, modelType reflect.Type, batchSize int,
 	mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
-	driver.Valuer
-	sql.Scanner
-}, options ...func(i int) string) *StreamUpdater[T] {
+		driver.Valuer
+		sql.Scanner
+	}, options ...func(i int) string) *StreamUpdater[T] {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -60,7 +60,7 @@ func NewSqlStreamUpdater[T any](db *sql.DB, tableName string, modelType reflect.
 	return &StreamUpdater[T]{db: db, BoolSupport: boolSupport, VersionIndex: -1, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
-func (w *StreamUpdater[T]) Write(ctx context.Context, model interface{}) error {
+func (w *StreamUpdater[T]) Write(ctx context.Context, model T) error {
 	if w.Map != nil {
 		_, er0 := w.Map(ctx, model)
 		if er0 != nil {
