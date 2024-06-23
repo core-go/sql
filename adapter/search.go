@@ -11,7 +11,6 @@ import (
 
 type SearchAdapter[T any, K any, F any] struct {
 	*GenericAdapter[T, K]
-	DB         *sql.DB
 	BuildQuery func(F) (string, []interface{})
 	Mp         func(ctx context.Context, model interface{}) (interface{}, error)
 	Map        map[string]int
@@ -48,13 +47,13 @@ func NewSearchAdapterWithArray[T any, K any, F any](db *sql.DB, table string, bu
 	if err != nil {
 		return nil, err
 	}
-	builder := &SearchAdapter[T, K, F]{GenericAdapter: adapter, DB: db, Map: fieldsIndex, BuildQuery: buildQuery, Mp: mp, ToArray: toArray}
+	builder := &SearchAdapter[T, K, F]{GenericAdapter: adapter, Map: fieldsIndex, BuildQuery: buildQuery, Mp: mp, ToArray: toArray}
 	return builder, nil
 }
 
 func (b *SearchAdapter[T, K, F]) Search(ctx context.Context, filter F, limit int64, offset int64) ([]T, int64, error) {
 	var objs []T
-	sql, params := b.BuildQuery(filter)
-	total, er2 := q.BuildFromQuery(ctx, b.DB, b.Map, &objs, sql, params, limit, offset, b.ToArray, b.Mp)
+	query, args := b.BuildQuery(filter)
+	total, er2 := q.BuildFromQuery(ctx, b.DB, b.Map, &objs, query, args, limit, offset, b.ToArray, b.Mp)
 	return objs, total, er2
 }

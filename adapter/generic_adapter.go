@@ -49,7 +49,7 @@ func NewSqlGenericAdapterWithVersionAndArray[T any, K any](db *sql.DB, tableName
 		if kType.Kind() == reflect.Map {
 			idMap = true
 		} else if kType.Kind() != reflect.Struct {
-			return nil, errors.New("For composite keys, K must be a struct or a map")
+			return nil, errors.New("for composite keys, K must be a struct or a map")
 		}
 	}
 

@@ -87,6 +87,17 @@ func (a *Adapter[T]) Create(ctx context.Context, model T) (int64, error) {
 	if err != nil {
 		return -1, err
 	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return rowsAffected, err
+	}
+	if rowsAffected > 0 && a.versionIndex >= 0 {
+		vo := reflect.ValueOf(model)
+		if vo.Kind() == reflect.Ptr {
+			vo = reflect.Indirect(vo)
+		}
+		setVersion(vo, a.versionIndex)
+	}
 	return res.RowsAffected()
 }
 func (a *Adapter[T]) Update(ctx context.Context, model T) (int64, error) {
@@ -95,6 +106,18 @@ func (a *Adapter[T]) Update(ctx context.Context, model T) (int64, error) {
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return -1, err
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return rowsAffected, err
+	}
+	if rowsAffected > 0 && a.versionIndex >= 0 {
+		vo := reflect.ValueOf(model)
+		if vo.Kind() == reflect.Ptr {
+			vo = reflect.Indirect(vo)
+		}
+		currentVersion := vo.Field(a.versionIndex).Interface()
+		increaseVersion(vo, a.versionIndex, currentVersion)
 	}
 	return res.RowsAffected()
 }
@@ -107,6 +130,18 @@ func (a *Adapter[T]) Save(ctx context.Context, model T) (int64, error) {
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return -1, err
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return rowsAffected, err
+	}
+	if rowsAffected > 0 && a.versionIndex >= 0 {
+		vo := reflect.ValueOf(model)
+		if vo.Kind() == reflect.Ptr {
+			vo = reflect.Indirect(vo)
+		}
+		currentVersion := vo.Field(a.versionIndex).Interface()
+		increaseVersion(vo, a.versionIndex, currentVersion)
 	}
 	return res.RowsAffected()
 }
@@ -135,4 +170,39 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 		return 0, nil
 	}
 	return 0, err
+}
+func increaseVersion(vo reflect.Value, versionIndex int, curVer interface{}) bool {
+	versionType := vo.Field(versionIndex).Type().String()
+	switch versionType {
+	case "int32":
+		nextVer := curVer.(int32) + 1
+		vo.Field(versionIndex).Set(reflect.ValueOf(nextVer))
+		return true
+	case "int":
+		nextVer := curVer.(int) + 1
+		vo.Field(versionIndex).Set(reflect.ValueOf(nextVer))
+		return true
+	case "int64":
+		nextVer := curVer.(int64) + 1
+		vo.Field(versionIndex).Set(reflect.ValueOf(nextVer))
+		return true
+	default:
+		return false
+	}
+}
+func setVersion(vo reflect.Value, versionIndex int) bool {
+	versionType := vo.Field(versionIndex).Type().String()
+	switch versionType {
+	case "int32":
+		vo.Field(versionIndex).Set(reflect.ValueOf(int32(1)))
+		return true
+	case "int":
+		vo.Field(versionIndex).Set(reflect.ValueOf(1))
+		return true
+	case "int64":
+		vo.Field(versionIndex).Set(reflect.ValueOf(int64(1)))
+		return true
+	default:
+		return false
+	}
 }
