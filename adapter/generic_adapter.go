@@ -12,25 +12,25 @@ import (
 	q "github.com/core-go/sql"
 )
 
-type GenericAdapter[T any, K any] struct {
-	*Adapter[*T]
+type Adapter[T any, K any] struct {
+	*Writer[*T]
 	Map    map[string]int
 	Fields string
 	Keys   []string
 	IdMap  bool
 }
 
-func NewGenericAdapter[T any, K any](db *sql.DB, tableName string, opts ...func(int) string) (*GenericAdapter[T, K], error) {
-	return NewSqlGenericAdapterWithVersionAndArray[T, K](db, tableName, "", nil, opts...)
+func NewAdapter[T any, K any](db *sql.DB, tableName string, opts ...func(int) string) (*Adapter[T, K], error) {
+	return NewSqlAdapterWithVersionAndArray[T, K](db, tableName, "", nil, opts...)
 }
-func NewGenericAdapterWithVersion[T any, K any](db *sql.DB, tableName string, versionField string, opts ...func(int) string) (*GenericAdapter[T, K], error) {
-	return NewSqlGenericAdapterWithVersionAndArray[T, K](db, tableName, versionField, nil, opts...)
+func NewAdapterWithVersion[T any, K any](db *sql.DB, tableName string, versionField string, opts ...func(int) string) (*Adapter[T, K], error) {
+	return NewSqlAdapterWithVersionAndArray[T, K](db, tableName, versionField, nil, opts...)
 }
-func NewSqlGenericAdapterWithVersionAndArray[T any, K any](db *sql.DB, tableName string, versionField string, toArray func(interface{}) interface {
+func NewSqlAdapterWithVersionAndArray[T any, K any](db *sql.DB, tableName string, versionField string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, opts ...func(int) string) (*GenericAdapter[T, K], error) {
-	adapter, err := NewSqlAdapterWithVersionAndArray[*T](db, tableName, versionField, toArray, opts...)
+}, opts ...func(int) string) (*Adapter[T, K], error) {
+	adapter, err := NewSqlWriterWithVersionAndArray[*T](db, tableName, versionField, toArray, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -58,9 +58,9 @@ func NewSqlGenericAdapterWithVersionAndArray[T any, K any](db *sql.DB, tableName
 		return nil, err
 	}
 	fields := q.BuildFieldsBySchema(adapter.Schema)
-	return &GenericAdapter[T, K]{adapter, fieldsIndex, fields, primaryKeys, idMap}, nil
+	return &Adapter[T, K]{adapter, fieldsIndex, fields, primaryKeys, idMap}, nil
 }
-func (a *GenericAdapter[T, K]) All(ctx context.Context) ([]T, error) {
+func (a *Adapter[T, K]) All(ctx context.Context) ([]T, error) {
 	var objs []T
 	query := fmt.Sprintf("select %s from %s", a.Fields, a.Table)
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
@@ -76,7 +76,7 @@ func toMap(obj interface{}) (map[string]interface{}, error) {
 	er2 := json.Unmarshal(b, &im)
 	return im, er2
 }
-func (a *GenericAdapter[T, K]) getId(k K) (interface{}, error) {
+func (a *Adapter[T, K]) getId(k K) (interface{}, error) {
 	if len(a.Keys) >= 2 && !a.IdMap {
 		ri, err := toMap(k)
 		return ri, err
@@ -84,7 +84,7 @@ func (a *GenericAdapter[T, K]) getId(k K) (interface{}, error) {
 		return k, nil
 	}
 }
-func (a *GenericAdapter[T, K]) Load(ctx context.Context, id K) (*T, error) {
+func (a *Adapter[T, K]) Load(ctx context.Context, id K) (*T, error) {
 	ip, er0 := a.getId(id)
 	if er0 != nil {
 		return nil, er0
@@ -102,7 +102,7 @@ func (a *GenericAdapter[T, K]) Load(ctx context.Context, id K) (*T, error) {
 	}
 	return nil, nil
 }
-func (a *GenericAdapter[T, K]) Exist(ctx context.Context, id K) (bool, error) {
+func (a *Adapter[T, K]) Exist(ctx context.Context, id K) (bool, error) {
 	ip, er0 := a.getId(id)
 	if er0 != nil {
 		return false, er0
@@ -120,7 +120,7 @@ func (a *GenericAdapter[T, K]) Exist(ctx context.Context, id K) (bool, error) {
 	}
 	return false, nil
 }
-func (a *GenericAdapter[T, K]) Delete(ctx context.Context, id K) (int64, error) {
+func (a *Adapter[T, K]) Delete(ctx context.Context, id K) (int64, error) {
 	ip, er0 := a.getId(id)
 	if er0 != nil {
 		return -1, er0

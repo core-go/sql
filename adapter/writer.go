@@ -4,13 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 
 	q "github.com/core-go/sql"
 )
 
-type Adapter[T any] struct {
+type Writer[T any] struct {
 	DB            *sql.DB
 	Table         string
 	Schema        *q.Schema
@@ -22,40 +24,40 @@ type Adapter[T any] struct {
 		driver.Valuer
 		sql.Scanner
 	}
-	TxKey          string
-	versionField   string
-	versionIndex   int
-	versionDBField string
+	TxKey        string
+	versionIndex int
+	versionJson  string
+	versionDB    string
 }
 
-func NewAdapter[T any](db *sql.DB, tableName string, opts ...func(int) string) (*Adapter[T], error) {
-	return NewSqlAdapterWithVersionAndArray[T](db, tableName, "", nil, opts...)
+func NewWriter[T any](db *sql.DB, tableName string, opts ...func(int) string) (*Writer[T], error) {
+	return NewSqlWriterWithVersionAndArray[T](db, tableName, "", nil, opts...)
 }
-func NewAdapterWithVersion[T any](db *sql.DB, tableName string, versionField string, opts ...func(int) string) (*Adapter[T], error) {
-	return NewSqlAdapterWithVersionAndArray[T](db, tableName, versionField, nil, opts...)
+func NewWriterWithVersion[T any](db *sql.DB, tableName string, versionField string, opts ...func(int) string) (*Writer[T], error) {
+	return NewSqlWriterWithVersionAndArray[T](db, tableName, versionField, nil, opts...)
 }
-func NewAdapterWithArray[T any](db *sql.DB, tableName string, toArray func(interface{}) interface {
+func NewWriterWithArray[T any](db *sql.DB, tableName string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, opts ...string) (*Adapter[T], error) {
+}, opts ...string) (*Writer[T], error) {
 	var versionField string
 	if len(opts) > 0 && len(opts[0]) > 0 {
 		versionField = opts[0]
 	}
-	return NewSqlAdapterWithVersionAndArray[T](db, tableName, versionField, toArray)
+	return NewSqlWriterWithVersionAndArray[T](db, tableName, versionField, toArray)
 }
-func NewSqlAdapterWithVersionAndArray[T any](db *sql.DB, tableName string, versionField string, toArray func(interface{}) interface {
+func NewSqlWriterWithVersionAndArray[T any](db *sql.DB, tableName string, versionField string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, opts ...func(int) string) (*Adapter[T], error) {
+}, opts ...func(int) string) (*Writer[T], error) {
 	var buildParam func(i int) string
 	if len(opts) > 0 && opts[0] != nil {
 		buildParam = opts[0]
 	} else {
 		buildParam = q.GetBuild(db)
 	}
-	driver := q.GetDriver(db)
-	boolSupport := driver == q.DriverPostgres
+	drivr := q.GetDriver(db)
+	boolSupport := drivr == q.DriverPostgres
 	var t T
 	modelType := reflect.TypeOf(t)
 	if modelType.Kind() == reflect.Ptr {
@@ -64,23 +66,23 @@ func NewSqlAdapterWithVersionAndArray[T any](db *sql.DB, tableName string, versi
 	schema := q.CreateSchema(modelType)
 	jsonColumnMapT := q.MakeJsonColumnMap(modelType)
 	jsonColumnMap := q.GetWritableColumns(schema.Fields, jsonColumnMapT)
-	adapter := &Adapter[T]{DB: db, Table: tableName, Schema: schema, JsonColumnMap: jsonColumnMap, BuildParam: buildParam, Driver: driver, BoolSupport: boolSupport, ToArray: toArray, TxKey: "tx", versionField: "", versionIndex: -1}
+	adapter := &Writer[T]{DB: db, Table: tableName, Schema: schema, JsonColumnMap: jsonColumnMap, BuildParam: buildParam, Driver: drivr, BoolSupport: boolSupport, ToArray: toArray, TxKey: "tx", versionIndex: -1}
 	if len(versionField) > 0 {
 		index := q.FindFieldIndex(modelType, versionField)
 		if index >= 0 {
-			_, dbFieldName, exist := q.GetFieldByIndex(modelType, index)
+			versionJson, versionDB, exist := q.GetFieldByIndex(modelType, index)
 			if !exist {
-				dbFieldName = strings.ToLower(versionField)
+				versionDB = strings.ToLower(versionField)
 			}
-			adapter.versionField = versionField
 			adapter.versionIndex = index
-			adapter.versionDBField = dbFieldName
+			adapter.versionJson = versionJson
+			adapter.versionDB = versionDB
 		}
 	}
 	return adapter, nil
 }
 
-func (a *Adapter[T]) Create(ctx context.Context, model T) (int64, error) {
+func (a *Writer[T]) Create(ctx context.Context, model T) (int64, error) {
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
 	query, args := q.BuildToInsertWithVersion(a.Table, model, a.versionIndex, a.BuildParam, a.BoolSupport, a.ToArray, a.Schema)
 	res, err := tx.ExecContext(ctx, query, args...)
@@ -100,7 +102,7 @@ func (a *Adapter[T]) Create(ctx context.Context, model T) (int64, error) {
 	}
 	return res.RowsAffected()
 }
-func (a *Adapter[T]) Update(ctx context.Context, model T) (int64, error) {
+func (a *Writer[T]) Update(ctx context.Context, model T) (int64, error) {
 	query, args := q.BuildToUpdateWithVersion(a.Table, model, a.versionIndex, a.BuildParam, a.BoolSupport, a.ToArray, a.Schema)
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
 	res, err := tx.ExecContext(ctx, query, args...)
@@ -121,7 +123,7 @@ func (a *Adapter[T]) Update(ctx context.Context, model T) (int64, error) {
 	}
 	return res.RowsAffected()
 }
-func (a *Adapter[T]) Save(ctx context.Context, model T) (int64, error) {
+func (a *Writer[T]) Save(ctx context.Context, model T) (int64, error) {
 	query, args, err := q.BuildToSaveWithSchema(a.Table, model, a.Driver, a.BuildParam, a.ToArray, a.Schema)
 	if err != nil {
 		return 0, err
@@ -145,15 +147,29 @@ func (a *Adapter[T]) Save(ctx context.Context, model T) (int64, error) {
 	}
 	return res.RowsAffected()
 }
-func (a *Adapter[T]) Patch(ctx context.Context, model map[string]interface{}) (int64, error) {
+func (a *Writer[T]) Patch(ctx context.Context, model map[string]interface{}) (int64, error) {
 	colMap := q.JSONToColumns(model, a.JsonColumnMap)
-	query, args := q.BuildToPatchWithVersion(a.Table, colMap, a.Schema.SKeys, a.BuildParam, a.ToArray, a.versionDBField, a.Schema.Fields)
+	query, args := q.BuildToPatchWithVersion(a.Table, colMap, a.Schema.SKeys, a.BuildParam, a.ToArray, a.versionDB, a.Schema.Fields)
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return -1, err
 	}
-	return res.RowsAffected()
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return rowsAffected, err
+	}
+	if rowsAffected > 0 && a.versionIndex >= 0 {
+		currentVersion, vok := model[a.versionJson]
+		if !vok {
+			return -1, fmt.Errorf("%s must be in model for patch", a.versionJson)
+		}
+		ok := increaseMapVersion(model, a.versionJson, currentVersion)
+		if !ok {
+			return -1, errors.New("do not support this version type")
+		}
+	}
+	return rowsAffected, err
 }
 func handleDuplicate(db *sql.DB, err error) (int64, error) {
 	x := err.Error()
@@ -170,6 +186,23 @@ func handleDuplicate(db *sql.DB, err error) (int64, error) {
 		return 0, nil
 	}
 	return 0, err
+}
+
+func setVersion(vo reflect.Value, versionIndex int) bool {
+	versionType := vo.Field(versionIndex).Type().String()
+	switch versionType {
+	case "int32":
+		vo.Field(versionIndex).Set(reflect.ValueOf(int32(1)))
+		return true
+	case "int":
+		vo.Field(versionIndex).Set(reflect.ValueOf(1))
+		return true
+	case "int64":
+		vo.Field(versionIndex).Set(reflect.ValueOf(int64(1)))
+		return true
+	default:
+		return false
+	}
 }
 func increaseVersion(vo reflect.Value, versionIndex int, curVer interface{}) bool {
 	versionType := vo.Field(versionIndex).Type().String()
@@ -190,19 +223,17 @@ func increaseVersion(vo reflect.Value, versionIndex int, curVer interface{}) boo
 		return false
 	}
 }
-func setVersion(vo reflect.Value, versionIndex int) bool {
-	versionType := vo.Field(versionIndex).Type().String()
-	switch versionType {
-	case "int32":
-		vo.Field(versionIndex).Set(reflect.ValueOf(int32(1)))
+func increaseMapVersion(model map[string]interface{}, name string, currentVersion interface{}) bool {
+	if versionI32, ok := currentVersion.(int32); ok {
+		model[name] = versionI32 + 1
 		return true
-	case "int":
-		vo.Field(versionIndex).Set(reflect.ValueOf(1))
+	} else if versionI, ok := currentVersion.(int); ok {
+		model[name] = versionI + 1
 		return true
-	case "int64":
-		vo.Field(versionIndex).Set(reflect.ValueOf(int64(1)))
+	} else if versionI64, ok := currentVersion.(int64); ok {
+		model[name] = versionI64 + 1
 		return true
-	default:
+	} else {
 		return false
 	}
 }
