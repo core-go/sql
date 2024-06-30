@@ -1,4 +1,4 @@
-package query
+package loader
 
 import (
 	"context"
@@ -27,6 +27,7 @@ type QueryService struct {
 	Driver     string
 	BuildParam func(i int) string
 }
+
 func NewStringService(db *sql.DB, table string, field string, options ...func(i int) string) *QueryService {
 	return NewQueryService(db, table, field, options...)
 }
@@ -86,7 +87,7 @@ func (s *QueryService) Save(ctx context.Context, values []string) (int64, error)
 		}
 		if driver == DriverPostgres {
 			for i := 1; i <= l; i++ {
-				ps = append(ps, "(" + BuildDollarParam(i) + ")")
+				ps = append(ps, "("+BuildDollarParam(i)+")")
 			}
 		} else {
 			for i := 1; i <= l; i++ {
@@ -246,6 +247,7 @@ func BuildMsSqlParam(i int) string {
 func BuildDollarParam(i int) string {
 	return "$" + strconv.Itoa(i)
 }
+
 type BatchStatement struct {
 	Query         string
 	Values        []interface{}

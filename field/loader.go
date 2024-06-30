@@ -1,4 +1,4 @@
-package loader
+package field
 
 import (
 	"context"
@@ -20,6 +20,7 @@ type Loader struct {
 	db    *sql.DB
 	query string
 }
+
 func NewQuery(db *sql.DB, query string) Query {
 	return &Loader{db: db, query: query}
 }
