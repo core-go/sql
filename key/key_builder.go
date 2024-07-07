@@ -1,4 +1,4 @@
-package sql
+package key
 
 type KeyBuilder interface {
 	BuildKey(object interface{}) string
