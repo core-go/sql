@@ -48,9 +48,9 @@ type TemplateNode struct {
 	Property  string       `yaml:"property" mapstructure:"property" json:"property,omitempty" gorm:"column:property" bson:"property,omitempty" dynamodbav:"property,omitempty" firestore:"property,omitempty"`
 	Value     string       `yaml:"value" mapstructure:"value" json:"value,omitempty" gorm:"column:value" bson:"value,omitempty" dynamodbav:"value,omitempty" firestore:"value,omitempty"`
 	Array     string       `yaml:"array" mapstructure:"array" json:"array,omitempty" gorm:"column:array" bson:"array,omitempty" dynamodbav:"array,omitempty" firestore:"array,omitempty"`
-	Separator string       `yaml:"separator" mapstructure:"separator" json:"array,omitempty" gorm:"column:separator" bson:"separator,omitempty" dynamodbav:"separator,omitempty" firestore:"separator,omitempty"`
-	Prefix    string       `yaml:"prefix" mapstructure:"prefix" json:"array,omitempty" gorm:"column:prefix" bson:"prefix,omitempty" dynamodbav:"prefix,omitempty" firestore:"prefix,omitempty"`
-	Suffix    string       `yaml:"suffix" mapstructure:"suffix" json:"array,omitempty" gorm:"column:suffix" bson:"suffix,omitempty" dynamodbav:"suffix,omitempty" firestore:"suffix,omitempty"`
+	Separator string       `yaml:"separator" mapstructure:"separator" json:"separator,omitempty" gorm:"column:separator" bson:"separator,omitempty" dynamodbav:"separator,omitempty" firestore:"separator,omitempty"`
+	Prefix    string       `yaml:"prefix" mapstructure:"prefix" json:"prefix,omitempty" gorm:"column:prefix" bson:"prefix,omitempty" dynamodbav:"prefix,omitempty" firestore:"prefix,omitempty"`
+	Suffix    string       `yaml:"suffix" mapstructure:"suffix" json:"suffix,omitempty" gorm:"column:suffix" bson:"suffix,omitempty" dynamodbav:"suffix,omitempty" firestore:"suffix,omitempty"`
 	Format    StringFormat `yaml:"format" mapstructure:"format" json:"format,omitempty" gorm:"column:format" bson:"format,omitempty" dynamodbav:"format,omitempty" firestore:"format,omitempty"`
 }
 type Template struct {
@@ -619,6 +619,7 @@ func Build(obj map[string]interface{}, template Template, param func(int) string
 	}
 	return strings.Join(results, ""), params
 }
+
 type QueryBuilder struct {
 	Template  Template
 	ModelType *reflect.Type
@@ -684,7 +685,7 @@ func GetQueryBuilder(isTemplate bool, builder Builder, id string, m map[string]*
 	}
 	return NewQueryBuilder(id, m, modelType, mp, param, buildSort, opts...)
 }
-func NewQueryBuilderWithArray(id string, m map[string]*Template, modelType *reflect.Type, mp func(interface{}, *reflect.Type, ...func(string, reflect.Type) string) map[string]interface{}, param func(i int) string, buildSort func(string, reflect.Type) string, q func(string) string, opts...func(interface{}) interface {
+func NewQueryBuilderWithArray(id string, m map[string]*Template, modelType *reflect.Type, mp func(interface{}, *reflect.Type, ...func(string, reflect.Type) string) map[string]interface{}, param func(i int) string, buildSort func(string, reflect.Type) string, q func(string) string, opts ...func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }) (*QueryBuilder, error) {

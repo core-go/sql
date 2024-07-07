@@ -91,7 +91,7 @@ func (a *Adapter[T, K]) Load(ctx context.Context, id K) (*T, error) {
 	}
 	var objs []T
 	query := fmt.Sprintf("select %s from %s ", a.Fields, a.Table)
-	query1, args := q.BuildFindByIdWithDB(a.DB, query, ip, a.JsonColumnMap, a.Schema.SKeys, a.BuildParam)
+	query1, args := q.BuildFindByIdWithDB(a.DB, query, ip, a.JsonColumnMap, a.Keys, a.BuildParam)
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
 	err := q.Query(ctx, tx, a.Map, &objs, query1, args...)
 	if err != nil {
@@ -108,7 +108,7 @@ func (a *Adapter[T, K]) Exist(ctx context.Context, id K) (bool, error) {
 		return false, er0
 	}
 	query := fmt.Sprintf("select %s from %s ", a.Schema.SColumns[0], a.Table)
-	query1, args := q.BuildFindByIdWithDB(a.DB, query, ip, a.JsonColumnMap, a.Schema.SKeys, a.BuildParam)
+	query1, args := q.BuildFindByIdWithDB(a.DB, query, ip, a.JsonColumnMap, a.Keys, a.BuildParam)
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
 	rows, err := tx.QueryContext(ctx, query1, args...)
 	if err != nil {
@@ -126,7 +126,7 @@ func (a *Adapter[T, K]) Delete(ctx context.Context, id K) (int64, error) {
 		return -1, er0
 	}
 	query := fmt.Sprintf("delete from %s ", a.Table)
-	query1, args := q.BuildFindByIdWithDB(a.DB, query, ip, a.JsonColumnMap, a.Schema.SKeys, a.BuildParam)
+	query1, args := q.BuildFindByIdWithDB(a.DB, query, ip, a.JsonColumnMap, a.Keys, a.BuildParam)
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
 	res, err := tx.ExecContext(ctx, query1, args...)
 	if err != nil {
