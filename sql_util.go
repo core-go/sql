@@ -21,8 +21,10 @@ func Any(ctx context.Context, db Executor, sql string, values ...interface{}) (b
 	}
 	return false, nil
 }
-
 func GetExec(ctx context.Context, db *sql.DB, opts ...string) Executor {
+	return GetTx(ctx, db, opts...)
+}
+func GetTx(ctx context.Context, db *sql.DB, opts ...string) Executor {
 	name := txs
 	if len(opts) > 0 && len(opts[0]) > 0 {
 		name = opts[0]
@@ -36,16 +38,7 @@ func GetExec(ctx context.Context, db *sql.DB, opts ...string) Executor {
 	}
 	return db
 }
-func GetTx(ctx context.Context) *sql.Tx {
-	txi := ctx.Value(txs)
-	if txi != nil {
-		txx, ok := txi.(*sql.Tx)
-		if ok {
-			return txx
-		}
-	}
-	return nil
-}
+
 func GetTxId(ctx context.Context) *string {
 	txi := ctx.Value("txId")
 	if txi != nil {
