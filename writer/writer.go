@@ -9,7 +9,7 @@ import (
 	q "github.com/core-go/sql"
 )
 
-type SqlWriter[T any] struct {
+type Writer[T any] struct {
 	db          *sql.DB
 	tableName   string
 	BuildParam  func(i int) string
@@ -25,7 +25,7 @@ type SqlWriter[T any] struct {
 func NewSqlWriterWithMap[T any](db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(i int) string) *SqlWriter[T] {
+}, options ...func(i int) string) *Writer[T] {
 	var buildParam func(i int) string
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
@@ -40,10 +40,10 @@ func NewSqlWriterWithMap[T any](db *sql.DB, tableName string, mp func(context.Co
 		modelType = modelType.Elem()
 	}
 	schema := q.CreateSchema(modelType)
-	return &SqlWriter[T]{db: db, tableName: tableName, BuildParam: buildParam, Map: mp, BoolSupport: boolSupport, schema: schema, ToArray: toArray}
+	return &Writer[T]{db: db, tableName: tableName, BuildParam: buildParam, Map: mp, BoolSupport: boolSupport, schema: schema, ToArray: toArray}
 }
 
-func NewSqlWriter[T any](db *sql.DB, tableName string, options ...func(ctx context.Context, model interface{}) (interface{}, error)) *SqlWriter[T] {
+func NewSqlWriter[T any](db *sql.DB, tableName string, options ...func(ctx context.Context, model interface{}) (interface{}, error)) *Writer[T] {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) >= 1 {
 		mp = options[0]
@@ -51,7 +51,7 @@ func NewSqlWriter[T any](db *sql.DB, tableName string, options ...func(ctx conte
 	return NewSqlWriterWithMap[T](db, tableName, mp, nil)
 }
 
-func (w *SqlWriter[T]) Write(ctx context.Context, model T) error {
+func (w *Writer[T]) Write(ctx context.Context, model T) error {
 	if w.Map != nil {
 		m2, er0 := w.Map(ctx, model)
 		if er0 != nil {
