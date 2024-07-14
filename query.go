@@ -17,33 +17,10 @@ const (
 	asc                 = "asc"
 )
 
-func GetOffset(limit int64, page int64, opts...int64) int64 {
-	var firstLimit int64 = 0
-	if len(opts) > 0 && opts[0] > 0 {
-		firstLimit = opts[0]
-	}
-	if firstLimit > 0 {
-		if page <= 1 {
-			return 0
-		} else {
-			offset := limit*(page-2) + firstLimit
-			if offset < 0 {
-				return 0
-			}
-			return offset
-		}
-	} else {
-		offset := limit * (page - 1)
-		if offset < 0 {
-			return 0
-		}
-		return offset
-	}
-}
 func BuildFromQuery(ctx context.Context, db *sql.DB, fieldsIndex map[string]int, models interface{}, query string, params []interface{}, limit int64, offset int64, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options...func(context.Context, interface{}) (interface{}, error)) (int64, error) {
+}, options ...func(context.Context, interface{}) (interface{}, error)) (int64, error) {
 	var mp func(context.Context, interface{}) (interface{}, error)
 	if len(options) > 0 && options[0] != nil {
 		mp = options[0]
@@ -110,7 +87,7 @@ func BuildPagingQueryByDriver(sql string, limit int64, offset int64, driver stri
 		return s2
 	}
 }
-func BuildPagingQuery(sql string, limit int64, offset int64, opts...string) string {
+func BuildPagingQuery(sql string, limit int64, offset int64, opts ...string) string {
 	if offset < 0 {
 		offset = 0
 	}
