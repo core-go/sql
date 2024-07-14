@@ -81,23 +81,17 @@ type Params struct {
 	BuildParam    func(int) string
 }
 
-func Delete(ctx context.Context, db *sql.DB, table string, query map[string]interface{}, options ...func(i int) string) (int64, error) {
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
-		buildParam = GetBuild(db)
+func BuildToDelete(table string, ids map[string]interface{}, buildParam func(int) string) (string, []interface{}) {
+	var args []interface{}
+	var where []string
+	i := 1
+	for col, value := range ids {
+		where = append(where, col+"="+buildParam(i))
+		args = append(args, value)
+		i++
 	}
-	sql, values := BuildToDelete(table, query, buildParam)
-
-	result, err := db.ExecContext(ctx, sql, values...)
-
-	if err != nil {
-		return -1, err
-	}
-	return BuildResult(result.RowsAffected())
+	return fmt.Sprintf("delete from %v where %v", table, strings.Join(where, " and ")), args
 }
-
 func MapToDB(model *map[string]interface{}, modelType reflect.Type) {
 	for colName, value := range *model {
 		if boolValue, boolOk := value.(bool); boolOk {

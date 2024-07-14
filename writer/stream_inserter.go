@@ -1,4 +1,4 @@
-package writer
+package sql
 
 import (
 	"context"
@@ -13,7 +13,7 @@ type StreamInserter[T any] struct {
 	db         *sql.DB
 	tableName  string
 	BuildParam func(i int) string
-	Map        func(ctx context.Context, model interface{}) (interface{}, error)
+	Map        func(T)
 	Driver     string
 	schema     *q.Schema
 	batchSize  int
@@ -24,8 +24,8 @@ type StreamInserter[T any] struct {
 	}
 }
 
-func NewStreamInserter[T any](db *sql.DB, tableName string, batchSize int, options ...func(context.Context, interface{}) (interface{}, error)) *StreamInserter[T] {
-	var mp func(context.Context, interface{}) (interface{}, error)
+func NewStreamInserter[T any](db *sql.DB, tableName string, batchSize int, options ...func(T)) *StreamInserter[T] {
+	var mp func(T)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
@@ -35,15 +35,15 @@ func NewStreamInserter[T any](db *sql.DB, tableName string, batchSize int, optio
 func NewStreamInserterWithArray[T any](db *sql.DB, tableName string, batchSize int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(context.Context, interface{}) (interface{}, error)) *StreamInserter[T] {
-	var mp func(context.Context, interface{}) (interface{}, error)
+}, options ...func(T)) *StreamInserter[T] {
+	var mp func(T)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
 	return NewSqlStreamInserter[T](db, tableName, batchSize, mp, toArray)
 }
 func NewSqlStreamInserter[T any](db *sql.DB, tableName string, batchSize int,
-	mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+	mp func(T), toArray func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}, options ...func(i int) string) *StreamInserter[T] {
@@ -65,14 +65,9 @@ func NewSqlStreamInserter[T any](db *sql.DB, tableName string, batchSize int,
 
 func (w *StreamInserter[T]) Write(ctx context.Context, model T) error {
 	if w.Map != nil {
-		m2, er0 := w.Map(ctx, model)
-		if er0 != nil {
-			return er0
-		}
-		w.batch = append(w.batch, m2)
-	} else {
-		w.batch = append(w.batch, model)
+		w.Map(model)
 	}
+	w.batch = append(w.batch, model)
 	if len(w.batch) >= w.batchSize {
 		return w.Flush(ctx)
 	}
@@ -80,7 +75,6 @@ func (w *StreamInserter[T]) Write(ctx context.Context, model T) error {
 }
 
 func (w *StreamInserter[T]) Flush(ctx context.Context) error {
-	// driver := GetDriver(w.db)
 	query, args, err := q.BuildToInsertBatchWithSchema(w.tableName, w.batch, w.Driver, w.ToArray, w.BuildParam, w.schema)
 	if err != nil {
 		return err

@@ -1,9 +1,10 @@
-package writer
+package sql
 
 import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 	"reflect"
 
 	q "github.com/core-go/sql"
@@ -13,16 +14,17 @@ type Writer[T any] struct {
 	db          *sql.DB
 	tableName   string
 	BuildParam  func(i int) string
-	Map         func(ctx context.Context, model interface{}) (interface{}, error)
+	Map         func(T)
 	BoolSupport bool
 	schema      *q.Schema
+	Driver      string
 	ToArray     func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
 }
 
-func NewSqlWriterWithMap[T any](db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+func NewWriterWithMap[T any](db *sql.DB, tableName string, mp func(T), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(i int) string) *Writer[T] {
@@ -40,26 +42,28 @@ func NewSqlWriterWithMap[T any](db *sql.DB, tableName string, mp func(context.Co
 		modelType = modelType.Elem()
 	}
 	schema := q.CreateSchema(modelType)
-	return &Writer[T]{db: db, tableName: tableName, BuildParam: buildParam, Map: mp, BoolSupport: boolSupport, schema: schema, ToArray: toArray}
+	if len(schema.Keys) <= 0 {
+		panic(fmt.Sprintf("require primary key for table '%s'", tableName))
+	}
+	return &Writer[T]{db: db, tableName: tableName, BuildParam: buildParam, Map: mp, BoolSupport: boolSupport, schema: schema, Driver: driver, ToArray: toArray}
 }
 
-func NewSqlWriter[T any](db *sql.DB, tableName string, options ...func(ctx context.Context, model interface{}) (interface{}, error)) *Writer[T] {
-	var mp func(context.Context, interface{}) (interface{}, error)
-	if len(options) >= 1 {
-		mp = options[0]
+func NewWriter[T any](db *sql.DB, tableName string, opts ...func(T)) *Writer[T] {
+	var mp func(T)
+	if len(opts) >= 1 {
+		mp = opts[0]
 	}
-	return NewSqlWriterWithMap[T](db, tableName, mp, nil)
+	return NewWriterWithMap[T](db, tableName, mp, nil)
 }
 
 func (w *Writer[T]) Write(ctx context.Context, model T) error {
 	if w.Map != nil {
-		m2, er0 := w.Map(ctx, model)
-		if er0 != nil {
-			return er0
-		}
-		_, err := q.SaveWithArray(ctx, w.db, w.tableName, m2, w.ToArray, w.schema)
+		w.Map(model)
+	}
+	query, args, err := q.BuildToSaveWithSchema(w.tableName, model, w.Driver, w.BuildParam, w.ToArray, w.schema)
+	if err != nil {
 		return err
 	}
-	_, err := q.SaveWithArray(ctx, w.db, w.tableName, model, w.ToArray, w.schema)
-	return err
+	_, er2 := w.db.ExecContext(ctx, query, args...)
+	return er2
 }

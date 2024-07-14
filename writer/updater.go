@@ -1,9 +1,10 @@
-package writer
+package sql
 
 import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 	"reflect"
 
 	q "github.com/core-go/sql"
@@ -13,7 +14,7 @@ type Updater[T any] struct {
 	db           *sql.DB
 	tableName    string
 	BuildParam   func(i int) string
-	Map          func(ctx context.Context, model interface{}) (interface{}, error)
+	Map          func(T)
 	BoolSupport  bool
 	VersionIndex int
 	schema       *q.Schema
@@ -23,8 +24,8 @@ type Updater[T any] struct {
 	}
 }
 
-func NewUpdater[T any](db *sql.DB, tableName string, options ...func(context.Context, interface{}) (interface{}, error)) *Updater[T] {
-	var mp func(context.Context, interface{}) (interface{}, error)
+func NewUpdater[T any](db *sql.DB, tableName string, options ...func(T)) *Updater[T] {
+	var mp func(T)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
@@ -33,14 +34,14 @@ func NewUpdater[T any](db *sql.DB, tableName string, options ...func(context.Con
 func NewUpdaterWithArray[T any](db *sql.DB, tableName string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(context.Context, interface{}) (interface{}, error)) *Updater[T] {
-	var mp func(context.Context, interface{}) (interface{}, error)
+}, options ...func(T)) *Updater[T] {
+	var mp func(T)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
 	return NewSqlUpdater[T](db, tableName, mp, toArray)
 }
-func NewSqlUpdater[T any](db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+func NewSqlUpdater[T any](db *sql.DB, tableName string, mp func(T), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(i int) string) *Updater[T] {
@@ -58,18 +59,15 @@ func NewSqlUpdater[T any](db *sql.DB, tableName string, mp func(context.Context,
 		modelType = modelType.Elem()
 	}
 	schema := q.CreateSchema(modelType)
+	if len(schema.Keys) <= 0 {
+		panic(fmt.Sprintf("require primary key for table '%s'", tableName))
+	}
 	return &Updater[T]{db: db, tableName: tableName, VersionIndex: -1, BoolSupport: boolSupport, schema: schema, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
 func (w *Updater[T]) Write(ctx context.Context, model T) error {
 	if w.Map != nil {
-		m2, er0 := w.Map(ctx, model)
-		if er0 != nil {
-			return er0
-		}
-		query0, values0 := q.BuildToUpdateWithVersion(w.tableName, m2, w.VersionIndex, w.BuildParam, w.BoolSupport, w.ToArray, w.schema)
-		_, er1 := w.db.ExecContext(ctx, query0, values0...)
-		return er1
+		w.Map(model)
 	}
 	query, values := q.BuildToUpdateWithVersion(w.tableName, model, w.VersionIndex, w.BuildParam, w.BoolSupport, w.ToArray, w.schema)
 	_, er2 := w.db.ExecContext(ctx, query, values...)

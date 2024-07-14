@@ -46,9 +46,9 @@ func NewSearchBuilderWithArray[T any, F any](db *sql.DB, buildQuery func(F) (str
 }
 
 func (b *SearchBuilder[T, F]) Search(ctx context.Context, m F, limit int64, offset int64) ([]T, int64, error) {
-	sql, params := b.BuildQuery(m)
+	query, params := b.BuildQuery(m)
 	var objs []T
-	total, er2 := q.BuildFromQuery(ctx, b.Database, b.fieldsIndex, &objs, sql, params, limit, offset, b.ToArray)
+	total, er2 := q.BuildFromQuery(ctx, b.Database, b.fieldsIndex, &objs, query, params, limit, offset, b.ToArray)
 	if b.Map != nil {
 		l := len(objs)
 		for i := 0; i < l; i++ {

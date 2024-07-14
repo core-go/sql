@@ -57,6 +57,9 @@ func NewLoaderWithMapAndArray[T any, K any](db *sql.DB, tableName string, toArra
 	var k K
 	kType := reflect.TypeOf(k)
 	idMap := false
+	if len(primaryKeys) <= 0 {
+		panic(fmt.Sprintf("require primary key for table '%s'", tableName))
+	}
 	if len(primaryKeys) > 1 {
 		if kType.Kind() == reflect.Map {
 			idMap = true

@@ -1,4 +1,4 @@
-package writer
+package sql
 
 import (
 	"context"
@@ -13,7 +13,7 @@ type Inserter[T any] struct {
 	db           *sql.DB
 	tableName    string
 	BuildParam   func(i int) string
-	Map          func(ctx context.Context, model interface{}) (interface{}, error)
+	Map          func(T)
 	BoolSupport  bool
 	VersionIndex int
 	schema       *q.Schema
@@ -23,8 +23,8 @@ type Inserter[T any] struct {
 	}
 }
 
-func NewInserter[T any](db *sql.DB, tableName string, options ...func(context.Context, interface{}) (interface{}, error)) *Inserter[T] {
-	var mp func(context.Context, interface{}) (interface{}, error)
+func NewInserter[T any](db *sql.DB, tableName string, options ...func(T)) *Inserter[T] {
+	var mp func(T)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
@@ -33,14 +33,14 @@ func NewInserter[T any](db *sql.DB, tableName string, options ...func(context.Co
 func NewInserterWithArray[T any](db *sql.DB, tableName string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(context.Context, interface{}) (interface{}, error)) *Inserter[T] {
-	var mp func(context.Context, interface{}) (interface{}, error)
+}, options ...func(T)) *Inserter[T] {
+	var mp func(T)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
 	return NewSqlInserter[T](db, tableName, mp, toArray)
 }
-func NewSqlInserter[T any](db *sql.DB, tableName string, mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+func NewSqlInserter[T any](db *sql.DB, tableName string, mp func(T), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, options ...func(i int) string) *Inserter[T] {
@@ -61,16 +61,9 @@ func NewSqlInserter[T any](db *sql.DB, tableName string, mp func(context.Context
 	return &Inserter[T]{db: db, BoolSupport: boolSupport, VersionIndex: -1, schema: schema, tableName: tableName, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
-func (w *Inserter[T]) Write(ctx context.Context, model interface{}) error {
+func (w *Inserter[T]) Write(ctx context.Context, model T) error {
 	if w.Map != nil {
-		m2, er0 := w.Map(ctx, model)
-		if er0 != nil {
-			return er0
-		}
-
-		queryInsert, values := q.BuildToInsertWithSchema(w.tableName, m2, w.VersionIndex, w.BuildParam, w.BoolSupport, false, w.ToArray, w.schema)
-		_, err := w.db.ExecContext(ctx, queryInsert, values...)
-		return err
+		w.Map(model)
 	}
 	queryInsert, values := q.BuildToInsertWithSchema(w.tableName, model, w.VersionIndex, w.BuildParam, w.BoolSupport, false, w.ToArray, w.schema)
 	_, err := w.db.ExecContext(ctx, queryInsert, values...)

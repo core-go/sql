@@ -143,6 +143,9 @@ func BuildToInsertBatchWithSchema(table string, models interface{}, driver strin
 		for j := 0; j < slen; j++ {
 			model := s.Index(j).Interface()
 			mv := reflect.ValueOf(model)
+			if mv.Kind() == reflect.Ptr {
+				mv = mv.Elem()
+			}
 			values := make([]string, 0)
 			for _, fdb := range cols {
 				if fdb.Insert {

@@ -37,9 +37,6 @@ func NewQueryWithArray[T any, K any, F any](db *sql.DB, table string, buildQuery
 	}
 	var t T
 	modelType := reflect.TypeOf(t)
-	if modelType.Kind() == reflect.Ptr {
-		modelType = modelType.Elem()
-	}
 	fieldsIndex, err := q.GetColumnIndexes(modelType)
 	if err != nil {
 		return nil, err

@@ -1,9 +1,10 @@
-package writer
+package sql
 
 import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 	"reflect"
 
 	q "github.com/core-go/sql"
@@ -13,21 +14,19 @@ type StreamWriter[T any] struct {
 	db         *sql.DB
 	tableName  string
 	BuildParam func(i int) string
-	Map        func(ctx context.Context, model interface{}) (interface{}, error)
-	// BoolSupport  bool
-	// VersionIndex int
-	schema    *q.Schema
-	batchSize int
-	batch     []interface{}
-	Driver    string
-	ToArray   func(interface{}) interface {
+	Map        func(T)
+	schema     *q.Schema
+	batchSize  int
+	batch      []interface{}
+	Driver     string
+	ToArray    func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
 }
 
-func NewStreamWriter[T any](db *sql.DB, tableName string, batchSize int, options ...func(context.Context, interface{}) (interface{}, error)) *StreamWriter[T] {
-	var mp func(context.Context, interface{}) (interface{}, error)
+func NewStreamWriter[T any](db *sql.DB, tableName string, batchSize int, options ...func(T)) *StreamWriter[T] {
+	var mp func(T)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
@@ -37,15 +36,15 @@ func NewStreamWriter[T any](db *sql.DB, tableName string, batchSize int, options
 func NewStreamWriterWithArray[T any](db *sql.DB, tableName string, batchSize int, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, options ...func(context.Context, interface{}) (interface{}, error)) *StreamWriter[T] {
-	var mp func(context.Context, interface{}) (interface{}, error)
+}, options ...func(T)) *StreamWriter[T] {
+	var mp func(T)
 	if len(options) >= 1 {
 		mp = options[0]
 	}
 	return NewSqlStreamWriter[T](db, tableName, batchSize, mp, toArray)
 }
 func NewSqlStreamWriter[T any](db *sql.DB, tableName string, batchSize int,
-	mp func(context.Context, interface{}) (interface{}, error), toArray func(interface{}) interface {
+	mp func(T), toArray func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}, options ...func(i int) string) *StreamWriter[T] {
@@ -63,19 +62,17 @@ func NewSqlStreamWriter[T any](db *sql.DB, tableName string, batchSize int,
 		modelType = modelType.Elem()
 	}
 	schema := q.CreateSchema(modelType)
+	if len(schema.Keys) <= 0 {
+		panic(fmt.Sprintf("require primary key for table '%s'", tableName))
+	}
 	return &StreamWriter[T]{db: db, Driver: driver, schema: schema, tableName: tableName, batchSize: batchSize, BuildParam: buildParam, Map: mp, ToArray: toArray}
 }
 
 func (w *StreamWriter[T]) Write(ctx context.Context, model T) error {
 	if w.Map != nil {
-		m2, er0 := w.Map(ctx, model)
-		if er0 != nil {
-			return er0
-		}
-		w.batch = append(w.batch, m2)
-	} else {
-		w.batch = append(w.batch, model)
+		w.Map(model)
 	}
+	w.batch = append(w.batch, model)
 	if len(w.batch) >= w.batchSize {
 		return w.Flush(ctx)
 	}
