@@ -1,4 +1,4 @@
-package adapter
+package repository
 
 import (
 	"context"
@@ -12,23 +12,23 @@ import (
 	q "github.com/core-go/sql"
 )
 
-type Adapter[T any, K any] struct {
+type Repository[T any, K any] struct {
 	*Writer[*T]
 	Map    map[string]int
 	Fields string
 	IdMap  bool
 }
 
-func NewAdapter[T any, K any](db *sql.DB, tableName string, opts ...func(int) string) (*Adapter[T, K], error) {
-	return NewSqlAdapterWithVersionAndArray[T, K](db, tableName, "", nil, opts...)
+func NewRepository[T any, K any](db *sql.DB, tableName string, opts ...func(int) string) (*Repository[T, K], error) {
+	return NewSqlRepositoryWithVersionAndArray[T, K](db, tableName, "", nil, opts...)
 }
-func NewAdapterWithVersion[T any, K any](db *sql.DB, tableName string, versionField string, opts ...func(int) string) (*Adapter[T, K], error) {
-	return NewSqlAdapterWithVersionAndArray[T, K](db, tableName, versionField, nil, opts...)
+func NewRepositoryWithVersion[T any, K any](db *sql.DB, tableName string, versionField string, opts ...func(int) string) (*Repository[T, K], error) {
+	return NewSqlRepositoryWithVersionAndArray[T, K](db, tableName, versionField, nil, opts...)
 }
-func NewSqlAdapterWithVersionAndArray[T any, K any](db *sql.DB, tableName string, versionField string, toArray func(interface{}) interface {
+func NewSqlRepositoryWithVersionAndArray[T any, K any](db *sql.DB, tableName string, versionField string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
-}, opts ...func(int) string) (*Adapter[T, K], error) {
+}, opts ...func(int) string) (*Repository[T, K], error) {
 	adapter, err := NewSqlWriterWithVersionAndArray[*T](db, tableName, versionField, toArray, opts...)
 	if err != nil {
 		return nil, err
@@ -56,9 +56,9 @@ func NewSqlAdapterWithVersionAndArray[T any, K any](db *sql.DB, tableName string
 		return nil, err
 	}
 	fields := q.BuildFieldsBySchema(adapter.Schema)
-	return &Adapter[T, K]{adapter, fieldsIndex, fields, idMap}, nil
+	return &Repository[T, K]{adapter, fieldsIndex, fields, idMap}, nil
 }
-func (a *Adapter[T, K]) All(ctx context.Context) ([]T, error) {
+func (a *Repository[T, K]) All(ctx context.Context) ([]T, error) {
 	var objs []T
 	query := fmt.Sprintf("select %s from %s", a.Fields, a.Table)
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
@@ -74,7 +74,7 @@ func toMap(obj interface{}) (map[string]interface{}, error) {
 	er2 := json.Unmarshal(b, &im)
 	return im, er2
 }
-func (a *Adapter[T, K]) getId(k K) (interface{}, error) {
+func (a *Repository[T, K]) getId(k K) (interface{}, error) {
 	if len(a.Keys) >= 2 && !a.IdMap {
 		ri, err := toMap(k)
 		return ri, err
@@ -82,7 +82,7 @@ func (a *Adapter[T, K]) getId(k K) (interface{}, error) {
 		return k, nil
 	}
 }
-func (a *Adapter[T, K]) Load(ctx context.Context, id K) (*T, error) {
+func (a *Repository[T, K]) Load(ctx context.Context, id K) (*T, error) {
 	ip, er0 := a.getId(id)
 	if er0 != nil {
 		return nil, er0
@@ -100,7 +100,7 @@ func (a *Adapter[T, K]) Load(ctx context.Context, id K) (*T, error) {
 	}
 	return nil, nil
 }
-func (a *Adapter[T, K]) Exist(ctx context.Context, id K) (bool, error) {
+func (a *Repository[T, K]) Exist(ctx context.Context, id K) (bool, error) {
 	ip, er0 := a.getId(id)
 	if er0 != nil {
 		return false, er0
@@ -118,7 +118,7 @@ func (a *Adapter[T, K]) Exist(ctx context.Context, id K) (bool, error) {
 	}
 	return false, nil
 }
-func (a *Adapter[T, K]) Delete(ctx context.Context, id K) (int64, error) {
+func (a *Repository[T, K]) Delete(ctx context.Context, id K) (int64, error) {
 	ip, er0 := a.getId(id)
 	if er0 != nil {
 		return -1, er0

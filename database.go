@@ -58,17 +58,17 @@ func HandleDuplicate(db *sql.DB, err error) (int64, error) {
 	x := err.Error()
 	driver := GetDriver(db)
 	if driver == DriverPostgres && strings.Contains(x, "pq: duplicate key value violates unique constraint") {
-		return 0, err
+		return 0, nil
 	} else if driver == DriverMysql && strings.Contains(x, "Error 1062: Duplicate entry") {
-		return 0, err //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 	} else if driver == DriverOracle && strings.Contains(x, "ORA-00001: unique constraint") {
-		return 0, err //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
+		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
 	} else if driver == DriverMssql && strings.Contains(x, "Violation of PRIMARY KEY constraint") {
-		return 0, err //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
+		return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
 	} else if driver == DriverSqlite3 && strings.Contains(x, "UNIQUE constraint failed") {
-		return 0, err
+		return 0, nil
 	}
-	return -1, err
+	return 0, err
 }
 func Insert(ctx context.Context, db *sql.DB, table string, model interface{}, options ...*Schema) (int64, error) {
 	var schema *Schema
