@@ -82,7 +82,8 @@ The flow for search/paging:
 <table><thead><tr><td>
 
 ```go
-func BuildFilter(filter *model.UserFilter) (string, []interface{}) {
+func BuildFilter(
+    filter *model.UserFilter) (string, []interface{}) {
   buildParam := s.BuildDollarParam
   var where []string
   var params []interface{}
@@ -140,7 +141,8 @@ func BuildFilter(filter *model.UserFilter) (string, []interface{}) {
 
 ```go
 buildQuery := query.UseQuery[
-    model.User, *model.UserFilter](db, "users")
+    model.User,
+    *model.UserFilter](db, "users")
 query, args := buildQuery(filter)
 ```
 
@@ -160,8 +162,8 @@ query, args := buildQuery(filter)
 
 ```go
 func (r *UserAdapter) Load(
-    ctx context.Context, id string)
-      (*User, error) {
+    ctx context.Context,
+    id string) (*User, error) {
   query := `
     select
       id, 
@@ -195,8 +197,8 @@ func (r *UserAdapter) Load(
 import q "github.com/core-go/sql"
 
 func (r *UserAdapter) Load(
-    ctx context.Context, id string)
-      (*User, error) {
+    ctx context.Context,
+    id string) (*User, error) {
   var users []User
   query := fmt.Sprintf(`
     select
@@ -231,8 +233,8 @@ func (r *UserAdapter) Load(
 
 ```go
 func (r *UserAdapter) Create(
-    ctx context.Context, user *User)
-    (int64, error) {
+    ctx context.Context,
+    user *User) (int64, error) {
   query := `
     insert into users (
       id,
@@ -270,7 +272,8 @@ func (r *UserAdapter) Create(
 import q "github.com/core-go/sql"
 
 func (r *UserAdapter) Create(
-    ctx context.Context, user *User) (int64, error) {
+    ctx context.Context,
+    user *User) (int64, error) {
   query, args := q.BuildToInsert("users", user, q.BuildParam)
   tx := q.GetTx(ctx)
   res, err := tx.ExecContext(ctx, query, args...)
@@ -292,7 +295,8 @@ func (r *UserAdapter) Create(
 
 ```go
 func (s *userService) Create(
-    ctx context.Context, user *User) (int64, error) {
+    ctx context.Context,
+    user *User) (int64, error) {
   tx, err := s.db.Begin()
   if err != nil {
     return -1, nil
@@ -315,7 +319,8 @@ func (s *userService) Create(
 
 ```go
 func (s *userService) Create(
-    ctx context.Context, user *User) (int64, error) {
+    ctx context.Context,
+	user *User) (int64, error) {
   ctx, tx, err := q.Begin(ctx, s.db)
   if err != nil {
     return  -1, err
@@ -337,8 +342,8 @@ func (s *userService) Create(
 
 ```go
 func (s *userService) Create(
-    ctx context.Context, user *User)
-      (int64, error) {
+    ctx context.Context,
+    user *User) (int64, error) {
   tx, err := s.db.Begin()
   if err != nil {
     return -1, nil
