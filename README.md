@@ -13,7 +13,7 @@ Some use cases that we optimize the performance:
   - Props: Because it interacts with DB once, it has a better performance.
 #### Reduced Boilerplate Code
 - Reduce boilerplate code associated with database interactions, allowing developers to focus more on application logic rather than low-level database handling
-  - In this [layer architecture sample](https://github.com/source-code-template/go-sql-layer-architecture-sample), you can see we can reduce a lot of source code at [data access layer](https://github.com/source-code-template/go-sql-layer-architecture-sample/blob/main/internal/user/repository/adapter/adapter.go), or you use [generic repository](https://github.com/core-go/sql/blob/main/adapter/adapter.go) to replace all repository source code.
+  - In this [layer architecture sample](https://github.com/source-code-template/go-sql-sample), you can see we can reduce a lot of source code at [data access layer](https://github.com/source-code-template/go-sql-sample/blob/main/internal/user/repository/adapter/adapter.go), or you use [generic repository](https://github.com/core-go/sql/blob/main/adapter/adapter.go) to replace all repository source code.
 
 ## Some advantage features
 #### Decimal
@@ -78,7 +78,7 @@ The flow for search/paging:
 - Build the count query
   - Count the total records for paging
 #### Dynamic query builder
-- Look at this sample [user](https://github.com/source-code-template/go-sql-layer-architecture-sample/blob/main/internal/user/user.go), you can see it automatically build a dynamic query for serach.
+- Look at this sample [user](https://github.com/source-code-template/go-sql-sample/blob/main/internal/user/user.go), you can see it automatically build a dynamic query for serach.
 <table><thead><tr><td>
 
 ```go
@@ -331,7 +331,7 @@ func (s *userService) Create(
 ```
 </td></tr></tbody></table>
 
-- In another example, in [this service layer](https://github.com/source-code-template/go-sql-layer-architecture-sample/blob/main/internal/user/service/usecase.go) and [this data access layer](https://github.com/source-code-template/go-sql-layer-architecture-sample/blob/main/internal/user/repository/adapter/adapter.go), it simplifies transaction handling, at GO SDK level.
+- In another example, in [this service layer](https://github.com/source-code-template/go-sql-sample/blob/main/internal/user/service/usecase.go) and [this data access layer](https://github.com/source-code-template/go-sql-sample/blob/main/internal/user/repository/adapter/adapter.go), it simplifies transaction handling, at GO SDK level.
 <table><thead><tr><td>
 
 [GO SDK Only](https://github.com/go-tutorials/go-sql-hexagonal-architecture-sample/blob/main/internal/user/service/user_service.go)

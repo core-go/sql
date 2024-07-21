@@ -29,7 +29,7 @@ func NewSqlRepositoryWithVersionAndArray[T any, K any](db *sql.DB, tableName str
 	driver.Valuer
 	sql.Scanner
 }, opts ...func(int) string) (*Repository[T, K], error) {
-	adapter, err := NewSqlWriterWithVersionAndArray[*T](db, tableName, versionField, toArray, opts...)
+	repo, err := NewSqlWriterWithVersionAndArray[*T](db, tableName, versionField, toArray, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func NewSqlRepositoryWithVersionAndArray[T any, K any](db *sql.DB, tableName str
 	var k K
 	kType := reflect.TypeOf(k)
 	idMap := false
-	if len(adapter.Keys) > 1 {
+	if len(repo.Keys) > 1 {
 		if kType.Kind() == reflect.Map {
 			idMap = true
 		} else if kType.Kind() != reflect.Struct {
@@ -55,8 +55,8 @@ func NewSqlRepositoryWithVersionAndArray[T any, K any](db *sql.DB, tableName str
 	if err != nil {
 		return nil, err
 	}
-	fields := q.BuildFieldsBySchema(adapter.Schema)
-	return &Repository[T, K]{adapter, fieldsIndex, fields, idMap}, nil
+	fields := q.BuildFieldsBySchema(repo.Schema)
+	return &Repository[T, K]{repo, fieldsIndex, fields, idMap}, nil
 }
 func (a *Repository[T, K]) All(ctx context.Context) ([]T, error) {
 	var objs []T

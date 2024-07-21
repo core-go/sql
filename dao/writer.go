@@ -218,22 +218,6 @@ func (a *Writer[T]) Patch(ctx context.Context, model map[string]interface{}) (in
 	}
 	return rowsAffected, err
 }
-func handleDuplicate(db *sql.DB, err error) (int64, error) {
-	x := err.Error()
-	driver := q.GetDriver(db)
-	if driver == q.DriverPostgres && strings.Contains(x, "pq: duplicate key value violates unique constraint") {
-		return 0, nil
-	} else if driver == q.DriverMysql && strings.Contains(x, "Error 1062: Duplicate entry") {
-		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-	} else if driver == q.DriverOracle && strings.Contains(x, "ORA-00001: unique constraint") {
-		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-	} else if driver == q.DriverMssql && strings.Contains(x, "Violation of PRIMARY KEY constraint") {
-		return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-	} else if driver == q.DriverSqlite3 && strings.Contains(x, "UNIQUE constraint failed") {
-		return 0, nil
-	}
-	return 0, err
-}
 
 func setVersion(vo reflect.Value, versionIndex int) bool {
 	versionType := vo.Field(versionIndex).Type().String()
