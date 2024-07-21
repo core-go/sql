@@ -4,7 +4,7 @@
 - Simplify common database operations, such as CRUD (Create, Read, Update, Delete) operations, transactions, and batch processing, by providing high-level abstractions and utilities.
 #### Compatibility and Flexibility
 - It is compatible with various SQL databases such as [Postgres](github.com/lib/pq), [My SQL](github.com/go-sql-driver/mysql), [MS SQL](https://github.com/denisenkom/go-mssqldb), [Oracle](https://github.com/godror/godror), [SQLite](https://github.com/mattn/go-sqlite3), offer flexibility in terms of database driver selection, and query building capabilities.
-### Performance Optimizations
+#### Performance Optimizations
 Some use cases that we optimize the performance:
 - When insert many rows, we build a single SQL statement and execute once. The syntax of Oracle is different from Postgres, My SQL, MS SQL, SQLite.
   - Source code to build dynamic SQL statement is [here](https://github.com/core-go/sql/blob/main/batch.go), and the sample is at [project-samples/go-import](https://github.com/project-samples/go-import)
@@ -18,13 +18,14 @@ Some use cases that we optimize the performance:
 ## Some advantage features
 #### Decimal
 - Support decimal, which is useful for currency
-### Query Template (SQL Mapper)
+#### Query Template (SQL Mapper)
 - My batis for GOLANG.
   - Project sample is at [go-admin](https://github.com/project-samples/go-admin). Mybatis file is here [query.xml](https://github.com/project-samples/go-admin/blob/main/configs/query.xml)
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" ?>
-<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="mappers">
   <select id="user">
@@ -82,43 +83,49 @@ The flow for search/paging:
 
 ```go
 func BuildFilter(filter *model.UserFilter) (string, []interface{}) {
-    buildParam := s.BuildDollarParam
-    var where []string
-    var params []interface{}
-    i := 1
-    if len(filter.Id) > 0 {
-        params = append(params, filter.Id)
-        where = append(where, fmt.Sprintf(`id = %s`, buildParam(i)))
-        i++
-    }
+  buildParam := s.BuildDollarParam
+  var where []string
+  var params []interface{}
+  i := 1
+  if len(filter.Id) > 0 {
+    params = append(params, filter.Id)
+    where = append(where,
+      fmt.Sprintf(`id = %s`, buildParam(i)))
+    i++
+  }
   if filter.DateOfBirth != nil {
     if filter.DateOfBirth.Min != nil {
       params = append(params, filter.DateOfBirth.Min)
-      where = append(where, fmt.Sprintf(`date_of_birth >= %s`, buildParam(i)))
+      where = append(where, 
+        fmt.Sprintf(`date_of_birth >= %s`, buildParam(i)))
       i++
     }
     if filter.DateOfBirth.Max != nil {
       params = append(params, filter.DateOfBirth.Max)
-      where = append(where, fmt.Sprintf(`date_of_birth <= %s`, buildParam(i)))
+      where = append(where,
+        fmt.Sprintf(`date_of_birth <= %s`, buildParam(i)))
       i++
     }
   }
   if len(filter.Username) > 0 {
     q := filter.Username + "%"
     params = append(params, q)
-    where = append(where, fmt.Sprintf(`username like %s`, buildParam(i)))
+    where = append(where,
+      fmt.Sprintf(`username like %s`, buildParam(i)))
     i++
   }
   if len(filter.Email) > 0 {
     q := filter.Email + "%"
     params = append(params, q)
-    where = append(where, fmt.Sprintf(`email like %s`, buildParam(i)))
+    where = append(where,
+      fmt.Sprintf(`email like %s`, buildParam(i)))
     i++
   }
   if len(filter.Phone) > 0 {
     q := "%" + filter.Phone + "%"
     params = append(params, q)
-    where = append(where, fmt.Sprintf(`phone like %s`, buildParam(i)))
+    where = append(where,
+      fmt.Sprintf(`phone like %s`, buildParam(i)))
     i++
   }
   if len(where) > 0 {
@@ -132,7 +139,8 @@ func BuildFilter(filter *model.UserFilter) (string, []interface{}) {
 <td>
 
 ```go
-buildQuery := query.UseQuery[model.User, *model.UserFilter](db, "users")
+buildQuery := query.UseQuery[
+    model.User, *model.UserFilter](db, "users")
 query, args := buildQuery(filter)
 ```
 
@@ -262,8 +270,7 @@ func (r *UserAdapter) Create(
 import q "github.com/core-go/sql"
 
 func (r *UserAdapter) Create(
-    ctx context.Context, user *User)
-      (int64, error) {
+    ctx context.Context, user *User) (int64, error) {
   query, args := q.BuildToInsert("users", user, q.BuildParam)
   tx := q.GetTx(ctx)
   res, err := tx.ExecContext(ctx, query, args...)
@@ -285,8 +292,7 @@ func (r *UserAdapter) Create(
 
 ```go
 func (s *userService) Create(
-    ctx context.Context, user *User)
-      (int64, error) {
+    ctx context.Context, user *User) (int64, error) {
   tx, err := s.db.Begin()
   if err != nil {
     return -1, nil
@@ -309,8 +315,7 @@ func (s *userService) Create(
 
 ```go
 func (s *userService) Create(
-    ctx context.Context, user *User)
-      (int64, error) {
+    ctx context.Context, user *User) (int64, error) {
   ctx, tx, err := q.Begin(ctx, s.db)
   if err != nil {
     return  -1, err
@@ -355,10 +360,11 @@ func (s *userService) Create(
 <td>
 
 ```go
-func (s *UserUseCase) Create(ctx context.Context, user *model.User) (int64, error) {
-    return tx.Execute(ctx, s.db, func(ctx context.Context) (int64, error) {
-        return s.repository.Create(ctx, user)
-    })
+func (s *UserUseCase) Create(
+    ctx context.Context, user *model.User) (int64, error) {
+  return tx.Execute(ctx, s.db, func(ctx context.Context) (int64, error) {
+    return s.repository.Create(ctx, user)
+  })
 }
 ```
 </td></tr></tbody></table>

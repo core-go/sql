@@ -128,7 +128,8 @@ func (a *Writer[T]) Update(ctx context.Context, model T) (int64, error) {
 		le := len(a.Keys)
 		var where []string
 		for i := 0; i < le; i++ {
-			where = append(where, fmt.Sprintf("%s = %s", a.Schema.Keys[i].Column), a.BuildParam(i+1))
+			where = append(where, fmt.Sprintf("%s = %s", a.Schema.Keys[i].Column, a.BuildParam(i+1)))
+			values = append(values, vo.Field(a.Schema.Keys[i].Index).Interface())
 		}
 		query2 := query1 + " where " + strings.Join(where, " and ")
 		rows, er2 := tx.QueryContext(ctx, query2, values...)

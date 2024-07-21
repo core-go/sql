@@ -128,7 +128,8 @@ func (a *Writer[T]) Update(ctx context.Context, model T) (int64, error) {
 		le := len(a.Keys)
 		var where []string
 		for i := 0; i < le; i++ {
-			where = append(where, fmt.Sprintf("%s = %s", a.Schema.Keys[i].Column), a.BuildParam(i+1))
+			where = append(where, fmt.Sprintf("%s = %s", a.Schema.Keys[i].Column, a.BuildParam(i+1)))
+			values = append(values, vo.Field(a.Schema.Keys[i].Index).Interface())
 		}
 		query2 := query1 + " where " + strings.Join(where, " and ")
 		rows, er2 := tx.QueryContext(ctx, query2, values...)
@@ -216,22 +217,6 @@ func (a *Writer[T]) Patch(ctx context.Context, model map[string]interface{}) (in
 		}
 	}
 	return rowsAffected, err
-}
-func handleDuplicate(db *sql.DB, err error) (int64, error) {
-	x := err.Error()
-	driver := q.GetDriver(db)
-	if driver == q.DriverPostgres && strings.Contains(x, "pq: duplicate key value violates unique constraint") {
-		return 0, nil
-	} else if driver == q.DriverMysql && strings.Contains(x, "Error 1062: Duplicate entry") {
-		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-	} else if driver == q.DriverOracle && strings.Contains(x, "ORA-00001: unique constraint") {
-		return 0, nil //mysql Error 1062: Duplicate entry 'a-1' for key 'PRIMARY'
-	} else if driver == q.DriverMssql && strings.Contains(x, "Violation of PRIMARY KEY constraint") {
-		return 0, nil //Violation of PRIMARY KEY constraint 'PK_aa'. Cannot insert duplicate key in object 'dbo.aa'. The duplicate key value is (b, 2).
-	} else if driver == q.DriverSqlite3 && strings.Contains(x, "UNIQUE constraint failed") {
-		return 0, nil
-	}
-	return 0, err
 }
 
 func setVersion(vo reflect.Value, versionIndex int) bool {
