@@ -1,7 +1,8 @@
-# sql
-- It is the library to work with "database/sql" of GO SDK to offer some advantages:
+# SQL
+It is the library to work with "database/sql" of GO SDK to offer some advantages:
 #### Simplified Database Operations
 - Simplify common database operations, such as CRUD (Create, Read, Update, Delete) operations, transactions, and batch processing, by providing high-level abstractions and utilities.
+  - The sample is at [go-sql-sample](https://github.com/source-code-template/go-sql-sample). 
 #### Compatibility and Flexibility
 - It is compatible with various SQL databases such as [Postgres](github.com/lib/pq), [My SQL](github.com/go-sql-driver/mysql), [MS SQL](https://github.com/denisenkom/go-mssqldb), [Oracle](https://github.com/godror/godror), [SQLite](https://github.com/mattn/go-sqlite3), offer flexibility in terms of database driver selection, and query building capabilities.
 #### Performance Optimizations
@@ -18,6 +19,18 @@ Some use cases that we optimize the performance:
 ## Some advantage features
 #### Decimal
 - Support decimal, which is useful for currency
+#### Query Builders
+- Utilities to build dynamic SQL queries programmatically.
+- Support for common SQL operations (SELECT, INSERT, UPDATE, DELETE).
+- Support insert or update (upsert) operations, support Oracle, Postgres, My SQL, MS SQL, SQLite
+#### Data Mapping:
+- Functions to map SQL rows to Go structs.
+- Benefits:
+  - Simplifies the process of converting database rows into Go objects.
+  - Reduces repetitive code and potential errors in manual data mapping.
+  - Enhances code readability and maintainability
+#### Transaction Management:
+- Support for database transactions, including commit and rollback.
 #### Query Template (SQL Mapper)
 - My batis for GOLANG.
   - Project sample is at [go-admin](https://github.com/project-samples/go-admin). Mybatis file is here [query.xml](https://github.com/project-samples/go-admin/blob/main/configs/query.xml)
@@ -55,10 +68,16 @@ Some use cases that we optimize the performance:
 </mapper>
 ```
 
-#### Generic Repository (CRUD repository)
-- It is like [CrudRepository](https://docs.spring.io/spring-data/commons/docs/current/api/org/springframework/data/repository/CrudRepository.html) of Spring, which promotes rapid development and consistency across applications.
-- While it provides many advantages, such as reducing boilerplate code and ensuring transactional integrity, it also offers flexibility and control over complex queries, because it uses "database/sql" at GO SDK level.
-- Especially, it also supports composite primary key.
+#### Generic CRUD Repository
+[Repository](https://github.com/core-go/sql/blob/main/repository/repository.go) is like [CrudRepository](https://docs.spring.io/spring-data/commons/docs/current/api/org/springframework/data/repository/CrudRepository.html) of Spring, it provides these advantages:
+- <b>Simplicity</b>: provides a set of standard CRUD (Create, Read, Update, Delete) operations out of the box, reducing the amount of boilerplate code developers need to write.
+  - Especially, it provides "Save" method, to build an insert or update statement, specified for Oracle, MySQL, MS SQL, Postgres, SQLite.
+- <b>Consistency</b>: By using Repository, the code follows a consistent pattern for data access across the application, making it easier to understand and maintain.
+- <b>Rapid Development</b>: reducing boilerplate code and ensuring transactional integrity.
+- <b>Flexibility</b>: offers flexibility and control over complex queries, because it uses "database/sql" at GO SDK level.
+- <b>Type Safety</b>: being a generic interface, it provides type-safe access to the entity objects, reducing the chances of runtime errors.
+- <b>Learning Curve</b>: it supports utilities at GO SDK level. So, a developer who works with "database/sql" at GO SDK can quickly understand and use it.
+- <b>Composite primary key</b>: it supports composite primary key.
   - You can look at the sample at [go-sql-composite-key](https://github.com/go-tutorials/go-sql-composite-key).
   - In this sample, the company_users has 2 primary keys: company_id and user_id
   - You can define a GO struct, which contains 2 fields: CompanyId and UserId
@@ -70,6 +89,27 @@ Some use cases that we optimize the performance:
       UserId    string `json:"userId" gorm:"column:user_id;primary_key"`
     }
     ```
+- <b>Conclusion</b>: The Repository offers a straightforward way to implement basic CRUD operations, promoting rapid development and consistency across applications. While it provides many advantages, such as reducing boilerplate code and ensuring transactional integrity, it also it also offers flexibility and control over complex queries, because it uses "database/sql" at GO SDK level.
+- <b>Samples</b>: The sample is at [go-sql-generic-sample](https://github.com/source-code-template/go-sql-generic-sample). The composite key sample is at [go-sql-composite-key](https://github.com/go-tutorials/go-sql-composite-key).
+#### Filtering, Pagination and Sorting
+- <b>Filtering</b> is the process of narrowing down a dataset based on specific criteria or conditions. This allows users to refine the results to match their needs, making it easier to find relevant data.
+- <b>Pagination</b> is the process of dividing a large dataset into smaller pages. Key Concepts of Pagination:
+  - Page Size: The number of items displayed on each page.
+    - Example: If you have 100 items and a page size of 10, there will be 10 pages in total.
+  - Page Number: The current page being viewed.
+    - Example: If you are on page 3 with a page size of 10, items 21 to 30 will be displayed.
+  - Offset and Limit:
+    - Offset: The number of items to skip before starting to collect the result set.
+    - Limit: The maximum number of items to return.
+    - Example: For page 3 with a page size of 10, the offset would be 20, and the limit would be 10 (SELECT * FROM items LIMIT 10 OFFSET 20).
+- <b>Sorting</b>: build a dynamic SQL with sorting:
+  - Build multi-column sorting based on dynamic parameters:
+    - Input: sort=phone,-id,username,-dateOfBirth
+    - Output: order by phone, id desc, username, date_of_birth desc
+    - You can define your own format, and inject your own function to map
+  - Safe and Secure Input Handling
+    - See the above output, you can see we map JSON field name to database column name: username with username, dateOfBirth with date_of_birth
+
 #### Search Repository
 The flow for search/paging:
 - Build the dynamic query
@@ -77,6 +117,27 @@ The flow for search/paging:
   - Query data and map to array of struct 
 - Build the count query
   - Count the total records for paging
+
+#### For batch job
+- [SQL Writer](https://github.com/core-go/sql/blob/main/writer/writer.go): to insert or update data
+- [SQL Inserter](https://github.com/core-go/sql/blob/main/writer/inserter.go): to insert data
+- [SQL Updater](https://github.com/core-go/sql/blob/main/writer/updater.go): to update data
+- [SQL Stream Writer](https://github.com/core-go/sql/blob/main/writer/stream_writer.go): to insert or update data. When you write data, it keeps the data in the buffer, it does not write data. It just writes data when flush.
+- [SQL Stream Inserter](https://github.com/core-go/sql/blob/main/writer/stream_inserter.go): to insert data. When you write data, it keeps the data in the buffer, it does not write data. It just writes data when flush. Especially, we build 1 single SQL statement to improve the performance.
+- [SQL Stream Updater](https://github.com/core-go/sql/blob/main/writer/stream_updater.go): to update data. When you write data, it keeps the data in the buffer, it does not write data. It just writes data when flush.
+- [Batch Inserter](https://github.com/core-go/sql/blob/main/batch/batch_inserter.go): to insert a batch of records. It builds a single SQL statement to improve the performance, specified for Oracle, Postgres, My SQL, MS SQL, SQLite.
+- [Batch Updater](https://github.com/core-go/sql/blob/main/batch/batch_updater.go)
+- [Batch Writer](https://github.com/core-go/sql/blob/main/batch/batch_writer.go)
+
+#### Health Check
+- Monitors the health of database connections
+- Sample is at [go-sql-sample](https://github.com/source-code-template/go-sql-sample).
+#### Action Log
+- Save Action Log with dynamic database design
+#### Passcode Adapter
+
+## Detailed samples of benefits
+
 #### Dynamic query builder
 - Look at this sample [user](https://github.com/source-code-template/go-sql-sample/blob/main/internal/user/user.go), you can see it automatically build a dynamic query for serach.
 <table><thead><tr><td>
@@ -374,21 +435,15 @@ func (s *UserUseCase) Create(
 ```
 </td></tr></tbody></table>
 
-#### For batch job
-- Inserter
-- Updater
-- Writer
-- StreamInserter
-- StreamUpdater
-- StreamWriter
-- BatchInserter
-- BatchUpdater
-- BatchWriter
-#### Health Check
-#### Passcode Adapter
-#### Action Log
-- Save Action Log with dynamic database design
-#### Field Loader
+## Summary of Samples
+- Utilities to simplify common database operations: the sample is at [go-sql-sample](https://github.com/source-code-template/go-sql-sample).
+- The sample of generic CRUD repository is at [go-sql-generic-sample](https://github.com/source-code-template/go-sql-generic-sample).
+- The composite key sample is at [go-sql-composite-key](https://github.com/go-tutorials/go-sql-composite-key).
+- The sample of dynamic query builder is at [user](https://github.com/source-code-template/go-sql-sample/blob/main/internal/user/user.go)
+- The sample of Mybatis for GO is at [go-admin](https://github.com/project-samples/go-admin). Mybatis file is at [query.xml](https://github.com/project-samples/go-admin/blob/main/configs/query.xml).
+#### Batch processing samples
+- The sample of export data is at [go-sql-export](https://github.com/project-samples/go-sql-export).
+- The sample of import data is at [go-sql-import](https://github.com/project-samples/go-sql-import).
 ## Installation
 Please make sure to initialize a Go module before installing core-go/sql:
 
