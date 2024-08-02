@@ -109,6 +109,7 @@ Some use cases that we optimize the performance:
     - You can define your own format, and inject your own function to map
   - Safe and Secure Input Handling
     - See the above output, you can see we map JSON field name to database column name: username with username, dateOfBirth with date_of_birth
+    - If you pass the columns which does not exist, the library ignore these columns. 
 
 #### Search Repository
 The flow for search/paging:
