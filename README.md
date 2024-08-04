@@ -17,6 +17,7 @@ Some use cases that we optimize the performance:
   - In this [layer architecture sample](https://github.com/source-code-template/go-sql-sample), you can see we can reduce a lot of source code at [data access layer](https://github.com/source-code-template/go-sql-sample/blob/main/internal/user/repository/adapter/adapter.go), or you use [generic repository](https://github.com/core-go/sql/blob/main/adapter/adapter.go) to replace all repository source code.
 
 ## Some advantage features
+You can refer to [Generic CRUD Repository](https://www.linkedin.com/pulse/generic-crud-repository-golang-duc-nguyen-kpnic) and [Data Processing](https://www.linkedin.com/pulse/data-processing-golang-nodejs-duc-nguyen-wv33c) for more details.
 #### Decimal
 - Support decimal, which is useful for currency
 #### Query Builders
