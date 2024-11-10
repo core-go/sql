@@ -24,7 +24,7 @@ type Loader[T any, K any] struct {
 	Keys          []string
 	BuildParam    func(i int) string
 	Map           func(*T)
-	toArray       func(interface{}) interface {
+	ToArray       func(interface{}) interface {
 		driver.Valuer
 		sql.Scanner
 	}
@@ -88,7 +88,7 @@ func NewLoaderWithMapAndArray[T any, K any](db *sql.DB, tableName string, toArra
 func (a *Loader[T, K]) All(ctx context.Context) ([]T, error) {
 	var objs []T
 	query := fmt.Sprintf("select %s from %s", a.Fields, a.Table)
-	err := q.Query(ctx, a.DB, a.FieldMap, &objs, query)
+	err := q.QueryWithArray(ctx, a.DB, a.FieldMap, &objs, a.ToArray, query)
 	if a.Map != nil {
 		l := len(objs)
 		for i := 0; i < l; i++ {
@@ -122,7 +122,7 @@ func (a *Loader[T, K]) Load(ctx context.Context, id K) (*T, error) {
 	var objs []T
 	query := fmt.Sprintf("select %s from %s ", a.Fields, a.Table)
 	query1, args := q.BuildFindByIdWithDB(a.DB, query, ip, a.JsonColumnMap, a.Keys, a.BuildParam)
-	err := q.Query(ctx, a.DB, a.FieldMap, &objs, query1, args...)
+	err := q.QueryWithArray(ctx, a.DB, a.FieldMap, &objs, a.ToArray, query1, args...)
 	if err != nil {
 		return nil, err
 	}

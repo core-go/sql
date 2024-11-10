@@ -14,10 +14,6 @@ type Query[T any, K any, F any] struct {
 	BuildQuery func(F) (string, []interface{})
 	Mp         func(*T)
 	Map        map[string]int
-	ToArray    func(interface{}) interface {
-		driver.Valuer
-		sql.Scanner
-	}
 }
 
 func NewQuery[T any, K any, F any](db *sql.DB, table string, buildQuery func(F) (string, []interface{}), opts ...func(*T)) (*Query[T, K, F], error) {
@@ -41,7 +37,7 @@ func NewQueryWithArray[T any, K any, F any](db *sql.DB, table string, buildQuery
 	if err != nil {
 		return nil, err
 	}
-	builder := &Query[T, K, F]{Loader: adapter, Map: fieldsIndex, BuildQuery: buildQuery, Mp: mp, ToArray: toArray}
+	builder := &Query[T, K, F]{Loader: adapter, Map: fieldsIndex, BuildQuery: buildQuery, Mp: mp}
 	return builder, nil
 }
 

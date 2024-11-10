@@ -30,7 +30,7 @@ func NewSearchRepositoryWithArray[T any, K any, F any](db *sql.DB, table string,
 	driver.Valuer
 	sql.Scanner
 }, versionField string, buildParam func(int) string, opts ...func(*T)) (*SearchRepository[T, K, F], error) {
-	repo, err := NewSqlRepositoryWithVersionAndArray[T, K](db, table, versionField, toArray, buildParam)
+	repo, err := NewRepositoryWithVersionAndArray[T, K](db, table, versionField, toArray, buildParam)
 	if err != nil {
 		return nil, err
 	}

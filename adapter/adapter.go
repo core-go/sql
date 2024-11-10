@@ -20,12 +20,18 @@ type Adapter[T any, K any] struct {
 }
 
 func NewAdapter[T any, K any](db *sql.DB, tableName string, opts ...func(int) string) (*Adapter[T, K], error) {
-	return NewSqlAdapterWithVersionAndArray[T, K](db, tableName, "", nil, opts...)
+	return NewAdapterWithVersionAndArray[T, K](db, tableName, "", nil, opts...)
 }
 func NewAdapterWithVersion[T any, K any](db *sql.DB, tableName string, versionField string, opts ...func(int) string) (*Adapter[T, K], error) {
-	return NewSqlAdapterWithVersionAndArray[T, K](db, tableName, versionField, nil, opts...)
+	return NewAdapterWithVersionAndArray[T, K](db, tableName, versionField, nil, opts...)
 }
-func NewSqlAdapterWithVersionAndArray[T any, K any](db *sql.DB, tableName string, versionField string, toArray func(interface{}) interface {
+func NewAdapterWithArray[T any, K any](db *sql.DB, tableName string, toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
+}, opts ...func(int) string) (*Adapter[T, K], error) {
+	return NewAdapterWithVersionAndArray[T, K](db, tableName, "", toArray, opts...)
+}
+func NewAdapterWithVersionAndArray[T any, K any](db *sql.DB, tableName string, versionField string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, opts ...func(int) string) (*Adapter[T, K], error) {
@@ -58,6 +64,7 @@ func NewSqlAdapterWithVersionAndArray[T any, K any](db *sql.DB, tableName string
 	fields := q.BuildFieldsBySchema(adapter.Schema)
 	return &Adapter[T, K]{adapter, fieldsIndex, fields, idMap}, nil
 }
+
 func (a *Adapter[T, K]) All(ctx context.Context) ([]T, error) {
 	var objs []T
 	query := fmt.Sprintf("select %s from %s", a.Fields, a.Table)
@@ -91,7 +98,7 @@ func (a *Adapter[T, K]) Load(ctx context.Context, id K) (*T, error) {
 	query := fmt.Sprintf("select %s from %s ", a.Fields, a.Table)
 	query1, args := q.BuildFindByIdWithDB(a.DB, query, ip, a.JsonColumnMap, a.Keys, a.BuildParam)
 	tx := q.GetExec(ctx, a.DB, a.TxKey)
-	err := q.Query(ctx, tx, a.Map, &objs, query1, args...)
+	err := q.QueryWithArray(ctx, tx, a.Map, &objs, a.ToArray, query1, args...)
 	if err != nil {
 		return nil, err
 	}

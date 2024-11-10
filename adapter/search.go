@@ -30,7 +30,7 @@ func NewSearchAdapterWithArray[T any, K any, F any](db *sql.DB, table string, bu
 	driver.Valuer
 	sql.Scanner
 }, versionField string, buildParam func(int) string, opts ...func(*T)) (*SearchAdapter[T, K, F], error) {
-	adapter, err := NewSqlAdapterWithVersionAndArray[T, K](db, table, versionField, toArray, buildParam)
+	adapter, err := NewAdapterWithVersionAndArray[T, K](db, table, versionField, toArray, buildParam)
 	if err != nil {
 		return nil, err
 	}

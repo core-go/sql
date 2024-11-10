@@ -4,15 +4,45 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"reflect"
+	"strconv"
 	"strings"
 	"time"
-
-	q "github.com/core-go/sql"
 )
 
+func BuildParam(i int) string {
+	return "?"
+}
+func BuildOracleParam(i int) string {
+	return ":" + strconv.Itoa(i)
+}
+func BuildMsSqlParam(i int) string {
+	return "@p" + strconv.Itoa(i)
+}
+func BuildDollarParam(i int) string {
+	return "$" + strconv.Itoa(i)
+}
+func GetBuild(db *sql.DB) func(i int) string {
+	driver := reflect.TypeOf(db.Driver()).String()
+	switch driver {
+	case "*pq.Driver":
+		return BuildDollarParam
+	case "*godror.drv":
+		return BuildOracleParam
+	case "*mssql.Driver":
+		return BuildMsSqlParam
+	default:
+		return BuildParam
+	}
+}
+
+type DBConfig struct {
+	DataSourceName string `yaml:"data_source_name" mapstructure:"data_source_name" json:"dataSourceName,omitempty" gorm:"column:datasourcename" bson:"dataSourceName,omitempty" dynamodbav:"dataSourceName,omitempty" firestore:"dataSourceName,omitempty"`
+	Driver         string `yaml:"driver" mapstructure:"driver" json:"driver,omitempty" gorm:"column:driver" bson:"driver,omitempty" dynamodbav:"driver,omitempty" firestore:"driver,omitempty"`
+}
 type ActionLogConf struct {
 	Log    bool            `yaml:"log" mapstructure:"log" json:"log,omitempty" gorm:"column:log" bson:"log,omitempty" dynamodbav:"log,omitempty" firestore:"log,omitempty"`
-	DB     q.Config        `yaml:"db" mapstructure:"db" json:"db,omitempty" gorm:"column:db" bson:"db,omitempty" dynamodbav:"db,omitempty" firestore:"db,omitempty"`
+	DB     DBConfig        `yaml:"db" mapstructure:"db" json:"db,omitempty" gorm:"column:db" bson:"db,omitempty" dynamodbav:"db,omitempty" firestore:"db,omitempty"`
 	Schema ActionLogSchema `yaml:"schema" mapstructure:"schema" json:"schema,omitempty" gorm:"column:schema" bson:"schema,omitempty" dynamodbav:"schema,omitempty" firestore:"schema,omitempty"`
 	Config ActionLogConfig `yaml:"config" mapstructure:"config" json:"config,omitempty" gorm:"column:config" bson:"config,omitempty" dynamodbav:"config,omitempty" firestore:"config,omitempty"`
 }
@@ -42,7 +72,6 @@ type ActionLogWriter struct {
 	Schema     ActionLogSchema
 	Generate   func(ctx context.Context) (string, error)
 	BuildParam func(i int) string
-	Driver     string
 }
 
 func NewSqlActionLogWriter(database *sql.DB, tableName string, config ActionLogConfig, s ActionLogSchema, options ...func(context.Context) (string, error)) *ActionLogWriter {
@@ -60,7 +89,6 @@ func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConf
 	s.Timestamp = strings.ToLower(s.Timestamp)
 	s.Status = strings.ToLower(s.Status)
 	s.Desc = strings.ToLower(s.Desc)
-	driver := q.GetDriver(database)
 	if len(s.Id) == 0 {
 		s.Id = "id"
 	}
@@ -86,9 +114,9 @@ func NewActionLogWriter(database *sql.DB, tableName string, config ActionLogConf
 	if len(options) > 0 && options[0] != nil {
 		buildParam = options[0]
 	} else {
-		buildParam = q.GetBuild(database)
+		buildParam = GetBuild(database)
 	}
-	writer := ActionLogWriter{Database: database, Table: tableName, Config: config, Schema: s, Generate: generate, BuildParam: buildParam, Driver: driver}
+	writer := ActionLogWriter{Database: database, Table: tableName, Config: config, Schema: s, Generate: generate, BuildParam: buildParam}
 	return &writer
 }
 
@@ -122,7 +150,7 @@ func (s *ActionLogWriter) Write(ctx context.Context, resource string, action str
 			log[k] = v
 		}
 	}
-	query, vars := BuildInsertSQL(s.Database, s.Table, log, s.BuildParam)
+	query, vars := BuildInsertSQL(s.Table, log, s.BuildParam)
 	_, err := s.Database.ExecContext(ctx, query, vars...)
 	return err
 }
@@ -154,18 +182,11 @@ func GetString(ctx context.Context, key string) string {
 	}
 	return ""
 }
-func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}, options ...func(i int) string) (string, []interface{}) {
-	driver := q.GetDriver(db)
-	var buildParam func(i int) string
-	if len(options) > 0 && options[0] != nil {
-		buildParam = options[0]
-	} else {
-		buildParam = q.GetBuild(db)
-	}
+func BuildInsertSQL(tableName string, model map[string]interface{}, buildParam func(i int) string) (string, []interface{}) {
 	var cols []string
 	var values []interface{}
 	for col, v := range model {
-		cols = append(cols, QuoteString(col, driver))
+		cols = append(cols, col)
 		values = append(values, v)
 	}
 	column := fmt.Sprintf("(%v)", strings.Join(cols, ","))
@@ -176,13 +197,6 @@ func BuildInsertSQL(db *sql.DB, tableName string, model map[string]interface{}, 
 		arrValue = append(arrValue, param)
 	}
 	value := fmt.Sprintf("(%v)", strings.Join(arrValue, ","))
-	strSQL := fmt.Sprintf("insert into %v %v values %v", QuoteString(tableName, driver), column, value)
+	strSQL := fmt.Sprintf("insert into %v %v values %v", tableName, column, value)
 	return strSQL, values
-}
-
-func QuoteString(name string, driver string) string {
-	if driver == q.DriverPostgres {
-		name = `"` + name + `"`
-	}
-	return name
 }
