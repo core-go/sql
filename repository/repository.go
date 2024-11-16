@@ -25,7 +25,7 @@ func NewRepository[T any, K any](db *sql.DB, tableName string, opts ...func(int)
 func NewRepositoryWithVersion[T any, K any](db *sql.DB, tableName string, versionField string, opts ...func(int) string) (*Repository[T, K], error) {
 	return NewRepositoryWithVersionAndArray[T, K](db, tableName, versionField, nil, opts...)
 }
-func NewSqlRepositoryWithArray[T any, K any](db *sql.DB, tableName string, toArray func(interface{}) interface {
+func NewRepositoryWithArray[T any, K any](db *sql.DB, tableName string, toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
 }, opts ...func(int) string) (*Repository[T, K], error) {
@@ -35,7 +35,7 @@ func NewRepositoryWithVersionAndArray[T any, K any](db *sql.DB, tableName string
 	driver.Valuer
 	sql.Scanner
 }, opts ...func(int) string) (*Repository[T, K], error) {
-	repo, err := NewSqlWriterWithVersionAndArray[*T](db, tableName, versionField, toArray, opts...)
+	repository, err := NewSqlWriterWithVersionAndArray[*T](db, tableName, versionField, toArray, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func NewRepositoryWithVersionAndArray[T any, K any](db *sql.DB, tableName string
 	var k K
 	kType := reflect.TypeOf(k)
 	idMap := false
-	if len(repo.Keys) > 1 {
+	if len(repository.Keys) > 1 {
 		if kType.Kind() == reflect.Map {
 			idMap = true
 		} else if kType.Kind() != reflect.Struct {
@@ -61,8 +61,8 @@ func NewRepositoryWithVersionAndArray[T any, K any](db *sql.DB, tableName string
 	if err != nil {
 		return nil, err
 	}
-	fields := q.BuildFieldsBySchema(repo.Schema)
-	return &Repository[T, K]{repo, fieldsIndex, fields, idMap}, nil
+	fields := q.BuildFieldsBySchema(repository.Schema)
+	return &Repository[T, K]{repository, fieldsIndex, fields, idMap}, nil
 }
 
 func (a *Repository[T, K]) All(ctx context.Context) ([]T, error) {

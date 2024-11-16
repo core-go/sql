@@ -14,23 +14,25 @@ type SearchRepository[T any, K any, F any] struct {
 	BuildQuery func(F) (string, []interface{})
 	Mp         func(*T)
 	Map        map[string]int
-	ToArray    func(interface{}) interface {
-		driver.Valuer
-		sql.Scanner
-	}
 }
 
 func NewSearchRepository[T any, K any, F any](db *sql.DB, table string, buildQuery func(F) (string, []interface{}), options ...func(*T)) (*SearchRepository[T, K, F], error) {
-	return NewSearchRepositoryWithArray[T, K, F](db, table, buildQuery, nil, "", nil, options...)
+	return NewSearchRepositoryWithVersionAndArray[T, K, F](db, table, buildQuery, nil, "", nil, options...)
 }
 func NewSearchRepositoryWithVersion[T any, K any, F any](db *sql.DB, table string, buildQuery func(F) (string, []interface{}), versionField string, options ...func(*T)) (*SearchRepository[T, K, F], error) {
-	return NewSearchRepositoryWithArray[T, K, F](db, table, buildQuery, nil, versionField, nil, options...)
+	return NewSearchRepositoryWithVersionAndArray[T, K, F](db, table, buildQuery, nil, versionField, nil, options...)
 }
 func NewSearchRepositoryWithArray[T any, K any, F any](db *sql.DB, table string, buildQuery func(F) (string, []interface{}), toArray func(interface{}) interface {
 	driver.Valuer
 	sql.Scanner
+}, opts ...func(*T)) (*SearchRepository[T, K, F], error) {
+	return NewSearchRepositoryWithVersionAndArray[T, K, F](db, table, buildQuery, toArray, "", nil, opts...)
+}
+func NewSearchRepositoryWithVersionAndArray[T any, K any, F any](db *sql.DB, table string, buildQuery func(F) (string, []interface{}), toArray func(interface{}) interface {
+	driver.Valuer
+	sql.Scanner
 }, versionField string, buildParam func(int) string, opts ...func(*T)) (*SearchRepository[T, K, F], error) {
-	repo, err := NewRepositoryWithVersionAndArray[T, K](db, table, versionField, toArray, buildParam)
+	repository, err := NewRepositoryWithVersionAndArray[T, K](db, table, versionField, toArray, buildParam)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +49,7 @@ func NewSearchRepositoryWithArray[T any, K any, F any](db *sql.DB, table string,
 	if err != nil {
 		return nil, err
 	}
-	builder := &SearchRepository[T, K, F]{Repository: repo, Map: fieldsIndex, BuildQuery: buildQuery, Mp: mp, ToArray: toArray}
+	builder := &SearchRepository[T, K, F]{Repository: repository, Map: fieldsIndex, BuildQuery: buildQuery, Mp: mp}
 	return builder, nil
 }
 
