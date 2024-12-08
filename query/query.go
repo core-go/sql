@@ -23,7 +23,7 @@ func NewQueryWithArray[T any, K any, F any](db *sql.DB, table string, buildQuery
 	driver.Valuer
 	sql.Scanner
 }, opts ...func(*T)) (*Query[T, K, F], error) {
-	return NewQueryWithArrayAndParam[T, K, F](db, table, buildQuery, nil, nil, opts...)
+	return NewQueryWithArrayAndParam[T, K, F](db, table, buildQuery, toArray, nil, opts...)
 }
 func NewQueryWithArrayAndParam[T any, K any, F any](db *sql.DB, table string, buildQuery func(F) (string, []interface{}), toArray func(interface{}) interface {
 	driver.Valuer
