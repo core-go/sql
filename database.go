@@ -726,7 +726,7 @@ func ReplaceQueryArgs(driver string, query string) string {
 	}
 	return query
 }
-func Exist(ctx context.Context, db *sql.DB, sql string, args ...interface{}) (bool, error) {
+func Exist(ctx context.Context, db Executor, sql string, args ...interface{}) (bool, error) {
 	rows, err := db.QueryContext(ctx, sql, args...)
 	if err != nil {
 		return false, err
